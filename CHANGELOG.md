@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-07-09
+
+### Added
+- **Local secret resolution for VardrGate identities.**  A `vardrgate_api_test` job credential may reference a secret instead of embedding it: `value_env` (an environment variable read on the runner) or `value_keychain` (an OS-keychain account). The handler resolves references to real values locally, just before execution, so secrets never travel through — or persist in — the backend. A referenced-but-missing secret fails the job rather than running with a blank credential. Literal `value` and anonymous credentials are untouched. Adds `keychain.get_secret()`.
+
 ## [0.25.0] — 2026-07-08
 
 ### Added

@@ -10,12 +10,14 @@ claim/event/failure handling and the executor stays small.
 Adding a tool is a one-file change: write a handler and register it below.
 """
 
+import copy
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from vardrrunner import api, configs, runner
+from vardrrunner import api, configs, keychain, runner
 from vardrrunner.targets import _is_wildcard, _resolve_targets
 
 
@@ -377,6 +379,55 @@ class NaabuHandler(ToolHandler[configs.NaabuConfig]):
         return f"{created} new, {updated} updated service(s)"
 
 
+def _resolve_identity_secrets(test_case: dict) -> dict:
+    """Return a copy of ``test_case`` with each identity credential's value
+    resolved from a local source, so real secrets never travel through — or
+    persist in — the backend.
+
+    A credential may specify at most one of:
+      - ``value`` — a literal (used as-is; convenient for local runs)
+      - ``value_env`` — an environment variable name, read on this machine
+      - ``value_keychain`` — an account looked up in the OS keychain
+
+    A referenced-but-missing secret raises ``ConfigError`` so the job fails
+    instead of silently running with a blank credential.
+    """
+    resolved = copy.deepcopy(test_case)
+    identities = resolved.get("identities")
+    if isinstance(identities, list):
+        for idx, identity in enumerate(identities):
+            cred = identity.get("credential") if isinstance(identity, dict) else None
+            if isinstance(cred, dict):
+                _resolve_one_credential(cred, str(identity.get("id", f"#{idx}")))
+    return resolved
+
+
+def _resolve_one_credential(cred: dict, identity_id: str) -> None:
+    provided = [k for k in ("value", "value_env", "value_keychain") if cred.get(k)]
+    if len(provided) > 1:
+        raise configs.ConfigError(
+            f"identity {identity_id!r}: credential must specify only one of "
+            "value, value_env, value_keychain"
+        )
+    env_name = cred.pop("value_env", None)
+    kc_account = cred.pop("value_keychain", None)
+    if env_name:
+        value = os.environ.get(str(env_name))
+        if not value:
+            raise configs.ConfigError(
+                f"identity {identity_id!r}: environment variable {env_name!r} is not set"
+            )
+        cred["value"] = value
+    elif kc_account:
+        value = keychain.get_secret(str(kc_account))
+        if not value:
+            raise configs.ConfigError(
+                f"identity {identity_id!r}: no keychain secret for account {kc_account!r}"
+            )
+        cred["value"] = value
+    # Otherwise: a literal value or an anonymous credential — left untouched.
+
+
 class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
     """Run a VardrGate API authorization test job and upload its result.
 
@@ -414,7 +465,10 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         self, targets: list[str], run_dir: Path, config: configs.VardrGateConfig
     ) -> Path | None:
         output = run_dir / "vardrgate_result.json"
-        job = {"config": {"test_case": config.test_case, "execution": config.execution}}
+        # Resolve credential references to real values locally, keeping secrets
+        # out of the backend. Raises ConfigError if a referenced secret is missing.
+        test_case = _resolve_identity_secrets(config.test_case)
+        job = {"config": {"test_case": test_case, "execution": config.execution}}
         timeout = config.execution.get("timeout_seconds")
         runner.run_vardrgate(job, output, timeout=timeout if isinstance(timeout, int) else None)
         return output

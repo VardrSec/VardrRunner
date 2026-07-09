@@ -146,6 +146,12 @@ Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`, `nmap`
 test via the local `vardrgate` binary and uploads the result to the job. See
 [ADR 0006](adr/0006-vardrgate-api-test-handler.md).
 
+For `vardrgate_api_test`, an identity credential may reference a secret instead of
+embedding it — `value_env` (an environment variable on the runner) or
+`value_keychain` (an OS-keychain account) — resolved locally at execution so the
+secret never reaches the backend. A missing referenced secret fails the job. See
+[ADR 0007](adr/0007-local-secret-resolution.md).
+
 ---
 
 ## `daemon` — continuous background worker
