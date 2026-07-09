@@ -9,7 +9,15 @@ from vardrrunner import configs, handlers
 
 
 def test_registry_covers_all_tools():
-    assert set(handlers.REGISTRY) == {"httpx", "nuclei", "nmap", "subfinder", "dnsx", "naabu"}
+    assert set(handlers.REGISTRY) == {
+        "httpx",
+        "nuclei",
+        "nmap",
+        "subfinder",
+        "dnsx",
+        "naabu",
+        "vardrgate_api_test",
+    }
     for name, handler in handlers.REGISTRY.items():
         assert handler.tool == name
 
@@ -102,6 +110,77 @@ def test_subfinder_resolve_extracts_wildcard_domains():
         client, "p", "scope", configs.SubfinderConfig()
     )
     assert out == ["example.com", "target.io"]
+
+
+def _vardrgate_cfg() -> configs.VardrGateConfig:
+    return configs.VardrGateConfig.from_dict(
+        {
+            "test_case": {
+                "id": "profile-check",
+                "request": {"method": "GET", "url": "https://api.example.com/users/42"},
+            },
+            "execution": {"timeout_seconds": 10},
+        }
+    )
+
+
+def test_vardrgate_parse_config_requires_test_case():
+    with pytest.raises(configs.ConfigError):
+        handlers.REGISTRY["vardrgate_api_test"].parse_config({"execution": {}})
+
+
+def test_vardrgate_resolve_targets_uses_request_url():
+    out = handlers.VardrGateHandler().resolve_targets(MagicMock(), "p", "config", _vardrgate_cfg())
+    assert out == ["https://api.example.com/users/42"]
+
+
+def test_vardrgate_resolve_targets_falls_back_to_id():
+    cfg = configs.VardrGateConfig.from_dict({"test_case": {"id": "no-url-case"}, "execution": {}})
+    out = handlers.VardrGateHandler().resolve_targets(MagicMock(), "p", "config", cfg)
+    assert out == ["no-url-case"]
+
+
+def test_vardrgate_execute_writes_result(tmp_path):
+    captured = {}
+
+    def fake_run(job, out, timeout=None):
+        captured["job"] = job
+        captured["timeout"] = timeout
+        out.write_text('{"test_case_id":"profile-check","findings":[]}')
+
+    with patch("vardrrunner.runner.run_vardrgate", side_effect=fake_run):
+        out = handlers.VardrGateHandler().execute([], tmp_path, _vardrgate_cfg())
+
+    assert out is not None and out.name == "vardrgate_result.json"
+    # The envelope handed to the binary carries the test case and execution block.
+    assert captured["job"]["config"]["test_case"]["id"] == "profile-check"
+    assert captured["timeout"] == 10
+
+
+def test_vardrgate_upload_posts_result_to_job(tmp_path):
+    client = MagicMock()
+    result = tmp_path / "vardrgate_result.json"
+    result.write_text(
+        '{"findings":[{"category":"potential_bola"},{"category":"unexpected_access"}]}'
+    )
+
+    summary = handlers.VardrGateHandler().upload(client, "p", result, job_id="job_abc")
+
+    client.post.assert_called_once()
+    path_arg = client.post.call_args[0][0]
+    assert path_arg == "/jobs/job_abc/upload"
+    assert "2 finding(s)" in summary
+
+
+def test_vardrgate_upload_without_job_id_skips_post(tmp_path):
+    client = MagicMock()
+    result = tmp_path / "vardrgate_result.json"
+    result.write_text('{"findings":[]}')
+
+    summary = handlers.VardrGateHandler().upload(client, "p", result)
+
+    client.post.assert_not_called()
+    assert "0 finding(s)" in summary
 
 
 def test_httpx_upload_summary(tmp_path):

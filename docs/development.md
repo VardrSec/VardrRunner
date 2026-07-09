@@ -4,8 +4,8 @@
 - Python **3.10+**
 - `git`
 - (Optional, for real runs) the external tools on your `PATH`: `httpx`, `subfinder`,
-  `nuclei`, `nmap`. They are **not** needed to run the test suite — every subprocess call
-  is mocked.
+  `nuclei`, `nmap`, `dnsx`, `naabu`, and `vardrgate` (only for `vardrgate_api_test`
+  jobs). They are **not** needed to run the test suite — every subprocess call is mocked.
 
 ## Setup
 ```bash

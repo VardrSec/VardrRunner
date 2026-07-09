@@ -141,6 +141,11 @@ vardrrunner jobs run      # claim and execute all currently pending jobs, then e
 (`POST /jobs/{id}/claim`, skipping on `409`), resolves targets, executes, and reports
 lifecycle events. This is the same execution core the daemon uses.
 
+Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`, `nmap`,
+`dnsx`, `naabu`) plus `vardrgate_api_test`, which runs a VardrGate API authorization
+test via the local `vardrgate` binary and uploads the result to the job. See
+[ADR 0006](adr/0006-vardrgate-api-test-handler.md).
+
 ---
 
 ## `daemon` — continuous background worker

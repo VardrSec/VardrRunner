@@ -75,7 +75,9 @@ class ToolHandler(Generic[C]):
         """Run the tool. Return the artifact to upload, or None if nothing was produced."""
         raise NotImplementedError
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, program_id: str, output: Path, job_id: str = ""
+    ) -> str:
         """Push the artifact to the backend. Return a one-line human summary."""
         raise NotImplementedError
 
@@ -135,7 +137,9 @@ class HttpxHandler(ToolHandler[configs.HttpxConfig]):
         runner.run_httpx(targets, output, timeout=config.timeout)
         return output
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, program_id: str, output: Path, job_id: str = ""
+    ) -> str:
         result = client.import_file(program_id, "httpx", str(output))
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} result(s)"
@@ -176,7 +180,9 @@ class NucleiHandler(ToolHandler[configs.NucleiConfig]):
         )
         return output
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, program_id: str, output: Path, job_id: str = ""
+    ) -> str:
         result = client.import_file(program_id, "nuclei", str(output))
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} finding(s)"
@@ -216,7 +222,9 @@ class NmapHandler(ToolHandler[configs.NmapConfig]):
         )
         return xml_path
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, program_id: str, output: Path, job_id: str = ""
+    ) -> str:
         services = runner.parse_nmap_xml(output)
         if not services:
             return "no open ports found"
@@ -270,7 +278,9 @@ class SubfinderHandler(ToolHandler[configs.SubfinderConfig]):
         _write_host_import_jsonl(hosts, "subfinder", jsonl_path)
         return jsonl_path
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, program_id: str, output: Path, job_id: str = ""
+    ) -> str:
         result = client.import_file(program_id, "httpx", str(output))
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} subdomain(s) as recon targets"
@@ -315,7 +325,9 @@ class DnsxHandler(ToolHandler[configs.DnsxConfig]):
         _write_host_import_jsonl(hosts, "dnsx", jsonl_path)
         return jsonl_path
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, program_id: str, output: Path, job_id: str = ""
+    ) -> str:
         result = client.import_file(program_id, "httpx", str(output))
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} resolvable host(s)"
@@ -353,7 +365,9 @@ class NaabuHandler(ToolHandler[configs.NaabuConfig]):
         runner.run_naabu(targets, out, top_ports=config.top_ports, timeout=config.timeout)
         return out
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, program_id: str, output: Path, job_id: str = ""
+    ) -> str:
         services = runner.parse_naabu_json(output)
         if not services:
             return "no open ports found"
@@ -361,6 +375,58 @@ class NaabuHandler(ToolHandler[configs.NaabuConfig]):
         created = result.get("created", 0)
         updated = result.get("updated", 0)
         return f"{created} new, {updated} updated service(s)"
+
+
+class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
+    """Run a VardrGate API authorization test job and upload its result.
+
+    This handler differs from the recon handlers: the job is self-contained, so
+    there are no scope/recon targets to resolve, and the result is attached to
+    the job itself (``POST /jobs/{id}/upload``) rather than imported to a program.
+    The runner never imports VardrGate internals — it shells out to the binary
+    and uploads the sanitized JSON result.
+    """
+
+    tool = "vardrgate_api_test"
+
+    def parse_config(self, cfg: dict) -> configs.VardrGateConfig:
+        return configs.VardrGateConfig.from_dict(cfg)
+
+    def resolve_targets(
+        self,
+        client: api.VardrMapClient,
+        program_id: str,
+        target_source: str,
+        config: configs.VardrGateConfig,
+    ) -> list[str]:
+        # The endpoint under test travels inside the test case; surface it as the
+        # single "target" so the lifecycle proceeds and operators see what runs.
+        request = config.test_case.get("request") or {}
+        url = request.get("url")
+        if url:
+            return [str(url)]
+        return [str(config.test_case.get("id", "vardrgate-job"))]
+
+    def running_label(self, targets: list[str], config: configs.VardrGateConfig) -> str:
+        return f"vardrgate authorization test against {targets[0] if targets else 'target'}"
+
+    def execute(
+        self, targets: list[str], run_dir: Path, config: configs.VardrGateConfig
+    ) -> Path | None:
+        output = run_dir / "vardrgate_result.json"
+        job = {"config": {"test_case": config.test_case, "execution": config.execution}}
+        timeout = config.execution.get("timeout_seconds")
+        runner.run_vardrgate(job, output, timeout=timeout if isinstance(timeout, int) else None)
+        return output
+
+    def upload(
+        self, client: api.VardrMapClient, program_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = json.loads(output.read_text())
+        if job_id:
+            client.post(f"/jobs/{job_id}/upload", json=result)
+        findings = result.get("findings") or []
+        return f"{len(findings)} finding(s)"
 
 
 # Registry: job type → handler. Add a tool by adding a handler here.
@@ -373,5 +439,6 @@ REGISTRY: dict[str, ToolHandler[Any]] = {
         SubfinderHandler(),
         DnsxHandler(),
         NaabuHandler(),
+        VardrGateHandler(),
     )
 }

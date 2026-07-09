@@ -144,7 +144,7 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
             return
 
         con.print("Uploading results…")
-        summary = handler.upload(client, program_id, output)
+        summary = handler.upload(client, program_id, output, job_id=job_id)
         con.print(f"[green]Done.[/green] {summary}")
         _emit(client, job_id, "uploaded", summary)
         _complete_done(client, job_id)

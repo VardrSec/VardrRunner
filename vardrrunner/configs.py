@@ -178,3 +178,33 @@ class NaabuConfig:
             limit=_req_int(cfg, "limit", 500, minimum=1),
             timeout=_opt_int(cfg, "timeout", minimum=1),
         )
+
+
+@dataclass(frozen=True)
+class VardrGateConfig:
+    """Config for a VardrGate API authorization test job.
+
+    Unlike the recon tools, this job is self-contained: the ``test_case`` (and
+    optional ``execution`` settings) travel inside the job config rather than
+    being resolved from program scope/recon. VardrGate itself enforces SSRF and
+    credential-redaction guarantees; the runner only shells out to it.
+    """
+
+    test_case: dict
+    execution: dict
+    policy_id: str | None = None
+
+    @classmethod
+    def from_dict(cls, cfg: dict) -> "VardrGateConfig":
+        test_case = cfg.get("test_case")
+        if not isinstance(test_case, dict) or not test_case:
+            raise ConfigError("'test_case' is required and must be an object")
+        execution = cfg.get("execution") or {}
+        if not isinstance(execution, dict):
+            raise ConfigError("'execution' must be an object")
+        policy_id = cfg.get("policy_id")
+        return cls(
+            test_case=test_case,
+            execution=execution,
+            policy_id=str(policy_id) if policy_id else None,
+        )

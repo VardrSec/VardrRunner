@@ -7,6 +7,15 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-07-08
+
+### Added
+- **`vardrgate_api_test` job handler.**  VardrRunner can now run VardrGate API authorization tests as jobs. The handler shells out to the `vardrgate run --job … --out …` binary (added to the tool allowlist as `vardrgate`), captures the sanitized result JSON, and uploads it to the job via `POST /jobs/{id}/upload`. The job is self-contained — the test case travels in the job config, so there are no scope/recon targets to resolve. VardrRunner imports no VardrGate internals; the coupling is the CLI/JSON contract only. See [ADR 0006](docs/adr/0006-vardrgate-api-test-handler.md).
+- **`VardrGateConfig`.**  Typed, validated config for the new job type (`test_case`, `execution`, optional `policy_id`).
+
+### Changed
+- **`ToolHandler.upload()` gained an optional `job_id` parameter.**  Recon handlers import results to a program and ignore it; the VardrGate handler uses it to attach the result to the originating job. Existing call sites and handlers are unaffected (defaults to `""`).
+
 ## [0.24.0] — 2026-06-26
 
 ### Added

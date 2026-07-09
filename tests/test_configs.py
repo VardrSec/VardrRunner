@@ -142,3 +142,32 @@ def test_job_envelope_defaults_config_to_empty():
 def test_job_envelope_missing_field_rejected(job):
     with pytest.raises(configs.ConfigError):
         configs.JobEnvelope.from_dict(job)
+
+
+def test_vardrgate_config_parses():
+    c = configs.VardrGateConfig.from_dict(
+        {
+            "test_case": {"id": "x", "request": {"url": "https://a/"}},
+            "execution": {"timeout_seconds": 5},
+            "policy_id": "pol_1",
+        }
+    )
+    assert c.test_case["id"] == "x"
+    assert c.execution == {"timeout_seconds": 5}
+    assert c.policy_id == "pol_1"
+
+
+def test_vardrgate_config_defaults_execution():
+    c = configs.VardrGateConfig.from_dict({"test_case": {"id": "x"}})
+    assert c.execution == {}
+    assert c.policy_id is None
+
+
+def test_vardrgate_config_requires_test_case():
+    with pytest.raises(ConfigError):
+        configs.VardrGateConfig.from_dict({"execution": {}})
+
+
+def test_vardrgate_config_rejects_non_object_execution():
+    with pytest.raises(ConfigError):
+        configs.VardrGateConfig.from_dict({"test_case": {"id": "x"}, "execution": "nope"})
