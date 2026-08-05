@@ -15,7 +15,7 @@ Per-version detail notes live in [`changelog/`](changelog/).
   `/engagements/*`; `VardrMapClient.programs()` → `engagements()`;
   `commands/programs.py` → `commands/engagements.py`. See
   [`changelog/v0.27.0.md`](changelog/v0.27.0.md).
-- **Requires VardrMap ≥ v0.21.0.** Deploy the backend before upgrading the runner.
+- **Requires VardrMap ≥ v0.22.0.** Deploy the backend before upgrading the runner.
 
 ### Compatibility
 
