@@ -91,7 +91,7 @@ def _build_config(tool: str, raw: dict):
         raise typer.Exit(1) from e
 
 
-def _finish(tool: str, client: api.VardrMapClient, program_id: str, targets, tool_cfg, run_dir):
+def _finish(tool: str, client: api.VardrMapClient, engagement_id: str, targets, tool_cfg, run_dir):
     """Execute a tool handler and upload its output — shared by every direct command."""
     handler = handlers.REGISTRY[tool]
     console.print(f"\nRunning {handler.running_label(targets, tool_cfg)}… → [dim]{run_dir}[/dim]")
@@ -103,7 +103,7 @@ def _finish(tool: str, client: api.VardrMapClient, program_id: str, targets, too
 
     console.print("Uploading results…")
     try:
-        summary = handler.upload(client, program_id, output)
+        summary = handler.upload(client, engagement_id, output)
     except Exception as e:
         console.print(f"[red]Upload failed:[/red] {e}")
         console.print(f"Raw output saved at [dim]{output}[/dim]")
@@ -112,7 +112,7 @@ def _finish(tool: str, client: api.VardrMapClient, program_id: str, targets, too
 
 
 def run_httpx(
-    program_id: str,
+    engagement_id: str,
     scope: bool = False,
     from_recon: bool = False,
     target: str | None = None,
@@ -128,7 +128,7 @@ def run_httpx(
     client = api.VardrMapClient(url, key)
 
     targets = _resolve_targets(
-        client, program_id, scope, from_recon, target, targets_file, status_code, limit
+        client, engagement_id, scope, from_recon, target, targets_file, status_code, limit
     )
     if not targets:
         console.print("[yellow]No targets found.[/yellow]")
@@ -137,11 +137,11 @@ def run_httpx(
     _check_target_cap(targets, max_targets)
     _confirm(targets, "httpx", yes)
     cfg = _build_config("httpx", {"limit": limit, "status_code": status_code})
-    _finish("httpx", client, program_id, targets, cfg, _make_run_dir())
+    _finish("httpx", client, engagement_id, targets, cfg, _make_run_dir())
 
 
 def run_subfinder(
-    program_id: str,
+    engagement_id: str,
     yes: bool = False,
     max_targets: int = MAX_TARGETS_DEFAULT,
 ):
@@ -151,18 +151,18 @@ def run_subfinder(
     client = api.VardrMapClient(url, key)
 
     cfg = _build_config("subfinder", {})
-    domains = handlers.REGISTRY["subfinder"].resolve_targets(client, program_id, "scope", cfg)
+    domains = handlers.REGISTRY["subfinder"].resolve_targets(client, engagement_id, "scope", cfg)
     if not domains:
         console.print("[yellow]No wildcard scope entries found.[/yellow]")
         raise typer.Exit(0)
 
     _check_target_cap(domains, max_targets)
     _confirm(domains, "subfinder", yes)
-    _finish("subfinder", client, program_id, domains, cfg, _make_run_dir())
+    _finish("subfinder", client, engagement_id, domains, cfg, _make_run_dir())
 
 
 def run_nuclei(
-    program_id: str,
+    engagement_id: str,
     scope: bool = False,
     from_recon: bool = False,
     target: str | None = None,
@@ -180,7 +180,7 @@ def run_nuclei(
     client = api.VardrMapClient(url, key)
 
     targets = _resolve_targets(
-        client, program_id, scope, from_recon, target, targets_file, status_code, limit
+        client, engagement_id, scope, from_recon, target, targets_file, status_code, limit
     )
     if not targets:
         console.print("[yellow]No targets found.[/yellow]")
@@ -198,11 +198,11 @@ def run_nuclei(
             "templates": templates,
         },
     )
-    _finish("nuclei", client, program_id, targets, cfg, _make_run_dir())
+    _finish("nuclei", client, engagement_id, targets, cfg, _make_run_dir())
 
 
 def run_nmap(
-    program_id: str,
+    engagement_id: str,
     scope: bool = False,
     from_recon: bool = False,
     target: str | None = None,
@@ -219,7 +219,7 @@ def run_nmap(
     client = api.VardrMapClient(url, key)
 
     targets = _resolve_targets(
-        client, program_id, scope, from_recon, target, targets_file, None, limit
+        client, engagement_id, scope, from_recon, target, targets_file, None, limit
     )
     # nmap wants hostnames/IPs, not full URLs; normalize and de-duplicate.
     targets = list(dict.fromkeys(runner.strip_url_to_host(t) for t in targets if t.strip()))
@@ -231,11 +231,11 @@ def run_nmap(
     _confirm(targets, "nmap", yes)
     # Validates timing (0-4) and top_ports up front — `--timing 9` is rejected, not clamped.
     cfg = _build_config("nmap", {"top_ports": top_ports, "timing": timing, "limit": limit})
-    _finish("nmap", client, program_id, targets, cfg, _make_run_dir())
+    _finish("nmap", client, engagement_id, targets, cfg, _make_run_dir())
 
 
 def run_dnsx(
-    program_id: str,
+    engagement_id: str,
     scope: bool = False,
     from_recon: bool = False,
     target: str | None = None,
@@ -249,7 +249,9 @@ def run_dnsx(
     url, key = config.require_auth()
     client = api.VardrMapClient(url, key)
 
-    raw = _resolve_targets(client, program_id, scope, from_recon, target, targets_file, None, limit)
+    raw = _resolve_targets(
+        client, engagement_id, scope, from_recon, target, targets_file, None, limit
+    )
     targets = list(dict.fromkeys(runner.strip_url_to_host(t) for t in raw if t.strip()))
     if not targets:
         console.print("[yellow]No targets found.[/yellow]")
@@ -258,11 +260,11 @@ def run_dnsx(
     _check_target_cap(targets, max_targets)
     _confirm(targets, "dnsx", yes)
     cfg = _build_config("dnsx", {"limit": limit})
-    _finish("dnsx", client, program_id, targets, cfg, _make_run_dir())
+    _finish("dnsx", client, engagement_id, targets, cfg, _make_run_dir())
 
 
 def run_naabu(
-    program_id: str,
+    engagement_id: str,
     scope: bool = False,
     from_recon: bool = False,
     target: str | None = None,
@@ -277,7 +279,9 @@ def run_naabu(
     url, key = config.require_auth()
     client = api.VardrMapClient(url, key)
 
-    raw = _resolve_targets(client, program_id, scope, from_recon, target, targets_file, None, limit)
+    raw = _resolve_targets(
+        client, engagement_id, scope, from_recon, target, targets_file, None, limit
+    )
     targets = list(dict.fromkeys(runner.strip_url_to_host(t) for t in raw if t.strip()))
     if not targets:
         console.print("[yellow]No targets found.[/yellow]")
@@ -286,4 +290,4 @@ def run_naabu(
     _check_target_cap(targets, max_targets)
     _confirm(targets, "naabu", yes)
     cfg = _build_config("naabu", {"top_ports": top_ports, "limit": limit})
-    _finish("naabu", client, program_id, targets, cfg, _make_run_dir())
+    _finish("naabu", client, engagement_id, targets, cfg, _make_run_dir())

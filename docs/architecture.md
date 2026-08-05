@@ -40,7 +40,7 @@ either direction.
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
 | `vardrrunner/commands/status.py` | `status` — local config, version, detected tool availability (quick glance). |
 | `vardrrunner/commands/doctor.py` | `doctor` — deep preflight; runs health checks and exits non-zero on actionable failures (`--json` report). Reuses `daemon` PID helpers and `config` validation. |
-| `vardrrunner/commands/programs.py` | program lookup helpers used by other commands. |
+| `vardrrunner/commands/engagements.py` | engagement lookup helpers used by other commands. |
 
 ## Job execution lifecycle
 1. **Poll** — `GET /jobs/pending` returns queued jobs for this operator.

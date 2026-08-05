@@ -13,7 +13,7 @@ console = Console()
 SUPPORTED_TOOLS = ["httpx", "nuclei"]
 
 
-def import_file(tool: str, program_id: str, file: Path):
+def import_file(tool: str, engagement_id: str, file: Path):
     """Upload a tool output file directly to VardrMap without running the tool."""
     if tool not in SUPPORTED_TOOLS:
         console.print(
@@ -28,7 +28,7 @@ def import_file(tool: str, program_id: str, file: Path):
     url, key = config.require_auth()
     try:
         client = api.VardrMapClient(url, key)
-        result = client.import_file(program_id, tool, str(file))
+        result = client.import_file(engagement_id, tool, str(file))
     except Exception as e:
         console.print(f"[red]Import failed:[/red] {e}")
         raise typer.Exit(1) from e
@@ -36,5 +36,5 @@ def import_file(tool: str, program_id: str, file: Path):
     record = result.get("import_record", {})
     count = record.get("imported_count", "?")
     console.print(
-        f"[green]Imported[/green] {count} {tool} result(s) into program [bold]{program_id}[/bold]"
+        f"[green]Imported[/green] {count} {tool} result(s) into engagement [bold]{engagement_id}[/bold]"
     )

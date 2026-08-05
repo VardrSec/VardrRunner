@@ -459,7 +459,7 @@ class TestExecutePendingJobs:
 
         job = {
             "id": "job-d01",
-            "program_id": "prog-1",
+            "engagement_id": "prog-1",
             "tool_type": "httpx",
             "target_source": "scope",
             "config": {"limit": 50},

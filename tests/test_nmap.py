@@ -167,7 +167,7 @@ def test_client_create_services():
     svcs = [{"host": "10.0.0.1", "port": 80, "protocol": "tcp"}]
     with patch.object(client, "post", return_value={"created": 1, "updated": 0}) as mock_post:
         result = client.create_services("prog-1", svcs)
-    mock_post.assert_called_once_with("/programs/prog-1/services", json={"services": svcs})
+    mock_post.assert_called_once_with("/engagements/prog-1/services", json={"services": svcs})
     assert result["created"] == 1
 
 
@@ -182,7 +182,7 @@ def test_run_nmap_job_dispatches_and_uploads(tmp_path):
 
     job = {
         "id": "job-nmap-1",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "nmap",
         "target_source": "scope",
         "config": {"top_ports": 100, "timing": 3},
@@ -226,7 +226,7 @@ def test_run_nmap_job_no_open_ports_marks_done(tmp_path):
     """If parse_nmap_xml returns empty, job completes as done without calling create_services."""
     job = {
         "id": "job-nmap-2",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "nmap",
         "target_source": "scope",
         "config": {},
@@ -292,7 +292,7 @@ def test_run_nmap_job_strips_url_targets(tmp_path):
     (tmp_path / "nmap.xml").write_text(_NMAP_XML)
     job = {
         "id": "job-nmap-3",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "nmap",
         "target_source": "recon",
         "config": {"top_ports": 50, "timing": 2},
@@ -354,7 +354,7 @@ def test_run_nmap_command_normalizes_and_uploads_services(tmp_path):
         patch("vardrrunner.commands.run.runner.run_nmap", return_value=0) as mock_nmap,
         patch("vardrrunner.commands.run.runner.parse_nmap_xml", return_value=services),
     ):
-        run_cmd.run_nmap(program_id="prog-1", target="https://app.example.com/path", yes=True)
+        run_cmd.run_nmap(engagement_id="prog-1", target="https://app.example.com/path", yes=True)
 
     # URL was normalized to bare host before nmap, and services uploaded.
     assert mock_nmap.call_args[0][0] == ["app.example.com"]

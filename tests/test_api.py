@@ -25,7 +25,7 @@ def test_base_url_trailing_slash_stripped():
 def test_url_join_handles_leading_slash_either_way():
     c = _client()
     assert c._url("/me") == "https://api.example.com/me"
-    assert c._url("programs") == "https://api.example.com/programs"
+    assert c._url("engagements") == "https://api.example.com/engagements"
 
 
 def test_authorization_header_set():
@@ -186,20 +186,20 @@ def test_whoami():
 
 def test_programs_returns_list():
     c = _client()
-    with patch.object(c, "get", return_value={"programs": [{"id": "p1"}]}):
-        assert c.programs() == [{"id": "p1"}]
+    with patch.object(c, "get", return_value={"engagements": [{"id": "p1"}]}):
+        assert c.engagements() == [{"id": "p1"}]
 
 
 def test_programs_missing_key_returns_empty():
     c = _client()
     with patch.object(c, "get", return_value={}):
-        assert c.programs() == []
+        assert c.engagements() == []
 
 
 def test_program():
     c = _client()
     with patch.object(c, "get", return_value={"id": "p1"}):
-        assert c.program("p1") == {"id": "p1"}
+        assert c.engagement("p1") == {"id": "p1"}
 
 
 def test_scope():

@@ -42,9 +42,9 @@ def _patch_status(
         client_mock.whoami.return_value = whoami_result or {"username": "jorge", "github_id": "123"}
 
     if programs_exc:
-        client_mock.programs.side_effect = programs_exc
+        client_mock.engagements.side_effect = programs_exc
     else:
-        client_mock.programs.return_value = (
+        client_mock.engagements.return_value = (
             programs_result if programs_result is not None else [{"id": "p1"}, {"id": "p2"}]
         )
 
@@ -96,7 +96,7 @@ def test_status_all_ok():
     with patches[0], patches[1], patches[2], patches[3]:
         run_status()
     client.whoami.assert_called_once()
-    client.programs.assert_called_once()
+    client.engagements.assert_called_once()
 
 
 def test_status_one_program():
@@ -105,7 +105,7 @@ def test_status_one_program():
         programs_result=[{"id": "p1"}],
     )
     with patches[0], patches[1], patches[2], patches[3]:
-        run_status()  # "1 program available" — singular — should not crash
+        run_status()  # "1 engagement available" — singular — should not crash
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ def test_status_programs_fetch_fails():
     err = requests.HTTPError(response=MagicMock(status_code=500))
     patches, client = _patch_status(programs_exc=err)
     with patches[0], patches[1], patches[2], patches[3]:
-        run_status()  # authenticated but programs call fails — should not raise
+        run_status()  # authenticated but engagements call fails — should not raise
 
 
 # ---------------------------------------------------------------------------

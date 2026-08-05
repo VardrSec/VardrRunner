@@ -25,7 +25,7 @@ def _is_wildcard(value: str) -> bool:
 
 def _resolve_targets(
     client: api.VardrMapClient,
-    program_id: str,
+    engagement_id: str,
     scope: bool,
     from_recon: bool,
     target: str | None,
@@ -44,7 +44,7 @@ def _resolve_targets(
         return [line.strip() for line in targets_file.read_text().splitlines() if line.strip()]
 
     if scope:
-        raw = client.scope(program_id)
+        raw = client.scope(engagement_id)
         in_scope = raw.get("in", [])
         resolved, skipped = [], []
         for item in in_scope:
@@ -62,7 +62,7 @@ def _resolve_targets(
         return resolved
 
     if from_recon:
-        items = client.recon(program_id, limit=limit, status_code=status_code)
+        items = client.recon(engagement_id, limit=limit, status_code=status_code)
         targets = []
         for item in items:
             val = item.get("url") or item.get("host")

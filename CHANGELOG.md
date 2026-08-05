@@ -7,6 +7,21 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-08-04
+
+### Changed
+
+- **Programs are now Engagements**, following VardrMap's rename. `api.py` calls
+  `/engagements/*`; `VardrMapClient.programs()` → `engagements()`;
+  `commands/programs.py` → `commands/engagements.py`. See
+  [`changelog/v0.27.0.md`](changelog/v0.27.0.md).
+- **Requires VardrMap ≥ v0.21.0.** Deploy the backend before upgrading the runner.
+
+### Compatibility
+
+- `--program` and `-p` still accepted on every command that takes `--engagement`.
+- `vardrrunner programs` still runs; hidden from `--help`.
+
 ## [0.26.0] — 2026-07-09
 
 ### Added

@@ -116,7 +116,7 @@ def test_job_envelope_valid():
             "id": "job-1",
             "tool_type": "httpx",
             "target_source": "scope",
-            "program_id": "prog-1",
+            "engagement_id": "prog-1",
             "config": {"limit": 5},
         }
     )
@@ -125,7 +125,7 @@ def test_job_envelope_valid():
 
 def test_job_envelope_defaults_config_to_empty():
     env = configs.JobEnvelope.from_dict(
-        {"id": "1", "tool_type": "httpx", "target_source": "scope", "program_id": "p"}
+        {"id": "1", "tool_type": "httpx", "target_source": "scope", "engagement_id": "p"}
     )
     assert env.config == {}
 
@@ -133,10 +133,10 @@ def test_job_envelope_defaults_config_to_empty():
 @pytest.mark.parametrize(
     "job",
     [
-        {"tool_type": "httpx", "target_source": "scope", "program_id": "p"},  # no id
-        {"id": "1", "target_source": "scope", "program_id": "p"},  # no tool_type
-        {"id": "1", "tool_type": "httpx", "program_id": "p"},  # no target_source
-        {"id": "1", "tool_type": "httpx", "target_source": "scope"},  # no program_id
+        {"tool_type": "httpx", "target_source": "scope", "engagement_id": "p"},  # no id
+        {"id": "1", "target_source": "scope", "engagement_id": "p"},  # no tool_type
+        {"id": "1", "tool_type": "httpx", "engagement_id": "p"},  # no target_source
+        {"id": "1", "tool_type": "httpx", "target_source": "scope"},  # no engagement_id
     ],
 )
 def test_job_envelope_missing_field_rejected(job):

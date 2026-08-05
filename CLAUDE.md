@@ -13,7 +13,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
-  - `commands/` — one module per group: `auth`, `daemon`, `doctor`, `heartbeat`, `imports`, `jobs`, `pipeline`, `programs`, `run`, `status`
+  - `commands/` — one module per group: `auth`, `daemon`, `doctor`, `heartbeat`, `imports`, `jobs`, `pipeline`, `engagements`, `run`, `status`
 - `tests/` — pytest suite (421 tests, 95% coverage); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index

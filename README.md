@@ -76,8 +76,8 @@ vardrrunner daemon start       # run the continuous worker (poll jobs + heartbea
 ```bash
 vardrrunner jobs list                          # show the backend queue
 vardrrunner jobs run                            # claim + execute all pending jobs once
-vardrrunner run subfinder --program 12 ...       # run a single tool and upload results
-vardrrunner import nuclei --program 12 -f out.jsonl
+vardrrunner run subfinder --engagement 12 ...       # run a single tool and upload results
+vardrrunner import nuclei --engagement 12 -f out.jsonl
 ```
 
 See **[docs/cli.md](docs/cli.md)** for the full command reference.

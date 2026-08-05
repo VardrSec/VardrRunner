@@ -73,14 +73,14 @@ vardrrunner heartbeat
 
 ## `run` — run a tool locally and upload results
 ```bash
-vardrrunner run httpx     --program <id> [options]
-vardrrunner run subfinder --program <id> [options]
-vardrrunner run nuclei    --program <id> [options]
-vardrrunner run nmap      --program <id> [--top-ports N] [--timing 0-4] [options]
-vardrrunner run dnsx      --program <id> [options]
-vardrrunner run naabu     --program <id> [--top-ports N] [options]
+vardrrunner run httpx     --engagement <id> [options]
+vardrrunner run subfinder --engagement <id> [options]
+vardrrunner run nuclei    --engagement <id> [options]
+vardrrunner run nmap      --engagement <id> [--top-ports N] [--timing 0-4] [options]
+vardrrunner run dnsx      --engagement <id> [options]
+vardrrunner run naabu     --engagement <id> [--top-ports N] [options]
 ```
-Executes the named tool against the program's scope, captures output into a timestamped
+Executes the named tool against the engagement's scope, captures output into a timestamped
 run directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
 - `run nmap` — safe-profile service discovery (normalizes URLs to hosts, never uses
   `-A`/`-O`/`-p-`/`--script`/`-T5`) → services API.
@@ -95,8 +95,8 @@ hung tool is killed rather than blocking.
 
 ## `import` — import an existing output file
 ```bash
-vardrrunner import nuclei --program <id> --file <path>
-vardrrunner import httpx  --program <id> --file <path>
+vardrrunner import nuclei --engagement <id> --file <path>
+vardrrunner import httpx  --engagement <id> --file <path>
 ```
 Pushes results from a tool output file (JSONL) you already have, without running the
 tool. `-f` is shorthand for `--file`. Supported tools: `httpx`, `nuclei`.
@@ -106,7 +106,7 @@ tool. `-f` is shorthand for `--file`. Supported tools: `httpx`, `nuclei`.
 ## `pipeline` — chain tools into one recon workflow
 ```bash
 vardrrunner pipeline list                              # show available pipelines
-vardrrunner pipeline run recon --program <id> [options]
+vardrrunner pipeline run recon --engagement <id> [options]
 ```
 A pipeline runs an ordered chain of tools. Each stage writes its discovered targets to a
 local handoff file; the next stage reads from that file instead of pulling from the backend

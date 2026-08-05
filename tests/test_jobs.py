@@ -181,7 +181,7 @@ def test_run_jobs_executes_httpx_job(tmp_path):
 
     job = {
         "id": "job-001",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "httpx",
         "target_source": "scope",
         "config": {"limit": 100},
@@ -211,7 +211,7 @@ def test_run_jobs_marks_failed_on_tool_timeout(tmp_path):
 
     job = {
         "id": "job-timeout",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "httpx",
         "target_source": "scope",
         "config": {"timeout": 1},
@@ -238,7 +238,7 @@ def test_run_jobs_marks_failed_on_tool_timeout(tmp_path):
 
 def test_run_jobs_malformed_job_marks_failed():
     """A job missing a required envelope field fails cleanly instead of crashing the loop."""
-    job = {"id": "job-x", "program_id": "p", "target_source": "scope"}  # no tool_type
+    job = {"id": "job-x", "engagement_id": "p", "target_source": "scope"}  # no tool_type
     client = MagicMock()
     client.pending_jobs.return_value = [job]
 
@@ -273,7 +273,7 @@ def test_run_jobs_executes_subfinder_job(tmp_path):
 
     job = {
         "id": "job-003",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "subfinder",
         "target_source": "scope",
         "config": {},
@@ -306,7 +306,7 @@ def test_run_jobs_subfinder_no_wildcards_marks_done():
     """Subfinder job with no wildcard scope entries is marked done without execution."""
     job = {
         "id": "job-004",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "subfinder",
         "target_source": "scope",
         "config": {},
@@ -333,7 +333,7 @@ def test_run_jobs_subfinder_no_wildcards_marks_done():
 def test_run_jobs_missing_tool_marks_failed():
     job = {
         "id": "job-002",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "nuclei",
         "target_source": "scope",
         "config": {},
@@ -356,7 +356,7 @@ def test_run_jobs_missing_tool_marks_failed():
 
 def test_run_jobs_malformed_job_no_id_prints_message():
     """Malformed job without an id field is printed, not marked via API."""
-    job = {"program_id": "p", "target_source": "scope"}  # no id and no tool_type
+    job = {"engagement_id": "p", "target_source": "scope"}  # no id and no tool_type
     client = MagicMock()
     client.pending_jobs.return_value = [job]
 
@@ -373,7 +373,7 @@ def test_run_jobs_unknown_tool_type_marks_failed():
     """A job with an unknown tool_type must be marked failed."""
     job = {
         "id": "job-unknown",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "masscan",
         "target_source": "scope",
         "config": {},
@@ -395,7 +395,7 @@ def test_run_jobs_invalid_config_marks_failed():
     """Invalid tool config must be caught and the job marked failed before claiming."""
     job = {
         "id": "job-badcfg",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "nuclei",
         "target_source": "scope",
         "config": {"severity": "not_a_real_severity"},
@@ -418,7 +418,7 @@ def test_run_jobs_target_resolution_failure_marks_failed():
     """If resolve_targets raises, the job must be marked failed."""
     job = {
         "id": "job-resolv",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "httpx",
         "target_source": "scope",
         "config": {},
@@ -442,7 +442,7 @@ def test_run_jobs_claim_failure_does_not_mark_failed(tmp_path):
     """If claim fails (409 race), the job is abandoned silently — not marked failed."""
     job = {
         "id": "job-race",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "httpx",
         "target_source": "scope",
         "config": {},
@@ -467,7 +467,7 @@ def test_run_jobs_no_output_marks_done(tmp_path):
     """A job whose tool produces no output file must be marked done (not failed)."""
     job = {
         "id": "job-noout",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "httpx",
         "target_source": "scope",
         "config": {},
@@ -496,7 +496,7 @@ def test_run_jobs_generic_exception_marks_failed(tmp_path):
 
     job = {
         "id": "job-exc",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "httpx",
         "target_source": "scope",
         "config": {},
