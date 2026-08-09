@@ -66,7 +66,7 @@ def _make_job(tool_type="httpx", target_src="scope"):
         "id": "job-httpx-1",
         "tool_type": tool_type,
         "target_source": target_src,
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "config": {},
     }
 

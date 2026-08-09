@@ -228,7 +228,7 @@ def test_run_jobs_sends_heartbeat_before_executing(tmp_path):
 
     job = {
         "id": "job-hb1",
-        "program_id": "prog-1",
+        "engagement_id": "prog-1",
         "tool_type": "httpx",
         "target_source": "scope",
         "config": {},

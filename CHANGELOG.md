@@ -7,6 +7,35 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-08-04
+
+### Changed
+
+- **Programs are now Engagements**, following VardrMap's rename. `api.py` calls
+  `/engagements/*`; `VardrMapClient.programs()` → `engagements()`;
+  `commands/programs.py` → `commands/engagements.py`. See
+  [`changelog/v0.27.0.md`](changelog/v0.27.0.md).
+- **Requires VardrMap ≥ v0.22.0.** Deploy the backend before upgrading the runner.
+
+### Compatibility
+
+- `--program` and `-p` still accepted on every command that takes `--engagement`.
+- `vardrrunner programs` still runs; hidden from `--help`.
+
+## [0.26.0] — 2026-07-09
+
+### Added
+- **Local secret resolution for VardrGate identities.**  A `vardrgate_api_test` job credential may reference a secret instead of embedding it: `value_env` (an environment variable read on the runner) or `value_keychain` (an OS-keychain account). The handler resolves references to real values locally, just before execution, so secrets never travel through — or persist in — the backend. A referenced-but-missing secret fails the job rather than running with a blank credential. Literal `value` and anonymous credentials are untouched. Adds `keychain.get_secret()`.
+
+## [0.25.0] — 2026-07-08
+
+### Added
+- **`vardrgate_api_test` job handler.**  VardrRunner can now run VardrGate API authorization tests as jobs. The handler shells out to the `vardrgate run --job … --out …` binary (added to the tool allowlist as `vardrgate`), captures the sanitized result JSON, and uploads it to the job via `POST /jobs/{id}/upload`. The job is self-contained — the test case travels in the job config, so there are no scope/recon targets to resolve. VardrRunner imports no VardrGate internals; the coupling is the CLI/JSON contract only. See [ADR 0006](docs/adr/0006-vardrgate-api-test-handler.md).
+- **`VardrGateConfig`.**  Typed, validated config for the new job type (`test_case`, `execution`, optional `policy_id`).
+
+### Changed
+- **`ToolHandler.upload()` gained an optional `job_id` parameter.**  Recon handlers import results to a program and ignore it; the VardrGate handler uses it to attach the result to the originating job. Existing call sites and handlers are unaffected (defaults to `""`).
+
 ## [0.24.0] — 2026-06-26
 
 ### Added

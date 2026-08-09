@@ -25,12 +25,12 @@ class JobEnvelope:
     id: str
     tool_type: str
     target_source: str
-    program_id: str
+    engagement_id: str
     config: dict
 
     @classmethod
     def from_dict(cls, job: dict) -> "JobEnvelope":
-        required = ("id", "tool_type", "target_source", "program_id")
+        required = ("id", "tool_type", "target_source", "engagement_id")
         missing = [k for k in required if not job.get(k)]
         if missing:
             raise ConfigError(f"job missing required field(s): {', '.join(missing)}")
@@ -38,7 +38,7 @@ class JobEnvelope:
             id=str(job["id"]),
             tool_type=str(job["tool_type"]),
             target_source=str(job["target_source"]),
-            program_id=str(job["program_id"]),
+            engagement_id=str(job["engagement_id"]),
             config=job.get("config") or {},
         )
 
@@ -177,4 +177,34 @@ class NaabuConfig:
             top_ports=_req_int(cfg, "top_ports", 100, minimum=1, maximum=65535),
             limit=_req_int(cfg, "limit", 500, minimum=1),
             timeout=_opt_int(cfg, "timeout", minimum=1),
+        )
+
+
+@dataclass(frozen=True)
+class VardrGateConfig:
+    """Config for a VardrGate API authorization test job.
+
+    Unlike the recon tools, this job is self-contained: the ``test_case`` (and
+    optional ``execution`` settings) travel inside the job config rather than
+    being resolved from engagement scope/recon. VardrGate itself enforces SSRF and
+    credential-redaction guarantees; the runner only shells out to it.
+    """
+
+    test_case: dict
+    execution: dict
+    policy_id: str | None = None
+
+    @classmethod
+    def from_dict(cls, cfg: dict) -> "VardrGateConfig":
+        test_case = cfg.get("test_case")
+        if not isinstance(test_case, dict) or not test_case:
+            raise ConfigError("'test_case' is required and must be an object")
+        execution = cfg.get("execution") or {}
+        if not isinstance(execution, dict):
+            raise ConfigError("'execution' must be an object")
+        policy_id = cfg.get("policy_id")
+        return cls(
+            test_case=test_case,
+            execution=execution,
+            policy_id=str(policy_id) if policy_id else None,
         )

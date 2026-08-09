@@ -7,18 +7,18 @@ from vardrrunner import api, config
 console = Console()
 
 
-def list_programs():
-    """List all programs in your VardrMap."""
+def list_engagements():
+    """List all engagements in your VardrMap."""
     url, key = config.require_auth()
     try:
         client = api.VardrMapClient(url, key)
-        programs = client.programs()
+        engagements = client.engagements()
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from e
 
-    if not programs:
-        console.print("[dim]No programs found.[/dim]")
+    if not engagements:
+        console.print("[dim]No engagements found.[/dim]")
         return
 
     table = Table(show_header=True, header_style="bold dim")
@@ -28,7 +28,7 @@ def list_programs():
     table.add_column("Findings", justify="right")
     table.add_column("Scans", justify="right")
 
-    for p in programs:
+    for p in engagements:
         table.add_row(
             p["id"],
             p["name"],
@@ -39,12 +39,12 @@ def list_programs():
     console.print(table)
 
 
-def show_scope(program_id: str):
-    """Show in-scope and out-of-scope items for a program."""
+def show_scope(engagement_id: str):
+    """Show in-scope and out-of-scope items for an engagement."""
     url, key = config.require_auth()
     try:
         client = api.VardrMapClient(url, key)
-        scope = client.scope(program_id)
+        scope = client.scope(engagement_id)
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from e

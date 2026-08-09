@@ -10,12 +10,14 @@ claim/event/failure handling and the executor stays small.
 Adding a tool is a one-file change: write a handler and register it below.
 """
 
+import copy
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from vardrrunner import api, configs, runner
+from vardrrunner import api, configs, keychain, runner
 from vardrrunner.targets import _is_wildcard, _resolve_targets
 
 
@@ -64,7 +66,7 @@ class ToolHandler(Generic[C]):
         raise NotImplementedError
 
     def resolve_targets(
-        self, client: api.VardrMapClient, program_id: str, target_source: str, config: C
+        self, client: api.VardrMapClient, engagement_id: str, target_source: str, config: C
     ) -> list[str]:
         raise NotImplementedError
 
@@ -75,7 +77,9 @@ class ToolHandler(Generic[C]):
         """Run the tool. Return the artifact to upload, or None if nothing was produced."""
         raise NotImplementedError
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
         """Push the artifact to the backend. Return a one-line human summary."""
         raise NotImplementedError
 
@@ -98,12 +102,12 @@ class ToolHandler(Generic[C]):
 
 
 def _resolve_standard(
-    client: api.VardrMapClient, program_id: str, target_source: str, config: Any
+    client: api.VardrMapClient, engagement_id: str, target_source: str, config: Any
 ) -> list[str]:
     """Scope/recon target resolution shared by httpx, nuclei, and nmap."""
     return _resolve_targets(
         client,
-        program_id,
+        engagement_id,
         scope=(target_source == "scope"),
         from_recon=(target_source == "recon"),
         target=None,
@@ -122,11 +126,11 @@ class HttpxHandler(ToolHandler[configs.HttpxConfig]):
     def resolve_targets(
         self,
         client: api.VardrMapClient,
-        program_id: str,
+        engagement_id: str,
         target_source: str,
         config: configs.HttpxConfig,
     ) -> list[str]:
-        return _resolve_standard(client, program_id, target_source, config)
+        return _resolve_standard(client, engagement_id, target_source, config)
 
     def execute(
         self, targets: list[str], run_dir: Path, config: configs.HttpxConfig
@@ -135,8 +139,10 @@ class HttpxHandler(ToolHandler[configs.HttpxConfig]):
         runner.run_httpx(targets, output, timeout=config.timeout)
         return output
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
-        result = client.import_file(program_id, "httpx", str(output))
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = client.import_file(engagement_id, "httpx", str(output))
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} result(s)"
 
@@ -153,11 +159,11 @@ class NucleiHandler(ToolHandler[configs.NucleiConfig]):
     def resolve_targets(
         self,
         client: api.VardrMapClient,
-        program_id: str,
+        engagement_id: str,
         target_source: str,
         config: configs.NucleiConfig,
     ) -> list[str]:
-        return _resolve_standard(client, program_id, target_source, config)
+        return _resolve_standard(client, engagement_id, target_source, config)
 
     def running_label(self, targets: list[str], config: configs.NucleiConfig) -> str:
         label = f"severity={config.severity}" if config.severity else "all"
@@ -176,8 +182,10 @@ class NucleiHandler(ToolHandler[configs.NucleiConfig]):
         )
         return output
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
-        result = client.import_file(program_id, "nuclei", str(output))
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = client.import_file(engagement_id, "nuclei", str(output))
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} finding(s)"
 
@@ -191,11 +199,11 @@ class NmapHandler(ToolHandler[configs.NmapConfig]):
     def resolve_targets(
         self,
         client: api.VardrMapClient,
-        program_id: str,
+        engagement_id: str,
         target_source: str,
         config: configs.NmapConfig,
     ) -> list[str]:
-        raw = _resolve_standard(client, program_id, target_source, config)
+        raw = _resolve_standard(client, engagement_id, target_source, config)
         # nmap needs bare hosts, not full URLs; normalize and de-duplicate.
         return list(dict.fromkeys(runner.strip_url_to_host(t) for t in raw if t.strip()))
 
@@ -216,11 +224,13 @@ class NmapHandler(ToolHandler[configs.NmapConfig]):
         )
         return xml_path
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
         services = runner.parse_nmap_xml(output)
         if not services:
             return "no open ports found"
-        result = client.create_services(program_id, services)
+        result = client.create_services(engagement_id, services)
         created = result.get("created", 0)
         updated = result.get("updated", 0)
         return f"{created} new, {updated} updated service(s)"
@@ -235,13 +245,13 @@ class SubfinderHandler(ToolHandler[configs.SubfinderConfig]):
     def resolve_targets(
         self,
         client: api.VardrMapClient,
-        program_id: str,
+        engagement_id: str,
         target_source: str,
         config: configs.SubfinderConfig,
     ) -> list[str]:
         # subfinder enumerates wildcard scope entries (*.example.com → example.com),
         # regardless of target_source.
-        raw = client.scope(program_id)
+        raw = client.scope(engagement_id)
         domains = []
         for item in raw.get("in", []):
             val = item.get("value", "")
@@ -270,8 +280,10 @@ class SubfinderHandler(ToolHandler[configs.SubfinderConfig]):
         _write_host_import_jsonl(hosts, "subfinder", jsonl_path)
         return jsonl_path
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
-        result = client.import_file(program_id, "httpx", str(output))
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = client.import_file(engagement_id, "httpx", str(output))
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} subdomain(s) as recon targets"
 
@@ -288,11 +300,11 @@ class DnsxHandler(ToolHandler[configs.DnsxConfig]):
     def resolve_targets(
         self,
         client: api.VardrMapClient,
-        program_id: str,
+        engagement_id: str,
         target_source: str,
         config: configs.DnsxConfig,
     ) -> list[str]:
-        raw = _resolve_standard(client, program_id, target_source, config)
+        raw = _resolve_standard(client, engagement_id, target_source, config)
         # dnsx resolves bare hostnames, not URLs.
         return list(dict.fromkeys(runner.strip_url_to_host(t) for t in raw if t.strip()))
 
@@ -315,8 +327,10 @@ class DnsxHandler(ToolHandler[configs.DnsxConfig]):
         _write_host_import_jsonl(hosts, "dnsx", jsonl_path)
         return jsonl_path
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
-        result = client.import_file(program_id, "httpx", str(output))
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = client.import_file(engagement_id, "httpx", str(output))
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} resolvable host(s)"
 
@@ -333,11 +347,11 @@ class NaabuHandler(ToolHandler[configs.NaabuConfig]):
     def resolve_targets(
         self,
         client: api.VardrMapClient,
-        program_id: str,
+        engagement_id: str,
         target_source: str,
         config: configs.NaabuConfig,
     ) -> list[str]:
-        raw = _resolve_standard(client, program_id, target_source, config)
+        raw = _resolve_standard(client, engagement_id, target_source, config)
         return list(dict.fromkeys(runner.strip_url_to_host(t) for t in raw if t.strip()))
 
     def running_label(self, targets: list[str], config: configs.NaabuConfig) -> str:
@@ -353,14 +367,120 @@ class NaabuHandler(ToolHandler[configs.NaabuConfig]):
         runner.run_naabu(targets, out, top_ports=config.top_ports, timeout=config.timeout)
         return out
 
-    def upload(self, client: api.VardrMapClient, program_id: str, output: Path) -> str:
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
         services = runner.parse_naabu_json(output)
         if not services:
             return "no open ports found"
-        result = client.create_services(program_id, services)
+        result = client.create_services(engagement_id, services)
         created = result.get("created", 0)
         updated = result.get("updated", 0)
         return f"{created} new, {updated} updated service(s)"
+
+
+def _resolve_identity_secrets(test_case: dict) -> dict:
+    """Return a copy of ``test_case`` with each identity credential's value
+    resolved from a local source, so real secrets never travel through — or
+    persist in — the backend.
+
+    A credential may specify at most one of:
+      - ``value`` — a literal (used as-is; convenient for local runs)
+      - ``value_env`` — an environment variable name, read on this machine
+      - ``value_keychain`` — an account looked up in the OS keychain
+
+    A referenced-but-missing secret raises ``ConfigError`` so the job fails
+    instead of silently running with a blank credential.
+    """
+    resolved = copy.deepcopy(test_case)
+    identities = resolved.get("identities")
+    if isinstance(identities, list):
+        for idx, identity in enumerate(identities):
+            cred = identity.get("credential") if isinstance(identity, dict) else None
+            if isinstance(cred, dict):
+                _resolve_one_credential(cred, str(identity.get("id", f"#{idx}")))
+    return resolved
+
+
+def _resolve_one_credential(cred: dict, identity_id: str) -> None:
+    provided = [k for k in ("value", "value_env", "value_keychain") if cred.get(k)]
+    if len(provided) > 1:
+        raise configs.ConfigError(
+            f"identity {identity_id!r}: credential must specify only one of "
+            "value, value_env, value_keychain"
+        )
+    env_name = cred.pop("value_env", None)
+    kc_account = cred.pop("value_keychain", None)
+    if env_name:
+        value = os.environ.get(str(env_name))
+        if not value:
+            raise configs.ConfigError(
+                f"identity {identity_id!r}: environment variable {env_name!r} is not set"
+            )
+        cred["value"] = value
+    elif kc_account:
+        value = keychain.get_secret(str(kc_account))
+        if not value:
+            raise configs.ConfigError(
+                f"identity {identity_id!r}: no keychain secret for account {kc_account!r}"
+            )
+        cred["value"] = value
+    # Otherwise: a literal value or an anonymous credential — left untouched.
+
+
+class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
+    """Run a VardrGate API authorization test job and upload its result.
+
+    This handler differs from the recon handlers: the job is self-contained, so
+    there are no scope/recon targets to resolve, and the result is attached to
+    the job itself (``POST /jobs/{id}/upload``) rather than imported to an engagement.
+    The runner never imports VardrGate internals — it shells out to the binary
+    and uploads the sanitized JSON result.
+    """
+
+    tool = "vardrgate_api_test"
+
+    def parse_config(self, cfg: dict) -> configs.VardrGateConfig:
+        return configs.VardrGateConfig.from_dict(cfg)
+
+    def resolve_targets(
+        self,
+        client: api.VardrMapClient,
+        engagement_id: str,
+        target_source: str,
+        config: configs.VardrGateConfig,
+    ) -> list[str]:
+        # The endpoint under test travels inside the test case; surface it as the
+        # single "target" so the lifecycle proceeds and operators see what runs.
+        request = config.test_case.get("request") or {}
+        url = request.get("url")
+        if url:
+            return [str(url)]
+        return [str(config.test_case.get("id", "vardrgate-job"))]
+
+    def running_label(self, targets: list[str], config: configs.VardrGateConfig) -> str:
+        return f"vardrgate authorization test against {targets[0] if targets else 'target'}"
+
+    def execute(
+        self, targets: list[str], run_dir: Path, config: configs.VardrGateConfig
+    ) -> Path | None:
+        output = run_dir / "vardrgate_result.json"
+        # Resolve credential references to real values locally, keeping secrets
+        # out of the backend. Raises ConfigError if a referenced secret is missing.
+        test_case = _resolve_identity_secrets(config.test_case)
+        job = {"config": {"test_case": test_case, "execution": config.execution}}
+        timeout = config.execution.get("timeout_seconds")
+        runner.run_vardrgate(job, output, timeout=timeout if isinstance(timeout, int) else None)
+        return output
+
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = json.loads(output.read_text())
+        if job_id:
+            client.post(f"/jobs/{job_id}/upload", json=result)
+        findings = result.get("findings") or []
+        return f"{len(findings)} finding(s)"
 
 
 # Registry: job type → handler. Add a tool by adding a handler here.
@@ -373,5 +493,6 @@ REGISTRY: dict[str, ToolHandler[Any]] = {
         SubfinderHandler(),
         DnsxHandler(),
         NaabuHandler(),
+        VardrGateHandler(),
     )
 }

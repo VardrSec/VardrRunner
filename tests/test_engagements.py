@@ -1,21 +1,21 @@
-"""Tests for the programs commands: list_programs and show_scope."""
+"""Tests for the engagements commands: list_engagements and show_scope."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
 
-from vardrrunner.commands import programs as prog_cmd
+from vardrrunner.commands import engagements as prog_cmd
 
 
 def _mock_auth(url="https://api.example.com", key="vmap_test"):
-    return patch("vardrrunner.commands.programs.config.require_auth", return_value=(url, key))
+    return patch("vardrrunner.commands.engagements.config.require_auth", return_value=(url, key))
 
 
 class TestListPrograms:
     def test_prints_programs(self, capsys):
         client = MagicMock()
-        client.programs.return_value = [
+        client.engagements.return_value = [
             {
                 "id": "p1",
                 "name": "TestProg",
@@ -26,43 +26,43 @@ class TestListPrograms:
         ]
         with (
             _mock_auth(),
-            patch("vardrrunner.commands.programs.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.engagements.api.VardrMapClient", return_value=client),
         ):
-            prog_cmd.list_programs()
+            prog_cmd.list_engagements()
 
         out = capsys.readouterr().out
         assert "TestProg" in out
 
     def test_no_programs_prints_dim_message(self, capsys):
         client = MagicMock()
-        client.programs.return_value = []
+        client.engagements.return_value = []
         with (
             _mock_auth(),
-            patch("vardrrunner.commands.programs.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.engagements.api.VardrMapClient", return_value=client),
         ):
-            prog_cmd.list_programs()
+            prog_cmd.list_engagements()
 
         out = capsys.readouterr().out
-        assert "No programs" in out
+        assert "No engagements" in out
 
     def test_api_error_exits_1(self):
         client = MagicMock()
-        client.programs.side_effect = RuntimeError("network error")
+        client.engagements.side_effect = RuntimeError("network error")
         with (
             _mock_auth(),
-            patch("vardrrunner.commands.programs.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.engagements.api.VardrMapClient", return_value=client),
         ):
             with pytest.raises(typer.Exit):
-                prog_cmd.list_programs()
+                prog_cmd.list_engagements()
 
     def test_program_with_missing_optional_fields(self, capsys):
         client = MagicMock()
-        client.programs.return_value = [{"id": "p1", "name": "Min"}]
+        client.engagements.return_value = [{"id": "p1", "name": "Min"}]
         with (
             _mock_auth(),
-            patch("vardrrunner.commands.programs.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.engagements.api.VardrMapClient", return_value=client),
         ):
-            prog_cmd.list_programs()
+            prog_cmd.list_engagements()
         out = capsys.readouterr().out
         assert "Min" in out
 
@@ -76,7 +76,7 @@ class TestShowScope:
         }
         with (
             _mock_auth(),
-            patch("vardrrunner.commands.programs.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.engagements.api.VardrMapClient", return_value=client),
         ):
             prog_cmd.show_scope("p1")
 
@@ -92,7 +92,7 @@ class TestShowScope:
         }
         with (
             _mock_auth(),
-            patch("vardrrunner.commands.programs.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.engagements.api.VardrMapClient", return_value=client),
         ):
             prog_cmd.show_scope("p1")
 
@@ -105,7 +105,7 @@ class TestShowScope:
         client.scope.return_value = {"in": [], "out": []}
         with (
             _mock_auth(),
-            patch("vardrrunner.commands.programs.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.engagements.api.VardrMapClient", return_value=client),
         ):
             prog_cmd.show_scope("p1")
 
@@ -117,7 +117,7 @@ class TestShowScope:
         client.scope.side_effect = RuntimeError("gone")
         with (
             _mock_auth(),
-            patch("vardrrunner.commands.programs.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.engagements.api.VardrMapClient", return_value=client),
         ):
             with pytest.raises(typer.Exit):
                 prog_cmd.show_scope("p1")

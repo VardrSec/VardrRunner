@@ -88,7 +88,7 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
     job_id = env.id
     tool_type = env.tool_type
     target_src = env.target_source
-    program_id = env.program_id
+    engagement_id = env.engagement_id
     cfg = env.config
 
     con.rule(f"Job {job_id[:8]}… — {tool_type} / {target_src}")
@@ -109,7 +109,7 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
         return
 
     try:
-        targets = handler.resolve_targets(client, program_id, target_src, tool_cfg)
+        targets = handler.resolve_targets(client, engagement_id, target_src, tool_cfg)
     except Exception as e:  # resolution failure must not crash the loop
         _fail_job(client, con, job_id, f"failed to resolve targets: {e}")
         return
@@ -144,7 +144,7 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
             return
 
         con.print("Uploading results…")
-        summary = handler.upload(client, program_id, output)
+        summary = handler.upload(client, engagement_id, output, job_id=job_id)
         con.print(f"[green]Done.[/green] {summary}")
         _emit(client, job_id, "uploaded", summary)
         _complete_done(client, job_id)

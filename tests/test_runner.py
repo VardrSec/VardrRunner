@@ -199,6 +199,20 @@ def test_run_dnsx_uses_arg_list(tmp_path):
         assert args[0] == "dnsx" and "-l" in args and "-silent" in args
 
 
+def test_run_vardrgate_uses_arg_list(tmp_path):
+    output = tmp_path / "result.json"
+    job = {"config": {"test_case": {"id": "x"}, "execution": {}}}
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        runner.run_vardrgate(job, output)
+        args = mock_run.call_args[0][0]
+    assert isinstance(args, list)
+    assert args[0] == "vardrgate"
+    assert args[1] == "run"
+    assert "--job" in args and "--out" in args
+    assert str(output) in args
+
+
 def test_run_naabu_uses_arg_list(tmp_path):
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)

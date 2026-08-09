@@ -23,6 +23,8 @@ ALLOWED_TOOLS = {
     "nmap": "nmap",
     "dnsx": "dnsx",
     "naabu": "naabu",
+    # Job type "vardrgate_api_test" maps to the "vardrgate" binary on PATH.
+    "vardrgate_api_test": "vardrgate",
 }
 
 # Wall-clock ceiling for a single tool run. A hung tool must never freeze the
@@ -328,6 +330,28 @@ def run_naabu(
         "-silent",
     ]
     return _run_tool(cmd, hosts_file, "naabu", timeout)
+
+
+def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> None:
+    """Run a VardrGate API authorization test job locally.
+
+    ``job`` is the VardrGate job envelope (``{"config": {"test_case": ..., "execution": ...}}``).
+    It is written to a temp file and passed to ``vardrgate run``; the sanitized
+    result JSON is written to ``output_path``. The temp file is always removed.
+    """
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
+        json.dump(job, tmp)
+        job_file = tmp.name
+
+    cmd = [
+        ALLOWED_TOOLS["vardrgate_api_test"],
+        "run",
+        "--job",
+        job_file,
+        "--out",
+        str(output_path),
+    ]
+    return _run_tool(cmd, job_file, "vardrgate", timeout)
 
 
 def parse_naabu_json(json_path: Path) -> list[dict]:

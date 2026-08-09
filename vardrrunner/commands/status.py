@@ -54,7 +54,7 @@ def run_status() -> None:
     conn_table = Table(show_header=False, box=None, padding=(0, 1))
     authed = False
     username = None
-    program_count = None
+    engagement_count = None
 
     try:
         client = api.VardrMapClient(api_url, api_key)
@@ -70,18 +70,18 @@ def run_status() -> None:
 
     if authed:
         try:
-            programs = client.programs()
-            program_count = len(programs)
+            engagements = client.engagements()
+            engagement_count = len(engagements)
             _row(
                 conn_table,
                 True,
-                f"{program_count} program{'s' if program_count != 1 else ''} available",
+                f"{engagement_count} engagement{'s' if engagement_count != 1 else ''} available",
             )
         except requests.HTTPError as e:
             status_code = e.response.status_code if e.response is not None else "?"
-            _row(conn_table, False, f"Could not fetch programs (HTTP {status_code})")
+            _row(conn_table, False, f"Could not fetch engagements (HTTP {status_code})")
         except requests.RequestException as e:
-            _row(conn_table, False, f"Could not fetch programs — {e}")
+            _row(conn_table, False, f"Could not fetch engagements — {e}")
 
     console.print()
     console.print("[bold]Connection[/bold]")
@@ -106,7 +106,7 @@ def run_status() -> None:
     if authed:
         console.print()
         console.print("[dim]Next steps:[/dim]")
-        console.print("  vardrrunner programs")
+        console.print("  vardrrunner engagements")
         console.print("  vardrrunner jobs list")
         console.print("  vardrrunner jobs run")
 

@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner.commands import auth, imports, jobs, programs, run
+from vardrrunner.commands import auth, engagements, imports, jobs, run
 from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import doctor as doctor_cmd
 from vardrrunner.commands import heartbeat as heartbeat_cmd
@@ -71,19 +71,22 @@ def whoami():
 
 
 @app.command()
-def program_list():
-    """List all programs in VardrMap."""
-    programs.list_programs()
+def engagement_list():
+    """List all engagements in VardrMap."""
+    engagements.list_engagements()
 
 
-# Alias `programs` → `program-list` for a more natural UX
-app.command(name="programs")(program_list)
+# Alias `engagements` → `engagement-list` for a more natural UX
+app.command(name="engagements")(engagement_list)
+# Retired name, kept so existing habits and scripts do not break. Hidden from
+# --help so only the current name is advertised.
+app.command(name="programs", hidden=True)(engagement_list)
 
 
 @app.command()
-def scope(program_id: str = typer.Argument(..., help="Program UUID")):
-    """Show in-scope and out-of-scope items for a program."""
-    programs.show_scope(program_id)
+def scope(engagement_id: str = typer.Argument(..., help="Engagement UUID")):
+    """Show in-scope and out-of-scope items for an engagement."""
+    engagements.show_scope(engagement_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -96,29 +99,35 @@ app.add_typer(import_app, name="import")
 
 @import_app.command("nuclei")
 def import_nuclei(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     file: Path = typer.Option(..., "--file", "-f", help="Path to nuclei JSONL output"),
 ):
     """Import a nuclei output file."""
-    imports.import_file("nuclei", program_id, file)
+    imports.import_file("nuclei", engagement_id, file)
 
 
 @import_app.command("httpx")
 def import_httpx(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     file: Path = typer.Option(..., "--file", "-f", help="Path to httpx JSON/JSONL output"),
 ):
     """Import an httpx output file."""
-    imports.import_file("httpx", program_id, file)
+    imports.import_file("httpx", engagement_id, file)
 
 
 @import_app.command("ffuf")
 def import_ffuf(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     file: Path = typer.Option(..., "--file", "-f", help="Path to ffuf JSON output"),
 ):
     """Import an ffuf output file."""
-    imports.import_file("ffuf", program_id, file)
+    imports.import_file("ffuf", engagement_id, file)
 
 
 # --------------------------------------------------------------------------- #
@@ -203,7 +212,9 @@ app.add_typer(run_app, name="run")
 
 @run_app.command("httpx")
 def run_httpx(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -218,7 +229,7 @@ def run_httpx(
 ):
     """Run httpx locally and upload results to VardrMap."""
     run.run_httpx(
-        program_id=program_id,
+        engagement_id=engagement_id,
         scope=scope,
         from_recon=from_recon,
         target=target,
@@ -231,16 +242,20 @@ def run_httpx(
 
 @run_app.command("subfinder")
 def run_subfinder(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """Run subfinder against wildcard scope entries and import discovered hosts."""
-    run.run_subfinder(program_id=program_id, yes=yes)
+    run.run_subfinder(engagement_id=engagement_id, yes=yes)
 
 
 @run_app.command("nuclei")
 def run_nuclei(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -261,7 +276,7 @@ def run_nuclei(
 ):
     """Run nuclei locally and upload results to VardrMap."""
     run.run_nuclei(
-        program_id=program_id,
+        engagement_id=engagement_id,
         scope=scope,
         from_recon=from_recon,
         target=target,
@@ -276,7 +291,9 @@ def run_nuclei(
 
 @run_app.command("nmap")
 def run_nmap(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -292,7 +309,7 @@ def run_nmap(
 ):
     """Run nmap service discovery locally and upload open ports to VardrMap."""
     run.run_nmap(
-        program_id=program_id,
+        engagement_id=engagement_id,
         scope=scope,
         from_recon=from_recon,
         target=target,
@@ -306,7 +323,9 @@ def run_nmap(
 
 @run_app.command("dnsx")
 def run_dnsx(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -318,7 +337,7 @@ def run_dnsx(
 ):
     """Resolve hosts with dnsx and upload the resolvable ones as recon targets."""
     run.run_dnsx(
-        program_id=program_id,
+        engagement_id=engagement_id,
         scope=scope,
         from_recon=from_recon,
         target=target,
@@ -330,7 +349,9 @@ def run_dnsx(
 
 @run_app.command("naabu")
 def run_naabu(
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -343,7 +364,7 @@ def run_naabu(
 ):
     """Port-scan hosts with naabu locally and upload open ports to VardrMap."""
     run.run_naabu(
-        program_id=program_id,
+        engagement_id=engagement_id,
         scope=scope,
         from_recon=from_recon,
         target=target,
@@ -371,7 +392,9 @@ def pipeline_list():
 @pipeline_app.command("run")
 def pipeline_run(
     name: str = typer.Argument(..., help="Pipeline name (see `pipeline list`)"),
-    program_id: str = typer.Option(..., "--program", "-p", help="Program UUID"),
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
     severity: str | None = typer.Option(
         None, "--severity", help="nuclei severity filter for the scan stage"
     ),
@@ -384,10 +407,10 @@ def pipeline_run(
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit a machine-readable JSON result"),
 ):
-    """Run every stage of a pipeline in order against a program."""
+    """Run every stage of a pipeline in order against an engagement."""
     pipeline_cmd.run_pipeline(
         name,
-        program_id,
+        engagement_id,
         severity=severity,
         yes=yes,
         continue_on_error=continue_on_error,

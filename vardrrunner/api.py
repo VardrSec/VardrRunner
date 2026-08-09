@@ -78,21 +78,24 @@ class VardrMapClient:
     def whoami(self) -> dict:
         return self.get("/me")
 
-    def programs(self) -> list[dict]:
-        return self.get("/programs").get("programs", [])
+    def engagements(self) -> list[dict]:
+        data = self.get("/engagements")
+        # VardrMap returns both keys during the engagements → engagements
+        # transition; prefer the new name and fall back to the old one.
+        return data.get("engagements") or data.get("engagements", [])
 
-    def program(self, program_id: str) -> dict:
-        return self.get(f"/programs/{program_id}")
+    def engagement(self, engagement_id: str) -> dict:
+        return self.get(f"/engagements/{engagement_id}")
 
-    def scope(self, program_id: str) -> dict:
+    def scope(self, engagement_id: str) -> dict:
         """Returns {"in": [...], "out": [...]} scope lists."""
-        return self.program(program_id).get("scope", {"in": [], "out": []})
+        return self.engagement(engagement_id).get("scope", {"in": [], "out": []})
 
     # Backend rejects limit values above this with 422.
     RECON_PAGE_SIZE = 500
 
     def recon(
-        self, program_id: str, limit: int = 100, status_code: int | None = None
+        self, engagement_id: str, limit: int = 100, status_code: int | None = None
     ) -> list[dict]:
         """Fetch recon items, paginating in RECON_PAGE_SIZE chunks to avoid backend 422s."""
         results: list[dict] = []
@@ -105,7 +108,7 @@ class VardrMapClient:
             params: dict = {"limit": fetch, "offset": offset}
             if status_code is not None:
                 params["status_code"] = status_code
-            page = self.get(f"/programs/{program_id}/recon", params=params).get("recon", [])
+            page = self.get(f"/engagements/{engagement_id}/recon", params=params).get("recon", [])
             results.extend(page)
             if len(page) < fetch:
                 break
@@ -113,10 +116,10 @@ class VardrMapClient:
 
         return results
 
-    def import_file(self, program_id: str, tool_type: str, file_path: str) -> dict:
+    def import_file(self, engagement_id: str, tool_type: str, file_path: str) -> dict:
         with open(file_path, "rb") as fh:
             return self.post(
-                f"/programs/{program_id}/imports",
+                f"/engagements/{engagement_id}/imports",
                 files={"file": (file_path, fh, "application/json")},
                 data={"tool_type": tool_type},
             )
@@ -165,6 +168,6 @@ class VardrMapClient:
     # Services
     # ------------------------------------------------------------------
 
-    def create_services(self, program_id: str, services: list[dict]) -> dict:
-        """Bulk-upsert nmap service results for a program."""
-        return self.post(f"/programs/{program_id}/services", json={"services": services})
+    def create_services(self, engagement_id: str, services: list[dict]) -> dict:
+        """Bulk-upsert nmap service results for an engagement."""
+        return self.post(f"/engagements/{engagement_id}/services", json={"services": services})

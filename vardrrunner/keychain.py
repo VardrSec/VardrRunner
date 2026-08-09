@@ -15,6 +15,9 @@ environment variables or the legacy config file.
 import logging
 
 SERVICE = "vardrrunner"
+# Secrets other than the API key (e.g. VardrGate identity credentials) are stored
+# under a separate service so they never collide with backend API keys.
+SECRET_SERVICE = "vardrrunner-secrets"
 
 
 def available() -> bool:
@@ -50,6 +53,22 @@ def set_key(api_url: str, api_key: str) -> bool:
     except Exception as e:
         logging.debug("keychain set_key failed for %s: %s", api_url, e)
         return False
+
+
+def get_secret(account: str) -> str | None:
+    """Return a stored secret (not the API key) by account name, or None.
+
+    Used to resolve job credential references locally so real secret values never
+    travel through or persist in the backend. Degrades gracefully to None when no
+    keyring backend is available.
+    """
+    try:
+        import keyring
+
+        return keyring.get_password(SECRET_SERVICE, account)
+    except Exception as e:
+        logging.debug("keychain get_secret failed for %s: %s", account, e)
+        return None
 
 
 def delete_key(api_url: str) -> bool:

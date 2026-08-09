@@ -146,7 +146,7 @@ class _StageResult:
 def _run_stage(
     client: api.VardrMapClient,
     stage: pipelines.Stage,
-    program_id: str,
+    engagement_id: str,
     severity: str | None,
     continue_on_error: bool,
     handoff_path: Path | None = None,
@@ -165,7 +165,7 @@ def _run_stage(
         targets = handler.normalize_handoff_targets(raw)
     else:
         try:
-            targets = handler.resolve_targets(client, program_id, stage.source, config_obj)
+            targets = handler.resolve_targets(client, engagement_id, stage.source, config_obj)
         except Exception as e:
             return _StageResult(
                 status="failed",
@@ -211,7 +211,7 @@ def _run_stage(
         )
 
     try:
-        summary = handler.upload(client, program_id, output)
+        summary = handler.upload(client, engagement_id, output)
     except Exception as e:
         return _StageResult(
             status="failed",
@@ -252,7 +252,7 @@ def list_pipelines() -> None:
 
 def run_pipeline(
     name: str,
-    program_id: str,
+    engagement_id: str,
     severity: str | None = None,
     yes: bool = False,
     continue_on_error: bool = False,
@@ -260,7 +260,7 @@ def run_pipeline(
     dry_run: bool = False,
     as_json: bool = False,
 ) -> None:
-    """Run every stage of a pipeline in order against a program."""
+    """Run every stage of a pipeline in order against an engagement."""
     stages = pipelines.PIPELINES.get(name)
     if stages is None:
         available = ", ".join(pipelines.PIPELINES)
@@ -287,11 +287,11 @@ def run_pipeline(
     if not as_json:
         console.print(
             f"\n[bold]Pipeline '{name}'[/bold]: {chain}  "
-            f"(program {program_id}  run [dim]{run_id}[/dim])"
+            f"(engagement {engagement_id}  run [dim]{run_id}[/dim])"
         )
 
     if dry_run:
-        _run_pipeline_dry(client, stages, program_id, severity, max_targets)
+        _run_pipeline_dry(client, stages, engagement_id, severity, max_targets)
         return
 
     if not yes and not typer.confirm("Run this pipeline?", default=False):
@@ -307,7 +307,7 @@ def run_pipeline(
         # JSON mode: no TUI — stdout must be pure JSON for machine consumers.
         for i, stage in enumerate(stages):
             result = _run_stage(
-                client, stage, program_id, severity, continue_on_error, handoff_path, max_targets
+                client, stage, engagement_id, severity, continue_on_error, handoff_path, max_targets
             )
             stage_results.append(
                 {
@@ -342,7 +342,7 @@ def run_pipeline(
                 {
                     "run_id": run_id,
                     "pipeline": name,
-                    "program_id": program_id,
+                    "engagement_id": engagement_id,
                     "success": stopped_at is None,
                     "total_elapsed": round(total_elapsed, 2),
                     "stages": stage_results,
@@ -355,7 +355,7 @@ def run_pipeline(
         for i, stage in enumerate(stages):
             tui.start(i)
             result = _run_stage(
-                client, stage, program_id, severity, continue_on_error, handoff_path, max_targets
+                client, stage, engagement_id, severity, continue_on_error, handoff_path, max_targets
             )
             tui.finish(
                 i,
@@ -387,7 +387,7 @@ def run_pipeline(
 def _run_pipeline_dry(
     client: api.VardrMapClient,
     stages: list[pipelines.Stage],
-    program_id: str,
+    engagement_id: str,
     severity: str | None,
     max_targets: int,
 ) -> None:
@@ -398,7 +398,7 @@ def _run_pipeline_dry(
     cfg_dict = {"severity": severity} if (first.tool == "nuclei" and severity) else {}
     config_obj = handler.parse_config(cfg_dict)
     try:
-        targets = handler.resolve_targets(client, program_id, first.source, config_obj)
+        targets = handler.resolve_targets(client, engagement_id, first.source, config_obj)
     except Exception as e:
         console.print(f"[red]Could not resolve stage-1 targets:[/red] {e}")
         raise typer.Exit(1) from e
