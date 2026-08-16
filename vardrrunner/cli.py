@@ -2,7 +2,7 @@
 vardrrunner — local automation runner for the VardrSec product family.
 
 Runs security tooling on the operator's machine and syncs results to a VardrSec
-backend (today: VardrMap) over HTTP. See https://github.com/jorge-aquino/VardrRunner.
+backend (today: VardrMap) over HTTP. See https://github.com/VardrSec/VardrRunner.
 """
 
 from pathlib import Path

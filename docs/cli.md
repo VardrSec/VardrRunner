@@ -8,6 +8,10 @@ helpful message otherwise).
 vardrrunner [COMMAND] [SUBCOMMAND] [OPTIONS]
 ```
 
+Every command that acts on an engagement takes `--engagement <uuid>`. `--program` and
+`-p` are accepted as aliases on the same flag, so scripts written before the v0.27.0
+rename keep working.
+
 ---
 
 ## `login`
@@ -28,6 +32,33 @@ place (re-authenticate with `login`); warns if `VARDRMAP_API_KEY` is still set.
 
 ```bash
 vardrrunner logout
+```
+
+## `whoami`
+Show the identity tied to the configured API key (`GET /me`). Confirms *which* account a
+key belongs to without printing the key itself.
+
+```bash
+vardrrunner whoami
+```
+
+---
+
+## `engagements`
+List every engagement visible to the configured key.
+
+```bash
+vardrrunner engagements          # alias of `engagement-list`
+```
+
+`vardrrunner programs` still runs as a retired alias; it is hidden from `--help`.
+
+## `scope`
+Show the in-scope and out-of-scope items for one engagement — useful before a run to
+confirm what the `--scope` target source will expand to.
+
+```bash
+vardrrunner scope <engagement-id>
 ```
 
 ---
@@ -80,13 +111,47 @@ vardrrunner run nmap      --engagement <id> [--top-ports N] [--timing 0-4] [opti
 vardrrunner run dnsx      --engagement <id> [options]
 vardrrunner run naabu     --engagement <id> [--top-ports N] [options]
 ```
-Executes the named tool against the engagement's scope, captures output into a timestamped
-run directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
+Executes the named tool, captures output into a timestamped run directory under
+`~/.vardrmap/runs`, and uploads parsed results to the backend.
 - `run nmap` — safe-profile service discovery (normalizes URLs to hosts, never uses
   `-A`/`-O`/`-p-`/`--script`/`-T5`) → services API.
 - `run dnsx` — DNS resolution; uploads the **resolvable** hosts as recon targets, so a later
   httpx/nuclei pass only probes hosts that exist.
 - `run naabu` — fast top-ports scan → open ports to the services API.
+
+### Choosing targets
+Every `run` command except `subfinder` takes one target source (`subfinder` always reads
+wildcard entries from the engagement's scope):
+
+| Flag | Source |
+|------|--------|
+| `--scope` | In-scope assets from the engagement |
+| `--from-recon` | Live recon items from the backend recon store |
+| `--target <value>` | A single inline target |
+| `--targets <path>` | A targets `.txt` file, one per line |
+
+With `--from-recon`, `--limit` caps how many recon items are pulled (default 100 for
+httpx/nuclei, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
+(httpx and nuclei only).
+
+### Per-tool options
+| Command | Options |
+|---------|---------|
+| `run nuclei` | `--severity high,critical` · `--templates`/`-t <path-or-tag>` |
+| `run nmap` | `--top-ports N` (default 100) · `--timing 0-4` (default 3; 5 is never allowed) |
+| `run naabu` | `--top-ports N` (default 100) |
+
+`--yes`/`-y` skips the confirmation prompt on any of them.
+
+### Target cap
+A run aborts before executing anything if the resolved target count exceeds **500**, so a
+broad scope can't turn into a several-thousand-host scan by accident. The cap applies to
+`run` and `pipeline run` alike, and it applies even with `--yes`.
+
+> **Known defect:** the abort message tells you to pass `--max-targets`, but that option
+> was never wired into `cli.py` — the cap is currently fixed at 500 and cannot be raised or
+> disabled from the command line. Narrow the target source (or use `--target`/`--targets`)
+> until the flag is exposed.
 
 Every tool run is bounded by a timeout (default 1800 s; set `VARDRRUNNER_TOOL_TIMEOUT`); a
 hung tool is killed rather than blocking.
@@ -99,7 +164,14 @@ vardrrunner import nuclei --engagement <id> --file <path>
 vardrrunner import httpx  --engagement <id> --file <path>
 ```
 Pushes results from a tool output file (JSONL) you already have, without running the
-tool. `-f` is shorthand for `--file`. Supported tools: `httpx`, `nuclei`.
+tool. `-f` is shorthand for `--file`. Supported tools: `httpx`, `nuclei` — the two
+formats the backend's file-import endpoint accepts. `subfinder`/`dnsx` are excluded
+because they convert to httpx-format JSONL before uploading; `nmap`/`naabu` upload via
+the services API rather than file import.
+
+> **Known defect:** `import ffuf` is still registered in `cli.py` and therefore appears in
+> `--help`, but `ffuf` was removed from `SUPPORTED_TOOLS` in v0.21.1 — invoking it always
+> exits with "Unsupported tool: ffuf". Ignore it until the command is removed.
 
 ---
 
@@ -127,8 +199,14 @@ Options for `pipeline run`:
 - `--dry-run` — resolve first-stage targets and print the plan without executing any tool
 - `--json` — emit a machine-readable JSON result (run ID, per-stage status/targets/elapsed)
 
-The pipeline preflights that every tool in the chain is installed, and stops early if a
-stage produces no targets (e.g. no subdomains discovered).
+Each run prints an 8-hex run ID at start and end. Progress renders as a live table — one
+row per stage, with a spinner while running and a final status icon (`✓` done, `✗` failed,
+`⊘` no targets, `—` aborted) plus target count, result summary, and elapsed time. When a
+stage stops the pipeline, the remaining stages are marked aborted immediately.
+
+The pipeline preflights that every tool in the chain is installed, stops early if a stage
+produces no targets (e.g. no subdomains discovered), and applies the same 500-target cap
+per stage as the `run` commands.
 
 ---
 
@@ -160,8 +238,23 @@ vardrrunner daemon start [--detach]   # poll jobs (5 s) + heartbeat (60 s) conti
 vardrrunner daemon stop               # cooperative graceful shutdown (removes PID file)
 vardrrunner daemon status             # report whether the daemon is running
 ```
-- `--detach` runs the daemon as a detached background process and writes a PID file.
-- A double-start guard prevents two daemons from running at once.
+
+Options for `daemon start`:
+
+| Option | Default | Purpose |
+|--------|---------|---------|
+| `--detach` / `-d` | off | Run in the background and write the PID file |
+| `--poll-interval N` | 5 | Seconds between job polls |
+| `--heartbeat-interval N` | 60 | Seconds between heartbeats |
+| `--log-file <path>` | none | Append output to a rotating log file |
+
+- The PID file is `~/.vardrrunner.pid`. A double-start guard prevents two daemons from
+  running at once, and `daemon status` cleans up a stale PID file.
+- `--log-file` writes through a rotating handler — **5 MB per file, 3 backups** — so a
+  long-lived VPS daemon can't fill the disk. Every line is prefixed with an ISO 8601
+  timestamp, and Rich markup is rendered to plain text rather than written literally.
+- Poll failures back off exponentially (5 s → 10 s → 20 s …, capped at 5 min) and reset on
+  the next successful poll, so a downed backend isn't hammered.
 - Shutdown is cooperative: `stop` removes the PID file; the daemon notices and exits
   cleanly (graceful SIGTERM handling on Unix, ctypes liveness probe on Windows).
 

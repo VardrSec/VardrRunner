@@ -9,7 +9,7 @@
 
 ## Setup
 ```bash
-git clone https://github.com/jorge-aquino/VardrRunner.git
+git clone https://github.com/VardrSec/VardrRunner.git
 cd VardrRunner
 python -m venv venv
 
@@ -26,8 +26,8 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **222 tests**, all hermetic: no network, no real subprocesses, no real filesystem state
-  outside temp dirs.
+- **439 tests** at ~96% coverage (CI floor: 95%), all hermetic: no network, no real
+  subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
 
@@ -36,12 +36,18 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 |------|------|
 | `tests/test_config.py` | credential resolution, HTTPS validation, auth |
 | `tests/test_credentials.py` | keychain resolution (env > keychain > file), login/logout, fallback |
+| `tests/test_keychain.py` | the `keyring` wrapper itself, incl. graceful degradation |
+| `tests/test_auth_commands.py` | `login_vardrmap`, `logout`, `whoami` |
 | `tests/test_configs.py` | typed tool configs + `JobEnvelope` validation |
 | `tests/test_handlers.py` | per-tool handlers + the registry |
 | `tests/test_jobs.py` | job lifecycle, malformed envelope, claim race, execution core |
-| `tests/test_pipelines.py` | pipeline definitions + sequential runner (incl. continue-on-error) |
+| `tests/test_pipelines.py` | pipeline definitions + the sequential runner (incl. continue-on-error, target cap) |
+| `tests/test_pipeline.py` | `pipeline` command internals — `_run_stage`, `_StageResult`, the live TUI |
 | `tests/test_run_commands.py` | direct `run` commands validate options like jobs do |
-| `tests/test_api.py` | API client headers + retry configuration |
+| `tests/test_imports.py` | `SUPPORTED_TOOLS` gating and file import |
+| `tests/test_engagements.py` | `engagements` list + `scope` display |
+| `tests/test_cli.py` | Typer wiring — every command route reaches its command module |
+| `tests/test_api.py` | API client headers, HTTP methods + retry configuration |
 | `tests/test_daemon.py` | daemon start/stop/status, PID file, liveness probe |
 | `tests/test_heartbeat.py` | heartbeat payload + posting |
 | `tests/test_job_events.py` | lifecycle event emission |
@@ -51,17 +57,27 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_doctor.py` | preflight checks, exit codes, and `--json` report |
 
 ## Lint, format, and types
-CI enforces all three on every push; run them locally before committing:
+CI enforces all of these on every push and PR to `main`; run them locally before committing:
 ```bash
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
+bandit -r vardrrunner -ll -q           # security scan (blocks on high/medium)
 ```
 Autofix most issues with:
 ```bash
 ruff check --fix vardrrunner tests && ruff format vardrrunner tests
 ```
 Config lives in `pyproject.toml` (`[tool.ruff]`, `[tool.mypy]`).
+
+### What CI runs
+| Job | Contents |
+|-----|----------|
+| **Lint + types** | ruff check, ruff format --check, mypy, bandit — on Python 3.12 |
+| **Tests** | pytest with `--cov-fail-under=95` on Ubuntu 3.10/3.11/3.12, plus a 3.12 smoke on Windows and macOS (the daemon is OS-sensitive: Windows ctypes liveness, POSIX signals) |
+| **Dependency audit** | `pip-audit` against the installed dependency set |
+
+Tests only run if the lint job passes (`needs: lint`).
 
 ## Branch & commit workflow
 1. Branch off `main` for any non-trivial change.
