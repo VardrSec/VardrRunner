@@ -144,14 +144,16 @@ httpx/nuclei, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP 
 `--yes`/`-y` skips the confirmation prompt on any of them.
 
 ### Target cap
-A run aborts before executing anything if the resolved target count exceeds **500**, so a
-broad scope can't turn into a several-thousand-host scan by accident. The cap applies to
-`run` and `pipeline run` alike, and it applies even with `--yes`.
+A run aborts before executing anything if the resolved target count exceeds
+`--max-targets` (default **500**), so a broad scope can't turn into a several-thousand-host
+scan by accident. Pass `--max-targets 0` to disable the cap, or a higher number to raise
+it. The cap applies to `run` and `pipeline run` alike, and it applies even with `--yes` —
+`--yes` means "skip the confirmation prompt", not "ignore safety guards".
 
-> **Known defect:** the abort message tells you to pass `--max-targets`, but that option
-> was never wired into `cli.py` — the cap is currently fixed at 500 and cannot be raised or
-> disabled from the command line. Narrow the target source (or use `--target`/`--targets`)
-> until the flag is exposed.
+```bash
+vardrrunner run httpx --engagement <id> --scope --max-targets 2000
+vardrrunner run httpx --engagement <id> --scope --max-targets 0     # no cap
+```
 
 Every tool run is bounded by a timeout (default 1800 s; set `VARDRRUNNER_TOOL_TIMEOUT`); a
 hung tool is killed rather than blocking.
@@ -169,9 +171,8 @@ formats the backend's file-import endpoint accepts. `subfinder`/`dnsx` are exclu
 because they convert to httpx-format JSONL before uploading; `nmap`/`naabu` upload via
 the services API rather than file import.
 
-> **Known defect:** `import ffuf` is still registered in `cli.py` and therefore appears in
-> `--help`, but `ffuf` was removed from `SUPPORTED_TOOLS` in v0.21.1 — invoking it always
-> exits with "Unsupported tool: ffuf". Ignore it until the command is removed.
+`import ffuf` was removed in v0.28.0; it had lingered in `--help` since v0.21.1 despite
+always failing.
 
 ---
 
@@ -198,6 +199,7 @@ Options for `pipeline run`:
 - `--continue-on-error` — keep going if a stage fails (default: stop)
 - `--dry-run` — resolve first-stage targets and print the plan without executing any tool
 - `--json` — emit a machine-readable JSON result (run ID, per-stage status/targets/elapsed)
+- `--max-targets N` — per-stage target cap (default 500; `0` disables)
 
 Each run prints an 8-hex run ID at start and end. Progress renders as a live table — one
 row per stage, with a spinner while running and a final status icon (`✓` done, `✗` failed,

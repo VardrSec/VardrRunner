@@ -14,7 +14,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
   - `commands/` — one module per group: `auth`, `daemon`, `doctor`, `heartbeat`, `imports`, `jobs`, `pipeline`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (439 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite (450 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
 - `.github/workflows/` — CI (lint + tests on every push)
@@ -83,11 +83,9 @@ vardrrunner daemon start
 Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
 back-compat aliases.
 
-## Known defects (documented, not yet fixed)
-- **`--max-targets` is not wired into `cli.py`.** The guardrail exists in
-  `commands/run.py` and `commands/pipeline.py` and the 500-target cap does apply, but the
-  option v0.22.1 advertised was never added to the Typer commands, so the abort message
-  names a flag that does not parse.
-- **`import ffuf` is still registered in `cli.py`** while `SUPPORTED_TOOLS` excludes it —
-  it shows in `--help` and always errors. `tests/test_cli.py::test_import_ffuf` passes
-  because it mocks `import_file`, so the suite does not catch it.
+## Wiring tests
+`tests/test_cli.py` is the only thing that checks Typer wiring, and asserting
+`mock.assert_called_once()` is not enough — it passes whether or not an option reaches the
+command module. Two v0.28.0 fixes existed precisely because nothing asserted kwargs:
+`--max-targets` was implemented but never exposed, and `import ffuf` stayed registered
+after leaving `SUPPORTED_TOOLS`. **When adding a flag, assert the kwarg it produces.**

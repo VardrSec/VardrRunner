@@ -7,6 +7,28 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-08-17
+
+First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.md).
+
+### Fixed
+
+- **`--max-targets` is now an actual option.** The guardrail shipped in v0.22.1 and the
+  500-target cap has been enforced ever since, but the option was never added to the Typer
+  commands — so the abort message named a flag that did not parse, and the cap could
+  neither be raised nor disabled. `--max-targets N` (`0` disables) is now on all six
+  `run <tool>` commands and on `pipeline run`.
+- **`import ffuf` removed.** v0.21.1 dropped `ffuf` from `SUPPORTED_TOOLS` but left the
+  command registered in `cli.py`, so it stayed visible in `--help` and always exited with
+  "Unsupported tool: ffuf".
+
+### Changed
+
+- **Wiring tests assert kwargs, not just call counts.** Both defects above survived because
+  `tests/test_cli.py` only asserted `mock.assert_called_once()`, which passes whether or not
+  an option reaches the command module. `--max-targets` is now asserted on every command
+  that takes it, and a regression test proves `import ffuf` is no longer routable.
+
 ### Documentation
 
 - **Docs resynced to the shipped v0.27.0 surface.** `whoami`, `engagements`, and `scope`
@@ -119,8 +141,8 @@ Per-version detail notes live in [`changelog/`](changelog/).
   cap. Default is 500. The check applies even with `--yes` so automation pipelines
   can't accidentally scan thousands of hosts.
   **Correction (2026-08-16):** the accompanying `--max-targets` option was never wired
-  into `cli.py`, so the cap is fixed at 500 and cannot be changed from the command line.
-  See [`changelog/v0.22.1.md`](changelog/v0.22.1.md).
+  into `cli.py`, so the cap was fixed at 500 and could not be changed from the command
+  line. Fixed in v0.28.0. See [`changelog/v0.22.1.md`](changelog/v0.22.1.md).
 
 ## [0.22.0] — 2026-06-20
 
@@ -140,8 +162,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
   "nuclei"]` — the two formats the backend's file-import endpoint actually accepts.
   `subfinder`/`dnsx` are excluded because they convert to httpx-format JSONL before
   uploading; `nmap`/`naabu` use `create_services`, not file import.
-  **Correction (2026-08-16):** the `import ffuf` command itself is still registered in
-  `cli.py` and still appears in `--help`; only the `SUPPORTED_TOOLS` entry was removed.
+  **Correction (2026-08-16):** the `import ffuf` command itself remained registered in
+  `cli.py` and kept appearing in `--help`; only the `SUPPORTED_TOOLS` entry was removed
+  here. The command was removed in v0.28.0.
 - **Run directories are pruned automatically.** `_make_run_dir()` now deletes run
   directories older than 7 days before creating a new one, so pipeline artifacts don't
   accumulate indefinitely on long-running VPS daemons.

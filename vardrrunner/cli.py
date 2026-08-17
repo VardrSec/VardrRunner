@@ -18,6 +18,11 @@ from vardrrunner.commands import pipeline as pipeline_cmd
 from vardrrunner.commands import status as status_cmd
 
 console = Console()
+
+# Shared across every command that resolves targets, so the cap is described
+# identically in `run --help` and `pipeline run --help`.
+_MAX_TARGETS_HELP = "Abort if resolved targets exceed this count (0 disables the cap)"
+
 app = typer.Typer(
     name="vardrrunner",
     help="Local runner for VardrMap. Runs tools locally, uploads results to your VardrMap instance.",
@@ -119,17 +124,6 @@ def import_httpx(
     imports.import_file("httpx", engagement_id, file)
 
 
-@import_app.command("ffuf")
-def import_ffuf(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
-    file: Path = typer.Option(..., "--file", "-f", help="Path to ffuf JSON output"),
-):
-    """Import an ffuf output file."""
-    imports.import_file("ffuf", engagement_id, file)
-
-
 # --------------------------------------------------------------------------- #
 # Run
 # --------------------------------------------------------------------------- #
@@ -226,6 +220,9 @@ def run_httpx(
         None, "--status-code", help="Filter recon by HTTP status code"
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+    ),
 ):
     """Run httpx locally and upload results to VardrMap."""
     run.run_httpx(
@@ -237,6 +234,7 @@ def run_httpx(
         limit=limit,
         status_code=status_code,
         yes=yes,
+        max_targets=max_targets,
     )
 
 
@@ -246,9 +244,12 @@ def run_subfinder(
         ..., "--engagement", "--program", "-p", help="Engagement UUID"
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+    ),
 ):
     """Run subfinder against wildcard scope entries and import discovered hosts."""
-    run.run_subfinder(engagement_id=engagement_id, yes=yes)
+    run.run_subfinder(engagement_id=engagement_id, yes=yes, max_targets=max_targets)
 
 
 @run_app.command("nuclei")
@@ -273,6 +274,9 @@ def run_nuclei(
         None, "--templates", "-t", help="Nuclei template path or tag"
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+    ),
 ):
     """Run nuclei locally and upload results to VardrMap."""
     run.run_nuclei(
@@ -286,6 +290,7 @@ def run_nuclei(
         severity=severity,
         templates=templates,
         yes=yes,
+        max_targets=max_targets,
     )
 
 
@@ -306,6 +311,9 @@ def run_nmap(
         3, "--timing", help="nmap timing template (0-4; 5 is never allowed)"
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+    ),
 ):
     """Run nmap service discovery locally and upload open ports to VardrMap."""
     run.run_nmap(
@@ -318,6 +326,7 @@ def run_nmap(
         top_ports=top_ports,
         timing=timing,
         yes=yes,
+        max_targets=max_targets,
     )
 
 
@@ -334,6 +343,9 @@ def run_dnsx(
     targets_file: Path | None = typer.Option(None, "--targets", help="Path to a targets .txt file"),
     limit: int = typer.Option(500, "--limit", help="Max recon items to use (--from-recon only)"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+    ),
 ):
     """Resolve hosts with dnsx and upload the resolvable ones as recon targets."""
     run.run_dnsx(
@@ -344,6 +356,7 @@ def run_dnsx(
         targets_file=targets_file,
         limit=limit,
         yes=yes,
+        max_targets=max_targets,
     )
 
 
@@ -361,6 +374,9 @@ def run_naabu(
     limit: int = typer.Option(500, "--limit", help="Max recon items to use (--from-recon only)"),
     top_ports: int = typer.Option(100, "--top-ports", help="Number of most-common ports to scan"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+    ),
 ):
     """Port-scan hosts with naabu locally and upload open ports to VardrMap."""
     run.run_naabu(
@@ -372,6 +388,7 @@ def run_naabu(
         limit=limit,
         top_ports=top_ports,
         yes=yes,
+        max_targets=max_targets,
     )
 
 
@@ -406,6 +423,9 @@ def pipeline_run(
         False, "--dry-run", help="Resolve first-stage targets and print the plan without executing"
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit a machine-readable JSON result"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+    ),
 ):
     """Run every stage of a pipeline in order against an engagement."""
     pipeline_cmd.run_pipeline(
@@ -416,4 +436,5 @@ def pipeline_run(
         continue_on_error=continue_on_error,
         dry_run=dry_run,
         as_json=as_json,
+        max_targets=max_targets,
     )
