@@ -28,6 +28,20 @@ Installation paths, in order of preference:
 - **From a GitHub Release** wheel (works today, before PyPI).
 - **From source** (`pip install -e ".[dev]"`) for development.
 
+> **Amendment (2026-08-17, v0.28.0).** PyPI publishing is now live. A pending trusted
+> publisher was registered for `VardrSec/VardrRunner` / `release.yml`, `PYPI_PUBLISH` was
+> set to `true`, and the v0.28.0 tag published
+> [`vardrrunner`](https://pypi.org/project/vardrrunner) — promoting the pending publisher
+> to an ordinary one. `pipx install vardrrunner` is now the primary documented path. The
+> ordering above stands as written; only its "once on PyPI" precondition is satisfied.
+>
+> One gap this ADR did not consider: **pipx presumes a Python installation**, which
+> operators provisioning a fresh VPS or a clean Windows box may not have. The README now
+> documents [uv](https://docs.astral.sh/uv/) — a single static binary that bootstraps its
+> own CPython — for that case. A fully standalone executable (PyInstaller/PyApp) remains
+> deferred: it would mean a per-OS build matrix, unsigned-binary warnings on Windows, and a
+> weaker supply-chain story than the current wheel + SBOM + attestation.
+
 ## Consequences
 - Every release has a verifiable provenance attestation and an SBOM, satisfying the
   supply-chain bar without manual steps.
