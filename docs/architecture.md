@@ -8,16 +8,35 @@ JSON over HTTP — there is no shared code, no shared database, and no import de
 either direction.
 
 ```
-┌─────────────────────────┐         HTTP (JSON)         ┌──────────────────────────┐
-│        VardrMap          │  <───────────────────────  │       VardrRunner         │
-│  (backend + DB + UI)     │   poll / claim / events     │   (this repo, local CLI)  │
-│                          │   heartbeat / upload        │                           │
-│  GET  /jobs/pending      │  ───────────────────────>   │   runs httpx/subfinder/   │
-│  POST /jobs/{id}/claim   │                             │   nuclei/nmap locally     │
-│  POST /jobs/{id}/events  │                             │                           │
-│  POST /runner/heartbeat  │                             │                           │
-└─────────────────────────┘                             └──────────────────────────┘
+┌──────────────────────────┐        HTTP (JSON)        ┌──────────────────────────┐
+│         VardrMap         │ <──── poll / claim ─────  │       VardrRunner        │
+│   (backend + DB + UI)    │ <──── events / upload ──  │  (this repo, local CLI)  │
+│                          │ <──── heartbeat ────────  │  runs httpx/subfinder/   │
+│                          │                           │  nuclei/nmap/dnsx/naabu/ │
+│                          │  ──── jobs / scope ─────> │  vardrgate locally       │
+└──────────────────────────┘                           └──────────────────────────┘
 ```
+
+The runner never listens — every exchange is outbound. The full set of endpoints it
+calls, all through `api.py`:
+
+| Endpoint | Used for |
+|----------|----------|
+| `GET /me` | `whoami`, and the auth check in `doctor` |
+| `GET /engagements` · `GET /engagements/{id}` | engagement list and scope lookup |
+| `GET /engagements/{id}/recon` | `--from-recon` target resolution (paginated, 500/page) |
+| `POST /engagements/{id}/imports` | httpx/nuclei/subfinder/dnsx result upload |
+| `POST /engagements/{id}/services` | nmap/naabu open-port upload |
+| `GET /jobs/pending` | poll the queue |
+| `POST /jobs/{id}/claim` | atomic claim |
+| `PATCH /jobs/{id}` | mark a job `done` / `failed` |
+| `POST /jobs/{id}/events` | lifecycle events for the backend Terminal |
+| `POST /jobs/{id}/upload` | `vardrgate_api_test` result attached to the job |
+| `POST /runner/heartbeat` | machine status for the backend Bridge |
+
+Requests to `/programs/*` are no longer sent; VardrMap's legacy path middleware still
+accepts them, but the runner has called `/engagements/*` since v0.27.0 and therefore
+requires VardrMap ≥ v0.22.0.
 
 ## Package layout
 | Path | Responsibility |
@@ -31,7 +50,7 @@ either direction.
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
 | `vardrrunner/pipelines.py` | Named recon pipelines — ordered lists of `Stage(tool, source)`. Stages reference handlers; each stage writes its discovered targets to a local handoff file, which the next stage reads directly instead of querying the backend recon store. |
 | `vardrrunner/runner.py` | Subprocess execution, stdout/stderr capture, timestamped run directories under `~/.vardrmap/runs`. |
-| `vardrrunner/commands/auth.py` | `login` — prompt for and persist backend URL + API key. |
+| `vardrrunner/commands/auth.py` | `login` / `logout` / `whoami` — prompt for and persist backend URL + API key, remove stored credentials, and report the identity behind the key. |
 | `vardrrunner/commands/run.py` | `run httpx|subfinder|nuclei|nmap|dnsx|naabu` — execute one tool, upload results (shares the typed-config + handler path). |
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
@@ -40,7 +59,7 @@ either direction.
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
 | `vardrrunner/commands/status.py` | `status` — local config, version, detected tool availability (quick glance). |
 | `vardrrunner/commands/doctor.py` | `doctor` — deep preflight; runs health checks and exits non-zero on actionable failures (`--json` report). Reuses `daemon` PID helpers and `config` validation. |
-| `vardrrunner/commands/engagements.py` | engagement lookup helpers used by other commands. |
+| `vardrrunner/commands/engagements.py` | `engagements` (list) and `scope` (show in/out-of-scope items) — renamed from `commands/programs.py` in v0.27.0. |
 
 ## Job execution lifecycle
 1. **Poll** — `GET /jobs/pending` returns queued jobs for this operator.
@@ -70,10 +89,13 @@ Windows liveness is checked via a ctypes probe (plain `os.kill` on Windows is
 `TerminateProcess` and would kill the daemon it was meant to check).
 
 ## Configuration & secrets
-All local state lives under `~/.vardrmap/`:
+Local state lives under `~/.vardrmap/`:
 - `config.json` — the backend `api_url` (normally **no secret**; only holds a plaintext
   `api_key` in the no-keychain fallback)
-- `runs/` — timestamped tool output directories
+- `runs/` — timestamped tool output directories, pruned after 7 days
+
+The one exception is the daemon PID file, `~/.vardrrunner.pid`, which is deliberately
+outside `~/.vardrmap/` — it belongs to the runner process, not to a backend's config.
 
 The **API key** resolves from `VARDRMAP_API_KEY` env > **OS keychain** (`keyring`) > config
 file. `vardrrunner login` stores it in the keychain by default; `logout` removes it. On a
@@ -88,5 +110,7 @@ the runner's only credential; it is never logged or printed.
 - **Every tool run is time-bounded.** A hung tool is killed and the job marked failed — the
   daemon never blocks forever.
 - **Failures are loud.** A missing/failed tool fails the job; it is never skipped silently.
+- **Blast radius is capped.** A run aborts before executing anything if the resolved target
+  count exceeds 500 (`commands/run.py: MAX_TARGETS_DEFAULT`), including under `--yes`.
 - **No backend coupling.** The runner must build, test, and run without the backend present
   (tests mock every HTTP and subprocess call).

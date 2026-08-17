@@ -10,11 +10,11 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `keychain.py` — OS keychain wrapper (`keyring`); degrades gracefully
   - `configs.py` — typed, validated tool configs + `JobEnvelope`; bad payload → `ConfigError`
   - `targets.py` — target resolution (scope/recon/inline/file)
-  - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002)
+  - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
   - `commands/` — one module per group: `auth`, `daemon`, `doctor`, `heartbeat`, `imports`, `jobs`, `pipeline`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (421 tests, 95% coverage); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite (450 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
 - `.github/workflows/` — CI (lint + tests on every push)
@@ -68,11 +68,24 @@ vardrrunner daemon start
 ## Commands
 - `login vardrmap` — authenticate; store key in OS keychain
 - `logout` — remove credentials, keep URL
-- `run httpx|subfinder|nuclei|nmap` — run tool locally, upload results
-- `pipeline list|run <name>` — chain tools (subfinder → httpx → nuclei)
+- `whoami` — identity behind the configured key
+- `engagements` — list engagements (`programs` kept as a hidden alias)
+- `scope <engagement-id>` — show in/out-of-scope items
+- `run httpx|subfinder|nuclei|nmap|dnsx|naabu` — run tool locally, upload results
+- `pipeline list|run <name>` — chain tools (`recon`, `quick`, `deep`, `ports`)
 - `import nuclei|httpx` — import existing output file
 - `jobs list|run` — inspect and execute backend job queue (one-shot)
 - `daemon start|stop|status` — long-running background worker (poll + heartbeat)
 - `heartbeat` — send single heartbeat
 - `status` — local config, version, tool availability
 - `doctor` — deep preflight for unattended use; exits non-zero on failures (`--json`)
+
+Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
+back-compat aliases.
+
+## Wiring tests
+`tests/test_cli.py` is the only thing that checks Typer wiring, and asserting
+`mock.assert_called_once()` is not enough — it passes whether or not an option reaches the
+command module. Two v0.28.0 fixes existed precisely because nothing asserted kwargs:
+`--max-targets` was implemented but never exposed, and `import ffuf` stayed registered
+after leaving `SUPPORTED_TOOLS`. **When adding a flag, assert the kwarg it produces.**

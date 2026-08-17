@@ -16,3 +16,6 @@ the way it does.
 | [0002](0002-tool-handler-registry.md) | Tool-handler registry for job execution | Accepted |
 | [0003](0003-distribution-and-release.md) | Distribution and release process | Accepted |
 | [0004](0004-credential-storage.md) | Credential storage (OS keychain by default) | Accepted |
+| [0005](0005-run-scoped-pipelines.md) | Run-scoped pipeline isolation via local handoff files | Accepted |
+| [0006](0006-vardrgate-api-test-handler.md) | VardrGate as a job type, executed via binary contract | Accepted |
+| [0007](0007-local-secret-resolution.md) | Local secret resolution for VardrGate identities | Accepted |

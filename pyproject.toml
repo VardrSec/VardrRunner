@@ -31,10 +31,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jorge-aquino/VardrRunner"
-Repository = "https://github.com/jorge-aquino/VardrRunner"
-Changelog = "https://github.com/jorge-aquino/VardrRunner/blob/main/CHANGELOG.md"
-Issues = "https://github.com/jorge-aquino/VardrRunner/issues"
+Homepage = "https://github.com/VardrSec/VardrRunner"
+Repository = "https://github.com/VardrSec/VardrRunner"
+Changelog = "https://github.com/VardrSec/VardrRunner/blob/main/CHANGELOG.md"
+Issues = "https://github.com/VardrSec/VardrRunner/issues"
 
 [project.optional-dependencies]
 dev = [
