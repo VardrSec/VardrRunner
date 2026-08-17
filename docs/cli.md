@@ -15,7 +15,7 @@ rename keep working.
 ---
 
 ## `login`
-Authenticate to a Vardr product. Prompts for the backend URL and API key, verifies the key,
+Authenticate to a Vardr product. Verifies the key against `GET /me` before saving anything,
 then stores it in the **OS keychain** (macOS Keychain / Windows Credential Locker / Linux
 Secret Service). The backend URL is kept in `~/.vardrmap/config.json`. On a machine with no
 keyring backend, it falls back to the plaintext config file with a warning.
@@ -23,6 +23,17 @@ keyring backend, it falls back to the plaintext config file with a warning.
 ```bash
 vardrrunner login vardrmap
 ```
+
+| Option | Purpose |
+|--------|---------|
+| `--url` | Backend base URL; prompted for if omitted |
+| `--key` | The `vmap_` API key; prompted for (with hidden input) if omitted |
+
+**Prefer the prompt for the key.** Passing `--key` puts a live credential into your shell
+history — on PowerShell it persists to `(Get-PSReadlineOption).HistorySavePath`, and on
+POSIX shells to `~/.bash_history` or equivalent. Omitting `--key` reads it with echo
+disabled and never writes it to disk in cleartext. For unattended use, set
+`VARDRMAP_API_KEY` in the environment instead of logging in at all.
 
 Key resolution order at runtime: **`VARDRMAP_API_KEY` env → keychain → config file**.
 

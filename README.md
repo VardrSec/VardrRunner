@@ -45,22 +45,42 @@ results, and heartbeats so the backend always knows which machines are online.
 
 ## Install
 
-**From PyPI** (once published) — recommended via [pipx](https://pipx.pypa.io) for an isolated CLI:
 ```bash
-pipx install vardrrunner      # or: pip install vardrrunner
+pipx install vardrrunner
 ```
 
-**From a GitHub Release** (works today, before PyPI) — grab the wheel from the
-[latest release](https://github.com/VardrSec/VardrRunner/releases) (each is built in CI
-with a CycloneDX SBOM and a build-provenance attestation):
+That's it — [pipx](https://pipx.pypa.io) puts `vardrrunner` on your `PATH` in its own
+isolated environment, which is what you want for a CLI. `pip install vardrrunner` also
+works if you're already inside a virtualenv you manage yourself.
+
+### No Python on the machine?
+
+Common on a fresh VPS or a clean Windows box. [uv](https://docs.astral.sh/uv/) is a single
+static binary that downloads its own CPython, so it needs nothing preinstalled:
+
+```bash
+# install uv itself
+curl -LsSf https://astral.sh/uv/install.sh | sh        # macOS / Linux
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
+
+uv tool install vardrrunner
+```
+
+`uvx vardrrunner <command>` runs it without installing at all — handy for a one-shot job on
+a box you don't intend to keep.
+
+### Other options
+
+**From a GitHub Release** — every tag ships a wheel, an sdist, a CycloneDX SBOM, and a
+build-provenance attestation. Use this when you need to verify the artifact before
+installing it:
+
 ```bash
 pipx install ./vardrrunner-<version>-py3-none-any.whl
 ```
-> Releases are cut per `vX.Y.Z` tag, so the newest release can lag `main`. Compare the
-> release tag against [CHANGELOG.md](CHANGELOG.md) — if you need a version that has not
-> been tagged yet, install from source.
 
-**From source** (development):
+**From source**, for development:
+
 ```bash
 git clone https://github.com/VardrSec/VardrRunner.git
 cd VardrRunner
@@ -68,9 +88,12 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1     # Windows  (macOS/Linux: source venv/bin/activate)
 pip install -e ".[dev]"
 ```
-All three install the `vardrrunner` command.
 
-> Homebrew / Scoop formulae are planned once there's demand; until then use pipx or the release wheel.
+Note that a clone alone does **not** give you the `vardrrunner` command — it has to be
+installed into an environment on your `PATH`, which is what the `pip install -e` step
+above does. Inside a venv you'll need it activated; `pipx`/`uv` avoid that entirely.
+
+> Homebrew / Scoop formulae are planned once there's demand.
 
 ## Quick start
 ```bash

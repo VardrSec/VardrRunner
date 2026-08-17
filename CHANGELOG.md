@@ -7,6 +7,22 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Documentation
+
+- **Install instructions rewritten around PyPI.** `pipx install vardrrunner` is now the
+  headline path rather than a "once published" placeholder, with the GitHub Release wheel
+  demoted to the verify-before-installing case and source install marked as development.
+- **`uv` documented for machines with no Python.** `pipx` presumes a Python installation,
+  which a fresh VPS or clean Windows box may not have; `uv` bootstraps its own CPython.
+  Also notes `uvx vardrrunner` for one-shot use without installing.
+- **README states plainly that cloning alone does not provide the command** — it must be
+  installed into an environment on `PATH`.
+- **`login --url` / `--key` documented** in `docs/cli.md`, with a warning that passing
+  `--key` writes a live credential into shell history and that the hidden-input prompt or
+  `VARDRMAP_API_KEY` should be preferred.
+- **ADR 0003 amended** to record that PyPI publishing went live in v0.28.0, and that the
+  original ADR did not account for operators without Python.
+
 ## [0.28.0] — 2026-08-17
 
 First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.md).
