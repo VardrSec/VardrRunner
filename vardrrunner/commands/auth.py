@@ -4,7 +4,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config, keychain
+from vardrrunner import api, config, credentials, keychain
 
 console = Console()
 app = typer.Typer(help="Authentication commands.")
@@ -14,8 +14,22 @@ app = typer.Typer(help="Authentication commands.")
 def login_vardrmap(
     api_url: str = typer.Option(None, "--url", help="VardrMap API base URL"),
     api_key: str = typer.Option(None, "--key", help="vmap_ API key"),
+    allow_plaintext: bool = typer.Option(
+        False,
+        "--allow-plaintext-credentials",
+        help="Permit storing the key in cleartext when no OS keychain exists",
+    ),
 ):
-    """Authenticate vardrrunner with your VardrMap instance."""
+    """Authenticate vardrrunner with your VardrMap instance.
+
+    The key goes to the OS keychain when one is available. When one is not,
+    login **refuses** rather than silently writing cleartext to disk — pass
+    ``--allow-plaintext-credentials`` to accept that, or use the
+    ``VARDRMAP_API_KEY`` environment variable, which writes nothing at all.
+
+    Note that omitting ``--key`` protects your *shell history*; it has no
+    bearing on how the key is then stored.
+    """
     if not api_url:
         api_url = typer.prompt("VardrMap API URL").strip().rstrip("/")
     if not api_key:
@@ -48,12 +62,22 @@ def login_vardrmap(
     if keychain.available() and keychain.set_key(api_url, api_key):
         config.save_url(api_url)
         console.print("API key stored in your OS keychain.")
-    else:
-        config.save({"api_url": api_url, "api_key": api_key})
+        return
+
+    # No keychain. Storing the key means cleartext on disk, so that has to be a
+    # decision the operator made on purpose — failing closed is the whole point.
+    if not allow_plaintext:
         console.print(
-            f"[yellow]No OS keychain available — stored the key in plaintext at "
-            f"{config.CONFIG_FILE}.[/yellow] Use VARDRMAP_API_KEY on servers instead."
+            f"[red]Not saved.[/red] {credentials.plaintext_refusal_message(config.CONFIG_FILE)}"
         )
+        raise typer.Exit(1)
+
+    config.save({"api_url": api_url, "api_key": api_key})
+    console.print(
+        f"[yellow]Stored the key in cleartext at {config.CONFIG_FILE}[/yellow] "
+        "as requested. Anyone who can read that file has your key; prefer "
+        "VARDRMAP_API_KEY on servers."
+    )
 
 
 def logout():

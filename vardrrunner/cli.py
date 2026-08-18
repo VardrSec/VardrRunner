@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 
 from vardrrunner.commands import auth, engagements, imports, jobs, run
+from vardrrunner.commands import credentials as credentials_cmd
 from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import doctor as doctor_cmd
 from vardrrunner.commands import heartbeat as heartbeat_cmd
@@ -62,6 +63,12 @@ def heartbeat():
 def logout():
     """Remove stored credentials (keychain + config file); keep the API URL."""
     auth.logout()
+
+
+@app.command()
+def credentials():
+    """Show where the API key comes from and how exposed it is (never shows the key)."""
+    credentials_cmd.show_credentials()
 
 
 @app.command()

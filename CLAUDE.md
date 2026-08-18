@@ -14,7 +14,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
   - `commands/` — one module per group: `auth`, `daemon`, `doctor`, `heartbeat`, `imports`, `jobs`, `pipeline`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (588 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite (605 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
 - `.github/workflows/` — CI (lint + tests on every push)
@@ -72,6 +72,7 @@ vardrrunner daemon start
 - `login vardrmap` — authenticate; store key in OS keychain
 - `logout` — remove credentials, keep URL
 - `whoami` — identity behind the configured key
+- `credentials` — credential source/posture; never shows the key
 - `engagements` — list engagements (`programs` kept as a hidden alias)
 - `scope <engagement-id>` — show in/out-of-scope items
 - `run httpx|subfinder|nuclei|nmap|dnsx|naabu` — run tool locally, upload results
