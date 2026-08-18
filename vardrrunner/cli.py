@@ -17,6 +17,7 @@ from vardrrunner.commands import doctor as doctor_cmd
 from vardrrunner.commands import heartbeat as heartbeat_cmd
 from vardrrunner.commands import pipeline as pipeline_cmd
 from vardrrunner.commands import service as service_cmd
+from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
 from vardrrunner.commands import updates as updates_cmd
 
@@ -31,6 +32,49 @@ app = typer.Typer(
     help="Local runner for VardrMap. Runs tools locally, uploads results to your VardrMap instance.",
     no_args_is_help=True,
 )
+
+
+@app.command("init")
+def initialize(
+    api_url: str | None = typer.Option(None, "--url", help="VardrMap API base URL"),
+    api_key: str | None = typer.Option(
+        None, "--key", help="vmap_ API key (prefer the hidden prompt or environment)"
+    ),
+    name: str | None = typer.Option(None, "--name", help="Human label for this runner"),
+    production: bool = typer.Option(
+        False, "--production", help="Require the strict unattended doctor profile"
+    ),
+    install_service: bool = typer.Option(
+        False, "--install-service", help="Install the native per-user worker service"
+    ),
+    start_service: bool = typer.Option(
+        True, "--start-service/--no-start-service", help="Start an installed service now"
+    ),
+    env_file: Path | None = typer.Option(
+        None, "--env-file", help="Linux systemd credential environment file"
+    ),
+    allow_plaintext: bool = typer.Option(
+        False,
+        "--allow-plaintext-credentials",
+        help="Explicitly permit cleartext key storage when no keychain is available",
+    ),
+    non_interactive: bool = typer.Option(
+        False, "--non-interactive", help="Never prompt; fail if required input is missing"
+    ),
+):
+    """Guided auth, identity, service, and health setup for a new runner."""
+    setup_cmd.initialize(
+        api_url=api_url,
+        api_key=api_key,
+        name=name,
+        production=production,
+        install_service=install_service,
+        start_service=start_service,
+        env_file=env_file,
+        allow_plaintext=allow_plaintext,
+        non_interactive=non_interactive,
+    )
+
 
 # --------------------------------------------------------------------------- #
 # Auth
@@ -252,9 +296,15 @@ app.add_typer(daemon_app, name="daemon")
 @daemon_app.command("start")
 def daemon_start(
     detach: bool = typer.Option(False, "--detach", "-d", help="Run in background"),
-    poll_interval: int = typer.Option(5, "--poll-interval", help="Seconds between job polls"),
+    poll_interval: int = typer.Option(
+        5, "--poll-interval", min=1, max=3600, help="Seconds between job polls"
+    ),
     heartbeat_interval: int = typer.Option(
-        60, "--heartbeat-interval", help="Seconds between heartbeats"
+        60,
+        "--heartbeat-interval",
+        min=1,
+        max=86400,
+        help="Seconds between heartbeats",
     ),
     log_file: Path | None = typer.Option(None, "--log-file", help="Append output to file"),
     log_format: daemon_cmd.LogFormat = typer.Option(

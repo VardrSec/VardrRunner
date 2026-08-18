@@ -61,8 +61,56 @@ class TestLoginVardrmap:
             patch("vardrrunner.commands.auth.keychain.available", return_value=False),
             patch("vardrrunner.commands.auth.config.save") as mock_save,
         ):
-            auth.login_vardrmap(api_url="https://api.example.com", api_key="vmap_validkey")
+            auth.login_vardrmap(
+                api_url="https://api.example.com",
+                api_key="vmap_validkey",
+                allow_plaintext=True,
+            )
         mock_save.assert_called_once()
+
+    def test_direct_call_does_not_treat_typer_default_as_plaintext_opt_in(self):
+        client = MagicMock()
+        client.whoami.return_value = {"username": "jorge"}
+        with (
+            patch("vardrrunner.commands.auth.config.validate_api_url"),
+            patch("vardrrunner.commands.auth.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.auth.keychain.available", return_value=False),
+            patch("vardrrunner.commands.auth.config.save") as save,
+            pytest.raises(typer.Exit),
+        ):
+            auth.login_vardrmap(api_url="https://api.example.com", api_key="vmap_validkey")
+        save.assert_not_called()
+
+    def test_keychain_is_rolled_back_when_url_save_fails(self):
+        client = MagicMock()
+        client.whoami.return_value = {"username": "jorge"}
+        with (
+            patch("vardrrunner.commands.auth.config.validate_api_url"),
+            patch("vardrrunner.commands.auth.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.auth.keychain.available", return_value=True),
+            patch("vardrrunner.commands.auth.keychain.set_key", return_value=True),
+            patch("vardrrunner.commands.auth.config.save_url", side_effect=OSError("disk full")),
+            patch("vardrrunner.commands.auth.keychain.delete_key") as delete,
+            pytest.raises(typer.Exit),
+        ):
+            auth.login_vardrmap(api_url="https://api.example.com", api_key="vmap_validkey")
+        delete.assert_called_once_with("https://api.example.com")
+
+    def test_plaintext_save_failure_exits_cleanly(self):
+        client = MagicMock()
+        client.whoami.return_value = {"username": "jorge"}
+        with (
+            patch("vardrrunner.commands.auth.config.validate_api_url"),
+            patch("vardrrunner.commands.auth.api.VardrMapClient", return_value=client),
+            patch("vardrrunner.commands.auth.keychain.available", return_value=False),
+            patch("vardrrunner.commands.auth.config.save", side_effect=OSError("disk full")),
+            pytest.raises(typer.Exit),
+        ):
+            auth.login_vardrmap(
+                api_url="https://api.example.com",
+                api_key="vmap_validkey",
+                allow_plaintext=True,
+            )
 
     def test_invalid_url_raises_invalid_api_url(self):
         from vardrrunner import config as cfg

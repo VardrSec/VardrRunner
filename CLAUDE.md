@@ -15,8 +15,9 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
-  - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (686 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+  - `compatibility.py` / `resources.py` / `updates.py` — wire negotiation, bounded local policy, and cached release checks (ADR 0012)
+  - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `updates`, `engagements`, `run`, `status`
+- `tests/` — pytest suite (794 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
 - `.github/workflows/` — CI (lint + tests on every push)
@@ -72,6 +73,7 @@ vardrrunner daemon start
 
 ## Commands
 - `login vardrmap` — authenticate; store key in OS keychain
+- `init` — guided/provisioned auth, identity, service, and doctor acceptance gate
 - `logout` — remove credentials, keep URL
 - `whoami` — identity behind the configured key
 - `credentials` — credential source/posture; never shows the key
@@ -88,6 +90,7 @@ vardrrunner daemon start
 - `heartbeat` — send single heartbeat
 - `status` — local config, version, tool availability
 - `doctor` — deep preflight for unattended use; exits non-zero on failures (`--json`)
+- `update check` — cached opt-in release discovery; never installs automatically
 
 Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
 back-compat aliases.

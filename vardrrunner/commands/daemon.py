@@ -23,6 +23,7 @@ import logging.handlers
 import os
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -50,6 +51,10 @@ _IS_WINDOWS = os.name == "nt"
 # Rotate at 5 MB, keep 3 backups (≈ 20 MB total log budget).
 _LOG_MAX_BYTES = 5 * 1024 * 1024
 _LOG_BACKUP_COUNT = 3
+
+
+class DaemonStateError(RuntimeError):
+    """The daemon PID ownership file cannot be claimed safely."""
 
 
 class LogFormat(str, Enum):
@@ -134,9 +139,10 @@ class _RotatingLogFile:
 
 def _read_pid() -> int | None:
     try:
-        return int(PID_FILE.read_text().strip())
+        pid = int(PID_FILE.read_text().strip())
     except (FileNotFoundError, ValueError):
         return None
+    return pid if pid > 0 else None
 
 
 def _process_alive(pid: int) -> bool:
@@ -168,6 +174,57 @@ def _process_alive(pid: int) -> bool:
     return True
 
 
+def _claim_pid_file(pid: int) -> None:
+    """Atomically claim daemon ownership, replacing at most one stale file."""
+    PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    for attempt in range(2):
+        try:
+            fd = os.open(
+                PID_FILE,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                stat.S_IRUSR | stat.S_IWUSR,
+            )
+        except FileExistsError as exc:
+            existing = _read_pid()
+            if existing is not None and _process_alive(existing):
+                raise DaemonStateError(f"daemon already running (PID {existing})") from exc
+            if attempt == 1:
+                raise DaemonStateError("could not replace stale daemon PID file") from exc
+            try:
+                PID_FILE.unlink()
+            except OSError as unlink_error:
+                raise DaemonStateError("could not remove stale daemon PID file") from unlink_error
+            continue
+        except OSError as exc:
+            raise DaemonStateError("could not create daemon PID file") from exc
+
+        try:
+            handle = os.fdopen(fd, "w", encoding="ascii", newline="\n")
+        except Exception as exc:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            try:
+                PID_FILE.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise DaemonStateError("could not open daemon PID file") from exc
+        try:
+            with handle:
+                handle.write(f"{pid}\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+        except Exception as exc:
+            try:
+                PID_FILE.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise DaemonStateError("could not write daemon PID file") from exc
+        return
+    raise DaemonStateError("could not claim daemon PID file")  # pragma: no cover
+
+
 # ── Commands ─────────────────────────────────────────────────────────────────
 
 
@@ -190,6 +247,12 @@ def start(
     log_format: LogFormat = LogFormat.TEXT,
 ) -> None:
     """Start the daemon: continuously poll for jobs and send heartbeats."""
+    if not 1 <= poll_interval <= 3600 or not 1 <= heartbeat_interval <= 86400:
+        console.print(
+            "[red]Invalid intervals:[/red] poll must be 1-3600 seconds and heartbeat "
+            "must be 1-86400 seconds."
+        )
+        raise typer.Exit(1)
     existing = _read_pid()
     if existing and _process_alive(existing):
         console.print(
@@ -258,7 +321,13 @@ def start(
         out = Console(file=_log, highlight=False)  # type: ignore[arg-type]
 
     pid = os.getpid()
-    PID_FILE.write_text(str(pid))
+    try:
+        _claim_pid_file(pid)
+    except DaemonStateError as e:
+        if _log:
+            _log.close()
+        console.print(f"[red]Could not start daemon:[/red] {redaction.redact_rich_exception(e)}")
+        raise typer.Exit(1) from e
     out.print(
         f"[green]Daemon started[/green] · PID {pid} "
         f"· poll {poll_interval}s · heartbeat {heartbeat_interval}s"

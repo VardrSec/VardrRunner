@@ -38,6 +38,54 @@ class TestStatusCommand:
         mock.assert_called_once()
 
 
+class TestInitCommand:
+    def test_all_options_are_forwarded(self, tmp_path):
+        env_file = tmp_path / "runner.env"
+        with patch("vardrrunner.commands.setup.initialize") as mock:
+            invoke(
+                "init",
+                "--url",
+                "https://api.example.com",
+                "--key",
+                "vmap_secret",
+                "--name",
+                "runner-a",
+                "--production",
+                "--install-service",
+                "--no-start-service",
+                "--env-file",
+                str(env_file),
+                "--allow-plaintext-credentials",
+                "--non-interactive",
+            )
+        mock.assert_called_once_with(
+            api_url="https://api.example.com",
+            api_key="vmap_secret",
+            name="runner-a",
+            production=True,
+            install_service=True,
+            start_service=False,
+            env_file=env_file,
+            allow_plaintext=True,
+            non_interactive=True,
+        )
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("--poll-interval", "0"),
+            ("--heartbeat-interval", "0"),
+            ("--poll-interval", "3601"),
+            ("--heartbeat-interval", "86401"),
+        ],
+    )
+    def test_daemon_intervals_are_bounded(self, args):
+        with patch("vardrrunner.commands.daemon.start") as start:
+            result = invoke("daemon", "start", *args)
+        assert result.exit_code != 0
+        start.assert_not_called()
+
+
 class TestDoctorCommand:
     def test_delegates_to_run_doctor(self):
         with patch("vardrrunner.commands.doctor.run_doctor") as mock:

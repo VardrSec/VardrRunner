@@ -9,11 +9,10 @@ keychain when one is available, falling back to the config file otherwise.
 
 import json
 import os
-import stat
 from pathlib import Path
 from urllib.parse import urlparse
 
-from vardrrunner import keychain
+from vardrrunner import keychain, manifests
 
 CONFIG_DIR = Path.home() / ".vardrmap"
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -64,15 +63,14 @@ def load() -> dict:
 
 
 def save(data: dict) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with CONFIG_FILE.open("w") as f:
-        json.dump(data, f, indent=2)
-    # Best-effort: restrict permissions on Unix so the file isn't world-readable.
-    # On Windows this has no effect but raises no error.
-    try:
-        CONFIG_FILE.chmod(stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:
-        pass
+    """Atomically replace config with owner-only permissions.
+
+    This deliberately uses ``write_atomic_text`` rather than the manifest JSON helper:
+    config may contain an explicitly accepted plaintext API key, which the manifest
+    redactor would replace and make unusable.
+    """
+    text = json.dumps(data, indent=2) + "\n"
+    manifests.write_atomic_text(CONFIG_FILE, text)
 
 
 def get_api_url() -> str | None:
@@ -102,6 +100,27 @@ def credential_source() -> str | None:
     if url and keychain.get_key(url):
         return "keychain"
     if load().get("api_key"):
+        return "config file"
+    return None
+
+
+def persistent_credential_source() -> str | None:
+    """Return a credential source that survives a fresh service process.
+
+    Environment variables in the current shell do not count. The URL must also be in the
+    config file because a per-user supervisor does not inherit the invoking shell.
+    """
+    data = load()
+    url = data.get("api_url")
+    if not isinstance(url, str) or not url:
+        return None
+    try:
+        validate_api_url(url)
+    except InvalidApiUrl:
+        return None
+    if keychain.get_key(url):
+        return "keychain"
+    if data.get("api_key"):
         return "config file"
     return None
 

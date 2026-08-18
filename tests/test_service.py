@@ -1,6 +1,7 @@
 """Native per-user service plans and safe command execution."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -12,6 +13,7 @@ from vardrrunner.commands import service as service_cmd
 
 def test_linux_plan_is_user_scoped_and_uses_json_logs(tmp_path):
     (tmp_path / "runner.env").write_text("VARDRMAP_URL=https://example.com\n")
+    (tmp_path / "runner.env").chmod(0o600)
     plan = service.build_plan(
         executable=tmp_path / "bin" / "vardrrunner",
         system="Linux",
@@ -24,6 +26,7 @@ def test_linux_plan_is_user_scoped_and_uses_json_logs(tmp_path):
     assert "EnvironmentFile=" in plan.definition
     assert "VARDRMAP_API_KEY" not in plan.definition
     assert plan.start_command[:2] == ("systemctl", "--user")
+    assert plan.environment_file == tmp_path / "runner.env"
 
 
 def test_linux_plan_requires_existing_environment_file(tmp_path):
@@ -33,6 +36,19 @@ def test_linux_plan_requires_existing_environment_file(tmp_path):
             system="Linux",
             home=tmp_path,
             env_file=tmp_path / "missing.env",
+        )
+
+
+def test_linux_plan_rejects_exposed_environment_file(tmp_path):
+    env_file = tmp_path / "runner.env"
+    env_file.write_text("VARDRMAP_API_KEY=secret\n")
+    with (
+        patch("vardrrunner.service.os", SimpleNamespace(name="posix")),
+        patch("vardrrunner.service.stat.S_IMODE", return_value=0o644),
+        pytest.raises(service.ServiceError, match="chmod 600"),
+    ):
+        service.build_plan(
+            executable=tmp_path / "runner", system="Linux", home=tmp_path, env_file=env_file
         )
 
 
@@ -190,11 +206,45 @@ def test_service_status_without_detail(tmp_path, capsys):
 
 
 def test_service_preflight_failure_exits():
+    plan = MagicMock(environment_file=None)
     with patch(
         "vardrrunner.commands.service.config.require_auth", side_effect=RuntimeError("no auth")
     ):
         with pytest.raises(typer.Exit):
-            service_cmd._preflight()
+            service_cmd._preflight(plan)
+
+
+def test_service_preflight_rejects_shell_only_credentials():
+    plan = MagicMock(environment_file=None)
+    with (
+        patch(
+            "vardrrunner.commands.service.config.require_auth",
+            return_value=("https://api.example.com", "vmap_env"),
+        ),
+        patch(
+            "vardrrunner.commands.service.config.persistent_credential_source",
+            return_value=None,
+        ),
+        pytest.raises(typer.Exit),
+    ):
+        service_cmd._preflight(plan)
+
+
+def test_service_preflight_accepts_environment_file():
+    plan = MagicMock(environment_file=Path("runner.env"))
+    with (
+        patch(
+            "vardrrunner.commands.service.config.require_auth",
+            return_value=("https://api.example.com", "vmap_env"),
+        ),
+        patch(
+            "vardrrunner.commands.service.config.persistent_credential_source",
+            return_value=None,
+        ),
+        patch("vardrrunner.commands.service.Journal"),
+        patch("vardrrunner.commands.service.identity.load_or_create"),
+    ):
+        service_cmd._preflight(plan)
 
 
 def test_plan_rejects_control_characters(tmp_path):

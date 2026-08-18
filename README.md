@@ -35,6 +35,8 @@ results, and heartbeats so the backend always knows which machines are online.
   raw targets, credentials, request bodies, or headers
 - **Small-team operations** — stable runner UUID/name, rotating JSON logs, strict production
   preflight, and native systemd/launchd/Windows Scheduled Task management
+- **Guided verified setup** — one idempotent `init` command for interactive onboarding or
+  non-interactive host provisioning, ending in a doctor acceptance gate
 - **Bounded execution** — schema/capability negotiation, target and artifact ceilings,
   free-disk reserve, and optional parallelism that never overlaps one engagement
 - **Live job events** — emits `started → targets_resolved → running → uploaded → done/failed`
@@ -105,12 +107,12 @@ above does. Inside a venv you'll need it activated; `pipx`/`uv` avoid that entir
 
 ## Quick start
 ```bash
-vardrrunner login vardrmap     # prompts for backend URL + API key; key goes to your OS keychain
-vardrrunner status             # show config, version, and which tools are detected
-vardrrunner heartbeat          # confirm the backend can see this machine
-vardrrunner daemon start       # run the continuous worker (poll jobs + heartbeat)
-vardrrunner service install    # optional: native per-user startup + JSON logs
+vardrrunner init               # guided auth, runner name, optional service, and health gate
 ```
+
+For an unattended host, use `vardrrunner init --production --install-service`. Existing
+individual `login`, `identity`, `doctor`, and `service` commands remain available when you
+want to control each step separately.
 
 ### One-shot usage
 ```bash
@@ -156,6 +158,11 @@ file**:
 The runner refuses to send your API key over plain HTTP to a non-local host, so a mistyped
 `http://` URL can't leak your key.
 
+An installed service does not inherit arbitrary variables from the shell that installed
+it. If credentials exist only in environment variables, Linux service setup requires an
+operator-owned `--env-file`; macOS/Windows should use keychain/config credentials or an
+existing supervisor. VardrRunner never creates, reads, or prints the env file's secrets.
+
 ## Documentation
 - [docs/architecture.md](docs/architecture.md) — how the runner is structured and how it talks to the backend
 - [docs/development.md](docs/development.md) — local setup, testing, and contribution workflow
@@ -169,7 +176,7 @@ pip install -e ".[dev]"   # editable install + dev tools (pytest, ruff, mypy)
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
-pytest tests              # 760 tests; all subprocess + HTTP calls are mocked
+pytest tests              # 794 tests; all subprocess + HTTP calls are mocked
 ```
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
 95% coverage floor on Python 3.10/3.11/3.12 (Linux) plus a 3.12 smoke on Windows and

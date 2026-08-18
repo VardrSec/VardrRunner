@@ -43,7 +43,7 @@ requires VardrMap ≥ v0.22.0.
 |------|----------------|
 | `vardrrunner/cli.py` | Typer application; defines command groups and wires them together. Thin — delegates to `commands/`. |
 | `vardrrunner/api.py` | The **only** module that performs HTTP. A `requests.Session` wrapper exposing typed methods; raises `requests.HTTPError` on non-2xx. Retries transient failures (connection errors, 429/5xx) with exponential backoff on idempotent methods only (never POST/PATCH); sends a `User-Agent: vardrrunner/<version>` header. |
-| `vardrrunner/config.py` | Resolve credentials (key: env > keychain > config file; URL: env > file); `validate_api_url()` enforces HTTPS; `credential_source()` for diagnostics; `require_auth()` guards commands. |
+| `vardrrunner/config.py` | Resolve credentials (key: env > keychain > config file; URL: env > file); atomically persist config; identify whether auth survives a fresh service process; enforce HTTPS. |
 | `vardrrunner/keychain.py` | OS keychain wrapper (`keyring`) for the API key. Degrades gracefully (returns None/False) when no backend is present, so servers fall back to env/file. |
 | `vardrrunner/configs.py` | Typed, validated tool configs (`HttpxConfig`, `NucleiConfig`, `NmapConfig`, `SubfinderConfig`, `VardrGateConfig`). Raw backend dicts are parsed into frozen dataclasses up front; invalid values raise `ConfigError` and fail the job fast. |
 | `vardrrunner/errors.py` | The failure taxonomy (`FailureCategory`) and `RunnerError` hierarchy, plus `classify_status()` — the single place an HTTP status becomes a domain meaning. Imports nothing from the package or outside stdlib, so it is the bottom of the dependency graph (see ADR 0008). |
@@ -70,6 +70,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
 | `vardrrunner/commands/service.py` | `service install|status|uninstall` — preview and manage native per-user supervision. |
 | `vardrrunner/commands/updates.py` | `update check` — inspect public release metadata; never installs automatically. |
+| `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, optional service installation, and doctor into one idempotent guided/provisioning workflow. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
 | `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — continuous worker (poll + heartbeat) with PID file and graceful shutdown. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
@@ -119,6 +120,10 @@ removes the PID file as a cooperative shutdown signal and the daemon exits grace
 Windows liveness is checked via a ctypes probe (plain `os.kill` on Windows is
 `TerminateProcess` and would kill the daemon it was meant to check).
 
+PID ownership is claimed with exclusive file creation and a durable write. Concurrent
+starts cannot both pass; malformed/non-positive/dead state is replaced once as stale.
+Poll and heartbeat ranges are checked in both CLI parsing and the daemon command boundary.
+
 Daemon logs rotate at 5 MiB with three backups. Text remains the interactive default;
 `--log-format json` emits one redacted JSON object per line with schema version, UTC
 timestamp, level, event, runner ID, process ID, and message.
@@ -132,6 +137,9 @@ For unattended startup, `service.py` generates a per-user systemd unit (Linux), 
 (macOS), or Scheduled Task (Windows). The generated command is the same foreground daemon,
 so there is one lifecycle implementation. Service files contain executable/log paths only,
 never credentials, and native manager commands are executed as argv lists without a shell.
+Installation preflight also verifies credentials survive a fresh process. Shell-only auth
+requires an explicitly referenced Linux systemd env file; the runner never copies or reads
+that file's contents.
 
 Before each poll, reconciliation inspects unfinished records for the configured backend:
 
@@ -146,7 +154,7 @@ Before each poll, reconciliation inspects unfinished records for the configured 
 ## Configuration & secrets
 Local state lives under `~/.vardrmap/`:
 - `config.json` — the backend `api_url` (normally **no secret**; only holds a plaintext
-  `api_key` in the no-keychain fallback)
+  `api_key` in the explicit no-keychain fallback); replacements are atomic
 - `runs/` — timestamped tool output directories, pruned after 7 days
 - `runner-journal.sqlite3` — sanitized execution state and recovery metadata (SQLite/WAL)
 - `runner-identity.json` — stable installation UUID, name, and original hostname
@@ -229,5 +237,9 @@ in depth—in a successful response's warning array.
   mismatches pause queue claims while heartbeat recovery remains available.
 - **Same-engagement work is serialized.** Optional concurrency applies only across groups;
   one runner process never executes two jobs from the same engagement simultaneously.
+- **Installed means restartable.** Native service preflight rejects authentication that
+  exists only in the launching shell unless a Linux environment file is attached.
+- **One local daemon owns the PID.** Exclusive creation closes the concurrent-start race;
+  the backend claim remains the cross-host ownership authority.
 - **No backend coupling.** The runner must build, test, and run without the backend present
   (tests mock every HTTP and subprocess call).

@@ -14,6 +14,38 @@ rename keep working.
 
 ---
 
+## `init` — guided host setup
+
+```bash
+vardrrunner init
+vardrrunner init --production --install-service
+vardrrunner init --non-interactive --name runner-a --production --install-service
+```
+
+`init` composes the secure setup steps in their required order: configure or reuse auth,
+create the stable runner identity, initialize the durable journal, optionally install the
+native per-user service, then run `doctor`. Setup succeeds only when the final doctor
+profile succeeds. It is safe to rerun; completed local state is reused.
+
+| Option | Purpose |
+|--------|---------|
+| `--url` / `--key` | Supply VardrMap credentials; omit `--key` interactively for a hidden prompt |
+| `--name` | Set the durable human runner label |
+| `--production` | Require the strict unattended doctor profile |
+| `--install-service` | Install the native per-user background worker |
+| `--start-service` / `--no-start-service` | Start after installation (default: start) |
+| `--env-file <path>` | Attach an existing Linux systemd credential environment file; also enables service installation |
+| `--allow-plaintext-credentials` | Explicitly accept config-file key storage if no keychain exists |
+| `--non-interactive` | Never prompt; fail if auth input is missing |
+
+Non-interactive setup accepts existing environment credentials. For an installed service,
+those credentials must also survive a fresh process: use keychain/config auth, or on Linux
+pass an operator-owned, owner-readable-only (`chmod 600`) `--env-file`. Setup never creates
+or displays a secret env file. As with `login`, prefer the hidden prompt over `--key` so the
+credential does not enter shell history.
+
+---
+
 ## `login`
 Authenticate to a Vardr product. Verifies the key against `GET /me` before saving anything,
 then stores it in the **OS keychain** (macOS Keychain / Windows Credential Locker / Linux
@@ -389,6 +421,10 @@ Options for `daemon start`:
 | `--log-file <path>` | none | Append output to a rotating log file |
 | `--log-format text|json` | `text` | Human text or redacted JSON Lines |
 
+Poll intervals are bounded to 1–3600 seconds and heartbeat intervals to 1–86400 seconds.
+The PID file is claimed with exclusive creation, so concurrent starts cannot both become
+workers; malformed or dead PID state is replaced as stale.
+
 - The PID file is `~/.vardrrunner.pid`. A double-start guard prevents two daemons from
   running at once, and `daemon status` cleans up a stale PID file.
 - `--log-file` writes through a rotating handler — **5 MB per file, 3 backups** — so a
@@ -424,6 +460,13 @@ commands without changing the host.
 
 Actual installation first verifies local authentication, the execution journal, and stable
 identity so a broken configuration does not enter a native supervisor restart loop.
+
+Authentication must be available to a newly started service process. A keychain or
+explicitly accepted config credential satisfies this. Credentials that exist only in the
+current shell are rejected unless Linux `--env-file` is supplied; macOS and Windows users
+must use keychain/config resolution or an established external supervisor. Linux env files
+must already exist with mode `0600`; a missing file is a service startup failure rather than
+being silently ignored.
 
 On Linux only, `--env-file <path>` adds a systemd `EnvironmentFile` reference. The file is
 never copied or displayed, and no secret is embedded in the unit. macOS and Windows should

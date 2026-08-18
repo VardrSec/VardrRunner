@@ -21,10 +21,16 @@ def _plan(env_file: Path | None = None):
         raise typer.Exit(1) from exc
 
 
-def _preflight() -> None:
+def _preflight(plan: service.ServicePlan) -> None:
     """Refuse installation that would enter a restart loop immediately."""
     try:
         config.require_auth()
+        if config.persistent_credential_source() is None and plan.environment_file is None:
+            raise service.ServiceError(
+                "credentials exist only in this process environment; the service would "
+                "restart unauthenticated. Use a keychain/config login, or on Linux pass "
+                "--env-file with an operator-owned credential file"
+            )
         Journal(config.journal_file())
         identity.load_or_create()
     except Exception as exc:
@@ -46,7 +52,7 @@ def install(env_file: Path | None = None, start: bool = True, dry_run: bool = Fa
         ):
             console.print("  " + " ".join(redaction.redact_rich_text(part) for part in command))
         return
-    _preflight()
+    _preflight(plan)
     try:
         service.install(plan, start=start)
     except (OSError, service.ServiceError) as exc:

@@ -6,6 +6,7 @@ import os
 import platform
 import plistlib
 import shutil
+import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,7 @@ class ServicePlan:
     stop_command: tuple[str, ...]
     uninstall_commands: tuple[tuple[str, ...], ...]
     status_command: tuple[str, ...]
+    environment_file: Path | None = None
 
 
 def _clean_path(path: Path) -> Path:
@@ -72,10 +74,16 @@ def build_plan(
         raise ServiceError("--env-file is currently supported only by systemd on Linux")
     if environment and not environment.is_file():
         raise ServiceError(f"environment file does not exist: {environment}")
+    if environment and system == "Linux" and os.name != "nt":
+        mode = stat.S_IMODE(environment.stat().st_mode)
+        if mode & 0o077:
+            raise ServiceError(
+                f"environment file permissions {oct(mode)} expose credentials; use chmod 600"
+            )
 
     if system == "Linux":
         path = home / ".config" / "systemd" / "user" / "vardrrunner.service"
-        env_line = f"EnvironmentFile=-{_systemd_quote(str(environment))}\n" if environment else ""
+        env_line = f"EnvironmentFile={_systemd_quote(str(environment))}\n" if environment else ""
         definition = (
             "[Unit]\nDescription=VardrRunner local security worker\nAfter=network-online.target\n"
             "Wants=network-online.target\n\n[Service]\nType=simple\n"
@@ -95,6 +103,7 @@ def build_plan(
                 ("systemctl", "--user", "daemon-reload"),
             ),
             ("systemctl", "--user", "status", "vardrrunner.service", "--no-pager"),
+            environment_file=environment,
         )
 
     if system == "Darwin":
@@ -120,6 +129,7 @@ def build_plan(
             ("launchctl", "bootout", domain, str(path)),
             (("launchctl", "bootout", domain, str(path)),),
             ("launchctl", "print", f"{domain}/com.vardrsec.vardrrunner"),
+            environment_file=None,
         )
 
     if system == "Windows":
@@ -144,6 +154,7 @@ def build_plan(
             ("schtasks.exe", "/End", "/TN", SERVICE_NAME),
             (("schtasks.exe", "/Delete", "/TN", SERVICE_NAME, "/F"),),
             ("schtasks.exe", "/Query", "/TN", SERVICE_NAME, "/V", "/FO", "LIST"),
+            environment_file=None,
         )
 
     raise ServiceError(f"service installation is unsupported on {system}")

@@ -7,6 +7,35 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.35.0] — 2026-08-18
+
+Phase 5 completes the enterprise-for-small-teams roadmap with guided setup and final
+host-lifecycle hardening. See [`changelog/v0.35.0.md`](changelog/v0.35.0.md) and
+[ADR 0013](docs/adr/0013-guided-setup-and-host-lifecycle.md).
+
+### Added
+
+- `vardrrunner init` guides authentication, stable naming, journal initialization,
+  optional native service installation, and a final doctor gate.
+- `init --non-interactive` for deterministic provisioning, with explicit URL/key, name,
+  production profile, service, start, and Linux environment-file options.
+- Atomic exclusive daemon PID ownership and bounded daemon poll/heartbeat intervals.
+
+### Security and reliability
+
+- Service installation now rejects credentials that exist only in the invoking shell when
+  no persistent keychain/config fallback or Linux `--env-file` is available. This prevents
+  a successful install followed by an unauthenticated restart loop.
+- Config replacement is atomic and permission-restricted; interrupted saves no longer risk
+  truncating the active configuration.
+- A keychain login rolls back the stored key if persisting its backend URL fails. Explicit
+  plaintext storage also reports write failure cleanly without claiming success.
+- Direct Python calls can no longer mistake Typer's option metadata for an explicit
+  `--allow-plaintext-credentials` opt-in.
+- Login display escapes backend-controlled account names before Rich rendering.
+- Malformed/non-positive PID state is treated as stale; PID create/write/remove failures
+  are classified and surfaced without silently starting a second daemon.
+
 ## [0.34.0] — 2026-08-18
 
 Phase 4 of the enterprise-grade roadmap: explicit runner/backend compatibility,

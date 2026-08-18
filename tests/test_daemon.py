@@ -9,6 +9,7 @@ module-level _IS_WINDOWS flag rather than relying on the host OS.
 import json
 import os
 import signal
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -69,6 +70,57 @@ class TestReadPid:
     def test_empty_file_returns_none(self, pid_file):
         pid_file.write_text("")
         assert daemon_mod._read_pid() is None
+
+    @pytest.mark.parametrize("value", ["0", "-1"])
+    def test_nonpositive_pid_returns_none(self, pid_file, value):
+        pid_file.write_text(value)
+        assert daemon_mod._read_pid() is None
+
+
+class TestPidClaim:
+    def test_claim_is_exclusive_and_owner_only(self, pid_file):
+        daemon_mod._claim_pid_file(os.getpid())
+        assert daemon_mod._read_pid() == os.getpid()
+        if os.name != "nt":
+            assert pid_file.stat().st_mode & 0o077 == 0
+        with pytest.raises(daemon_mod.DaemonStateError, match="already running"):
+            daemon_mod._claim_pid_file(os.getpid())
+
+    def test_stale_file_is_replaced(self, pid_file):
+        pid_file.write_text("2000000000")
+        daemon_mod._claim_pid_file(os.getpid())
+        assert daemon_mod._read_pid() == os.getpid()
+
+    def test_stale_file_removal_failure_is_classified(self, pid_file):
+        pid_file.write_text("bad")
+        with (
+            patch.object(Path, "unlink", side_effect=OSError("locked")),
+            pytest.raises(daemon_mod.DaemonStateError, match="remove stale"),
+        ):
+            daemon_mod._claim_pid_file(os.getpid())
+
+    def test_pid_create_failure_is_classified(self, pid_file):
+        with (
+            patch("vardrrunner.commands.daemon.os.open", side_effect=OSError("denied")),
+            pytest.raises(daemon_mod.DaemonStateError, match="create"),
+        ):
+            daemon_mod._claim_pid_file(os.getpid())
+
+    def test_pid_write_failure_cleans_up_and_is_classified(self, pid_file):
+        with (
+            patch("vardrrunner.commands.daemon.os.fdopen", side_effect=OSError("disk full")),
+            pytest.raises(daemon_mod.DaemonStateError, match="open"),
+        ):
+            daemon_mod._claim_pid_file(os.getpid())
+        assert not pid_file.exists()
+
+    def test_pid_flush_failure_cleans_up_and_is_classified(self, pid_file):
+        with (
+            patch("vardrrunner.commands.daemon.os.fsync", side_effect=OSError("disk full")),
+            pytest.raises(daemon_mod.DaemonStateError, match="write"),
+        ):
+            daemon_mod._claim_pid_file(os.getpid())
+        assert not pid_file.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +320,17 @@ class TestStart:
     def test_writes_and_removes_pid_file(self, pid_file):
         """Daemon writes PID on entry and removes it in the finally block."""
         _run_start(pid_file, stop_after=1)
+        assert not pid_file.exists()
+
+    @pytest.mark.parametrize(("poll", "heartbeat"), [(0, 60), (5, 0)])
+    def test_rejects_invalid_intervals(self, pid_file, poll, heartbeat):
+        with pytest.raises(typer.Exit):
+            daemon_mod.start(
+                detach=False,
+                poll_interval=poll,
+                heartbeat_interval=heartbeat,
+                log_file=None,
+            )
         assert not pid_file.exists()
 
     def test_calls_execute_pending_jobs(self, pid_file):
