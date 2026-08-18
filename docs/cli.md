@@ -281,6 +281,30 @@ limited to 10 MiB. The same validation applies to backend data and pipeline hand
 
 `--yes`/`-y` skips the confirmation prompt on any of them.
 
+### Target classification and local deny rules
+
+Every resolved target is classified before any tool runs. Loopback, link-local and **cloud
+instance-metadata** addresses produce an advisory warning:
+
+```
+⚠ 169.254.169.254 — cloud instance-metadata endpoint — reachable from inside the cloud
+  network and commonly serves instance credentials
+```
+
+**Warnings never block** — the same contract the backend's scope findings follow. To make
+something actually block, configure a local deny rule:
+
+| Where | How |
+|---|---|
+| Config file | `"deny_targets": ["cloud_metadata", "10.0.0.0/8"]` in `~/.vardrmap/config.json` |
+| Environment | `VARDRRUNNER_DENY_TARGETS=cloud_metadata,loopback` |
+
+A rule is a class name (`public`, `private`, `loopback`, `link_local`, `cloud_metadata`), a
+literal host, or a CIDR. **Nothing is denied by default.** Set
+`VARDRRUNNER_ALLOW_DENIED_TARGETS=1` to override the rules; the override is recorded as a
+`deny_override` job event. It is an environment variable rather than a flag so it also
+applies to the daemon, where deny rules matter most and there is no command line.
+
 ### Target cap
 A run aborts before executing anything if the resolved target count exceeds
 `--max-targets` (default **500**), so a broad scope can't turn into a several-thousand-host

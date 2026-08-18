@@ -37,6 +37,7 @@ class FailureCategory(str, Enum):
     TARGET_RESOLUTION = "target_resolution"
     TARGET_VALIDATION = "target_validation"
     TARGET_LIMIT = "target_limit"
+    TARGET_DENIED = "target_denied"
     RESOURCE_LIMIT = "resource_limit"
     ARTIFACT_LIMIT = "artifact_limit"
     TOOL_MISSING = "tool_missing"

@@ -7,6 +7,40 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.36.0] — 2026-08-18
+
+Completes roadmap §16 (target safety), the one part of Phase 4 that shipped
+without its security half. See [`changelog/v0.36.0.md`](changelog/v0.36.0.md).
+
+### Added
+
+- **Target classification.** Every resolved target is classified as `public`, `private`,
+  `loopback`, `link_local`, `cloud_metadata` or `hostname` — lexically, with no DNS, so the
+  path stays fast and offline-safe.
+- **Cloud instance-metadata warnings.** `169.254.169.254` and the equivalents for AWS
+  IPv6/ECS, GCP, Alibaba and Oracle, plus `metadata.google.internal` and friends. This
+  runner is built to sit unattended on a VPS, where that address answers from inside the
+  network with instance credentials attached.
+- **Loopback and link-local warnings**, including the `localhost` family by name.
+- **Configurable local deny rules** — `deny_targets` in the config file or
+  `VARDRRUNNER_DENY_TARGETS`. A rule is a class name, a literal host, or a CIDR.
+- **`VARDRRUNNER_ALLOW_DENIED_TARGETS`** as the explicit override, audited as a
+  `deny_override` job event. An environment variable rather than a flag, because deny rules
+  matter most on the daemon path where there is no command line.
+- **Target statistics** — accepted, duplicates removed, blanks skipped, and a per-class
+  breakdown — emitted as a `target_stats` job event. Counts only, never target values.
+
+### Security
+
+- **Findings are advisory and never block**, matching the contract backend scope findings
+  already follow. The only thing that blocks is a deny rule the operator configured
+  themselves.
+- **Nothing is denied by default.** An operator who configures nothing is blocked by
+  nothing, on every existing code path.
+- A malformed deny rule matches nothing rather than everything: a typo in config must not
+  silently halt all work.
+
+
 ## [0.35.0] — 2026-08-18
 
 Phase 5 completes the enterprise-for-small-teams roadmap with guided setup and final

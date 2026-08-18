@@ -128,6 +128,8 @@ Or skip the file entirely with environment variables (handy for tests/containers
 export VARDRMAP_URL=http://localhost:8000
 export VARDRMAP_API_KEY=vmap_devkey
 export VARDRRUNNER_TOOL_TIMEOUT=300        # optional: per-tool run ceiling, seconds
+export VARDRRUNNER_DENY_TARGETS=cloud_metadata,loopback   # optional: local deny rules
+export VARDRRUNNER_ALLOW_DENIED_TARGETS=1  # optional: explicit, audited override
 export VARDRUNNER_NAME=chicago-runner-1   # optional: heartbeat/display label override
 export VARDRRUNNER_MAX_TARGETS=500          # queue target ceiling (1..100000)
 export VARDRRUNNER_MAX_ARTIFACT_MB=100      # output ceiling before upload (1..10240)
