@@ -35,6 +35,8 @@ results, and heartbeats so the backend always knows which machines are online.
   raw targets, credentials, request bodies, or headers
 - **Small-team operations** — stable runner UUID/name, rotating JSON logs, strict production
   preflight, and native systemd/launchd/Windows Scheduled Task management
+- **Bounded execution** — schema/capability negotiation, target and artifact ceilings,
+  free-disk reserve, and optional parallelism that never overlaps one engagement
 - **Live job events** — emits `started → targets_resolved → running → uploaded → done/failed`
   so the backend Terminal shows real-time logs
 - **Preflight (`doctor`)** — one command validates the whole machine (creds, URL, perms,
@@ -118,6 +120,7 @@ vardrrunner jobs list                                         # show the backend
 vardrrunner jobs run                                          # claim + execute all pending jobs once
 vardrrunner audit list                                        # inspect durable local job evidence
 vardrrunner identity set-name chicago-runner-1                # durable human label
+vardrrunner update check                                      # check; never auto-install
 vardrrunner run subfinder --engagement <engagement-id>        # run a single tool and upload results
 vardrrunner import nuclei --engagement <engagement-id> -f out.jsonl
 ```
@@ -145,6 +148,10 @@ file**:
 | `VARDRRUNNER_TOOL_TIMEOUT` | Per-tool run timeout in seconds (default 1800); a hung tool is killed and the job marked failed |
 | `VARDRRUNNER_ALLOW_INSECURE` | Set to `1` to permit a plain-HTTP backend URL (not recommended) |
 | `VARDRUNNER_NAME` | Optional display/heartbeat label; does not replace the stable UUID |
+| `VARDRUNNER_MAX_TARGETS` | Queue target ceiling (default 500; range 1–100000) |
+| `VARDRUNNER_MAX_ARTIFACT_MB` | Artifact ceiling before upload (default 100 MiB; range 1–10240) |
+| `VARDRUNNER_MAX_CONCURRENT_JOBS` | Parallel engagement groups (default 1; range 1–8) |
+| `VARDRUNNER_MIN_FREE_DISK_MB` | Required free-space reserve (default 512 MiB; 0 disables) |
 
 The runner refuses to send your API key over plain HTTP to a non-local host, so a mistyped
 `http://` URL can't leak your key.
@@ -162,7 +169,7 @@ pip install -e ".[dev]"   # editable install + dev tools (pytest, ruff, mypy)
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
-pytest tests              # 686 tests; all subprocess + HTTP calls are mocked
+pytest tests              # 760 tests; all subprocess + HTTP calls are mocked
 ```
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
 95% coverage floor on Python 3.10/3.11/3.12 (Linux) plus a 3.12 smoke on Windows and

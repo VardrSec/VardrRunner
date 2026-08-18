@@ -114,6 +114,13 @@ class TestServiceCommands:
         uninstall.assert_called_once()
 
 
+class TestUpdateCommands:
+    def test_check_options(self):
+        with patch("vardrrunner.commands.updates.check") as mock:
+            invoke("update", "check", "--force", "--json")
+        mock.assert_called_once_with(force=True, as_json=True)
+
+
 class TestAuditCommands:
     def test_list_delegates(self):
         with patch("vardrrunner.commands.audit.list_runs") as mock:

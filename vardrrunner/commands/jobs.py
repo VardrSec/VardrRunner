@@ -9,14 +9,28 @@ done/fail); the per-tool specifics live in ``vardrrunner.handlers``.
 
 import json
 import logging
+import threading
 import time
 from collections.abc import Callable, MutableMapping
+from concurrent.futures import ThreadPoolExecutor
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config, configs, errors, handlers, policy, redaction, runner
+from vardrrunner import (
+    api,
+    compatibility,
+    config,
+    configs,
+    errors,
+    handlers,
+    policy,
+    redaction,
+    resources,
+    runner,
+)
+from vardrrunner import targets as target_safety
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.run import _confirm, _make_run_dir
 from vardrrunner.journal import Journal, Phase, RunRecord, utc_now
@@ -115,6 +129,7 @@ def _execute_one(
     yes: bool,
     journal_store: Journal | None = None,
     backend_url: str | None = None,
+    limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
 ) -> None:
     """Run a single job through the uniform lifecycle, delegating specifics to its handler."""
     # Validate the job envelope before touching any field — a drifted/partial payload
@@ -145,6 +160,7 @@ def _execute_one(
             tool=tool_type,
             target_source=target_src,
             command_profile=_journal_profile(tool_type, cfg),
+            job_schema_version=env.schema_version,
         )
         if record.phase != Phase.DISCOVERED:
             raise errors.RunnerError(
@@ -193,6 +209,17 @@ def _execute_one(
     except Exception as e:  # resolution failure must not crash the loop
         fail(errors.FailureCategory.TARGET_RESOLUTION, f"failed to resolve targets: {e}")
         return
+    try:
+        targets = target_safety.validate_targets(targets)
+    except target_safety.TargetValidationError as e:
+        fail(errors.FailureCategory.TARGET_VALIDATION, str(e))
+        return
+    if len(targets) > limits.max_targets:
+        fail(
+            errors.FailureCategory.TARGET_LIMIT,
+            f"resolved target count {len(targets)} exceeds local limit {limits.max_targets}",
+        )
+        return
 
     if journal_store is not None and record is not None:
         record = journal_store.transition(
@@ -208,6 +235,12 @@ def _execute_one(
         return
 
     _confirm(targets, tool_type, yes)
+
+    try:
+        resources.ensure_free_space(config.runs_dir(), limits.min_free_disk_bytes)
+    except resources.ResourceLimitError as e:
+        fail(errors.FailureCategory.RESOURCE_LIMIT, str(e))
+        return
 
     if journal_store is not None and record is not None:
         record = journal_store.transition(record.run_id, Phase.CLAIMING)
@@ -335,6 +368,13 @@ def _execute_one(
             finish(Phase.DONE, "done")
             return
 
+        try:
+            resources.enforce_artifact(output, limits.max_artifact_bytes)
+        except resources.ResourceLimitError as e:
+            _fail_job(client, con, job_id, str(e))
+            finish(Phase.FAILED, "failed", errors.FailureCategory.ARTIFACT_LIMIT, str(e))
+            return
+
         if journal_store is not None and record is not None:
             record = journal_store.attach_artifact(record.run_id, output)
             stage = Phase.ARTIFACT_READY
@@ -384,6 +424,8 @@ def execute_pending_jobs(
     monotonic: Callable[[], float] = time.monotonic,
     journal_store: Journal | None = None,
     backend_url: str | None = None,
+    limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
+    client_factory: Callable[[], api.VardrMapClient] | None = None,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
@@ -398,12 +440,22 @@ def execute_pending_jobs(
         return 0
 
     blocked = blocked_engagements if blocked_engagements is not None else {}
+    blocked_lock = threading.Lock()
     now = monotonic()
 
-    con.print(f"Found [bold]{len(jobs_list)}[/bold] pending job(s).")
-    for job in jobs_list:
+    con.print(
+        f"Found [bold]{len(jobs_list)}[/bold] pending job(s) · "
+        f"concurrency {limits.max_concurrent_jobs}."
+    )
+
+    def execute_group(group: list[dict], worker_client: api.VardrMapClient) -> None:
+        for job in group:
+            execute_job(job, worker_client)
+
+    def execute_job(job: dict, worker_client: api.VardrMapClient) -> None:
         engagement_id = str(job.get("engagement_id") or "")
-        retry_at = blocked.get(engagement_id, 0.0) if engagement_id else 0.0
+        with blocked_lock:
+            retry_at = blocked.get(engagement_id, 0.0) if engagement_id else 0.0
         if retry_at > now:
             remaining = max(1, int(retry_at - now))
             con.print(
@@ -411,40 +463,84 @@ def execute_pending_jobs(
                 "stop-work recheck for engagement "
                 f"{redaction.redact_rich_text(engagement_id)} in {remaining}s.[/dim]"
             )
-            continue
+            return
         if engagement_id:
-            blocked.pop(engagement_id, None)
+            with blocked_lock:
+                blocked.pop(engagement_id, None)
         try:
             _execute_one(
-                client,
+                worker_client,
                 con,
                 job,
                 yes,
                 journal_store=journal_store,
                 backend_url=backend_url,
+                limits=limits,
             )
         except errors.StopWorkError:
             # Reported already by _execute_one. Remember the engagement so the
             # daemon does not re-claim and re-refuse it on every poll, but set a
             # bounded recheck so lifting stop-work restores availability.
             if engagement_id:
-                blocked[engagement_id] = monotonic() + STOP_WORK_RECHECK_SECONDS
+                with blocked_lock:
+                    blocked[engagement_id] = monotonic() + STOP_WORK_RECHECK_SECONDS
             con.print(
                 "[yellow]No further jobs will be claimed for this engagement "
                 f"for {int(STOP_WORK_RECHECK_SECONDS)}s, then it will be rechecked.[/yellow]"
             )
+
+    groups: dict[str, list[dict]] = {}
+    for index, job in enumerate(jobs_list):
+        engagement = str(job.get("engagement_id") or "")
+        key = engagement or f"__unscoped_{index}"
+        groups.setdefault(key, []).append(job)
+
+    workers = min(limits.max_concurrent_jobs, len(groups))
+    if workers <= 1:
+        for group in groups.values():
+            execute_group(group, client)
+    else:
+        if client_factory is None:
+            raise resources.ResourceLimitError(
+                "concurrent execution requires an isolated API client factory"
+            )
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="vardrrunner-job") as pool:
+            futures = [
+                pool.submit(execute_group, group, client_factory()) for group in groups.values()
+            ]
+            for future in futures:
+                future.result()
     return len(jobs_list)
 
 
 def run_jobs(yes: bool = False) -> None:
     """Claim and execute all pending jobs for the authenticated user."""
-    send_heartbeat(quiet=True)
+    report = send_heartbeat(quiet=True)
+    if isinstance(report, compatibility.CompatibilityReport) and not report.compatible:
+        console.print(
+            "[red]Jobs blocked by backend compatibility policy:[/red] "
+            f"{redaction.redact_rich_text('; '.join(report.messages))}"
+        )
+        raise typer.Exit(1)
     url, key = config.require_auth()
     client = api.VardrMapClient(url, key)
     journal_store = Journal(config.journal_file())
+    try:
+        limits = resources.load_limits()
+    except resources.ResourceLimitError as exc:
+        console.print(
+            f"[red]Invalid runner resource policy:[/red] {redaction.redact_rich_exception(exc)}"
+        )
+        raise typer.Exit(1) from exc
     reconcile(journal_store, client, url, console)
     executed = execute_pending_jobs(
-        client, console, yes=yes, journal_store=journal_store, backend_url=url
+        client,
+        console,
+        yes=yes,
+        journal_store=journal_store,
+        backend_url=url,
+        limits=limits,
+        client_factory=lambda: api.VardrMapClient(url, key),
     )
     if executed == 0:
         console.print("[dim]No pending jobs.[/dim]")

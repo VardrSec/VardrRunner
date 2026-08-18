@@ -169,6 +169,15 @@ def test_identity_and_journal_failures_are_fatal():
         assert doctor._check_journal().status is Health.FAIL
 
 
+def test_resource_policy_is_reported_and_invalid_values_fail(monkeypatch):
+    monkeypatch.setenv("VARDRRUNNER_MAX_CONCURRENT_JOBS", "2")
+    check = doctor._check_resource_policy()
+    assert check.status is Health.OK
+    assert "concurrency=2" in check.detail
+    monkeypatch.setenv("VARDRRUNNER_MAX_CONCURRENT_JOBS", "99")
+    assert doctor._check_resource_policy().status is Health.FAIL
+
+
 def test_json_reports_standard_profile_by_default(capsys):
     checks = [Check("all", Health.OK, "ready")]
     with patch("vardrrunner.commands.doctor._collect", return_value=checks):

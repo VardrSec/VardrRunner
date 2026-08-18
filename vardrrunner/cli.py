@@ -18,6 +18,7 @@ from vardrrunner.commands import heartbeat as heartbeat_cmd
 from vardrrunner.commands import pipeline as pipeline_cmd
 from vardrrunner.commands import service as service_cmd
 from vardrrunner.commands import status as status_cmd
+from vardrrunner.commands import updates as updates_cmd
 
 console = Console()
 
@@ -161,6 +162,19 @@ def service_uninstall():
 def service_status():
     """Query the native service manager."""
     service_cmd.show_status()
+
+
+update_app = typer.Typer(help="Check for VardrRunner releases.", no_args_is_help=True)
+app.add_typer(update_app, name="update")
+
+
+@update_app.command("check")
+def update_check(
+    force: bool = typer.Option(False, "--force", help="Ignore the 24-hour local cache"),
+    as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+):
+    """Check PyPI for a newer release; never installs automatically."""
+    updates_cmd.check(force=force, as_json=as_json)
 
 
 # --------------------------------------------------------------------------- #

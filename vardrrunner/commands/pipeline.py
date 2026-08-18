@@ -28,7 +28,8 @@ from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 
-from vardrrunner import api, config, configs, handlers, pipelines, redaction, runner
+from vardrrunner import api, config, configs, handlers, pipelines, redaction, resources, runner
+from vardrrunner import targets as targets_module
 from vardrrunner.commands.run import MAX_TARGETS_DEFAULT, _make_run_dir, validate_max_targets
 
 console = Console()
@@ -174,6 +175,17 @@ def _run_stage(
                 elapsed=time.monotonic() - t0,
             )
 
+    try:
+        targets = targets_module.validate_targets(targets)
+    except targets_module.TargetValidationError as e:
+        return _StageResult(
+            status="aborted",
+            should_continue=continue_on_error,
+            targets=len(targets),
+            summary=f"unsafe target input: {redaction.redact_exception(e)}",
+            elapsed=time.monotonic() - t0,
+        )
+
     if not targets:
         return _StageResult(
             status="no_targets",
@@ -192,6 +204,17 @@ def _run_stage(
 
     run_dir = _make_run_dir()
     try:
+        limits = resources.load_limits()
+        resources.ensure_free_space(run_dir, limits.min_free_disk_bytes)
+    except resources.ResourceLimitError as e:
+        return _StageResult(
+            status="aborted",
+            should_continue=continue_on_error,
+            targets=len(targets),
+            summary=redaction.redact_exception(e),
+            elapsed=time.monotonic() - t0,
+        )
+    try:
         output = handler.execute(targets, run_dir, config_obj)
     except Exception as e:
         return _StageResult(
@@ -207,6 +230,17 @@ def _run_stage(
             status="no_targets",
             should_continue=False,
             targets=len(targets),
+            elapsed=time.monotonic() - t0,
+        )
+
+    try:
+        resources.enforce_artifact(output, limits.max_artifact_bytes)
+    except resources.ResourceLimitError as e:
+        return _StageResult(
+            status="aborted",
+            should_continue=continue_on_error,
+            targets=len(targets),
+            summary=redaction.redact_exception(e),
             elapsed=time.monotonic() - t0,
         )
 
@@ -403,6 +437,7 @@ def _run_pipeline_dry(
     config_obj = handler.parse_config(cfg_dict)
     try:
         targets = handler.resolve_targets(client, engagement_id, first.source, config_obj)
+        targets = targets_module.validate_targets(targets)
     except Exception as e:
         console.print(
             f"[red]Could not resolve stage-1 targets:[/red] {redaction.redact_rich_exception(e)}"

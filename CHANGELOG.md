@@ -7,6 +7,36 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.34.0] — 2026-08-18
+
+Phase 4 of the enterprise-grade roadmap: explicit runner/backend compatibility,
+local resource policy, target-shape validation, bounded queue concurrency, and opt-in
+release checks. See [`changelog/v0.34.0.md`](changelog/v0.34.0.md) and
+[ADR 0012](docs/adr/0012-compatibility-and-local-safety-controls.md).
+
+### Added
+
+- Heartbeat capability and job-schema advertisement plus optional backend compatibility
+  constraints. Hard incompatibilities pause queue claims without stopping heartbeats.
+- Strict `schema_version` validation on queue jobs; legacy jobs without the field use v1.
+- Local queue ceilings for target count, artifact size, free-disk reserve, and concurrency,
+  configured through bounded `VARDRRUNNER_*` environment variables.
+- Optional parallel queue execution across engagements. Jobs for one engagement are always
+  serialized and each worker owns an isolated HTTP client.
+- `vardrrunner update check [--force] [--json]`, an explicit, non-installing PyPI release
+  check with a 24-hour atomic local cache.
+
+### Security and reliability
+
+- Targets from CLI input, files, backend scope/recon, and pipeline handoffs reject control
+  characters, whitespace, option-like prefixes, non-HTTP URL schemes, and URL credentials.
+- Target files are capped at 10 MiB and malformed backend target collections fail cleanly.
+- Free-space policy is enforced before claim; output size is enforced before upload while
+  preserving the local artifact for review.
+- `doctor` validates and reports the effective resource policy. Scope and testing-window
+  findings remain advisory; these controls do not change authorization policy semantics.
+- Fixed the documented legacy `programs` response-key fallback for engagement listing.
+
 ## [0.33.0] — 2026-08-18
 
 Phase 3 of the enterprise-grade roadmap: stable runner identity, structured daemon logs,

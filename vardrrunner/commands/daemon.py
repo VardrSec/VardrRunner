@@ -28,12 +28,13 @@ import sys
 import threading
 from datetime import datetime, timezone
 from enum import Enum
+from functools import partial
 from pathlib import Path
 
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config, identity, redaction
+from vardrrunner import api, compatibility, config, identity, redaction, resources
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.jobs import execute_pending_jobs
 from vardrrunner.journal import Journal
@@ -228,6 +229,24 @@ def start(
             f"[red]Runner identity unavailable:[/red] {redaction.redact_rich_exception(e)}"
         )
         raise typer.Exit(1) from e
+    try:
+        limits = resources.load_limits()
+    except resources.ResourceLimitError as e:
+        console.print(
+            f"[red]Invalid runner resource policy:[/red] {redaction.redact_rich_exception(e)}"
+        )
+        raise typer.Exit(1) from e
+
+    initial_report = send_heartbeat(quiet=True)
+    compatibility_state = {
+        "blocked": isinstance(initial_report, compatibility.CompatibilityReport)
+        and not initial_report.compatible,
+        "message": "; ".join(initial_report.messages)
+        if isinstance(initial_report, compatibility.CompatibilityReport)
+        else "",
+        "announced": False,
+    }
+    compatibility_lock = threading.Lock()
 
     out = console
     _log = None
@@ -263,9 +282,15 @@ def start(
 
     # Heartbeat runs on its own interval independent of job duration
     def _hb_loop():
-        send_heartbeat(quiet=True)
         while not _stop.wait(timeout=heartbeat_interval):
-            send_heartbeat(quiet=True)
+            report = send_heartbeat(quiet=True)
+            if isinstance(report, compatibility.CompatibilityReport):
+                blocked = not report.compatible
+                with compatibility_lock:
+                    if blocked != compatibility_state["blocked"]:
+                        compatibility_state["announced"] = False
+                    compatibility_state["blocked"] = blocked
+                    compatibility_state["message"] = "; ".join(report.messages)
 
     hb_thread = threading.Thread(target=_hb_loop, daemon=True, name="vardrrunner-heartbeat")
     hb_thread.start()
@@ -278,6 +303,20 @@ def start(
     try:
         while not _shutdown_requested():
             try:
+                with compatibility_lock:
+                    compatibility_blocked = bool(compatibility_state["blocked"])
+                    compatibility_message = str(compatibility_state["message"])
+                    compatibility_announced = bool(compatibility_state["announced"])
+                    if compatibility_blocked and not compatibility_announced:
+                        compatibility_state["announced"] = True
+                if compatibility_blocked:
+                    if not compatibility_announced:
+                        out.print(
+                            "[red]Queue claims paused by backend compatibility policy:[/red] "
+                            f"{redaction.redact_rich_text(compatibility_message)}"
+                        )
+                    _stop.wait(timeout=poll_interval)
+                    continue
                 url, key = config.require_auth()
                 client = api.VardrMapClient(url, key)
                 reconcile(journal_store, client, url, out)
@@ -287,6 +326,8 @@ def start(
                     blocked_engagements=_stop_work_blocked,
                     journal_store=journal_store,
                     backend_url=url,
+                    limits=limits,
+                    client_factory=partial(api.VardrMapClient, url, key),
                 )
                 if count:
                     out.print(f"[dim]Cycle complete — {count} job(s) executed.[/dim]")

@@ -15,7 +15,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config, configs, handlers, redaction, runner
+from vardrrunner import api, config, configs, handlers, redaction, resources, runner, targets
 
 _PRUNE_AFTER_DAYS = 7
 
@@ -114,11 +114,24 @@ def _finish(tool: str, client: api.VardrMapClient, engagement_id: str, targets, 
     label = redaction.redact_rich_text(handler.running_label(targets, tool_cfg))
     safe_run_dir = redaction.redact_rich_text(str(run_dir))
     console.print(f"\nRunning {label}… → [dim]{safe_run_dir}[/dim]")
+    try:
+        limits = resources.load_limits()
+        resources.ensure_free_space(run_dir, limits.min_free_disk_bytes)
+    except resources.ResourceLimitError as e:
+        console.print(f"[red]Resource policy blocked execution:[/red] {e}")
+        raise typer.Exit(1) from e
     output = _execute(lambda: handler.execute(targets, run_dir, tool_cfg))
 
     if output is None or not output.exists() or output.stat().st_size == 0:
         console.print("[yellow]No output produced — nothing to upload.[/yellow]")
         raise typer.Exit(0)
+
+    try:
+        resources.enforce_artifact(output, limits.max_artifact_bytes)
+    except resources.ResourceLimitError as e:
+        console.print(f"[red]Artifact blocked:[/red] {redaction.redact_rich_exception(e)}")
+        console.print(f"Raw output saved at [dim]{redaction.redact_rich_text(str(output))}[/dim]")
+        raise typer.Exit(1) from e
 
     console.print("Uploading results…")
     try:
@@ -170,7 +183,13 @@ def run_subfinder(
     client = api.VardrMapClient(url, key)
 
     cfg = _build_config("subfinder", {})
-    domains = handlers.REGISTRY["subfinder"].resolve_targets(client, engagement_id, "scope", cfg)
+    try:
+        domains = targets.validate_targets(
+            handlers.REGISTRY["subfinder"].resolve_targets(client, engagement_id, "scope", cfg)
+        )
+    except targets.TargetValidationError as e:
+        console.print(f"[red]Invalid scope target:[/red] {redaction.redact_rich_exception(e)}")
+        raise typer.Exit(1) from e
     if not domains:
         console.print("[yellow]No wildcard scope entries found.[/yellow]")
         raise typer.Exit(0)

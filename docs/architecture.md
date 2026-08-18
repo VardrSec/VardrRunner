@@ -54,6 +54,9 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/manifests.py` | Streaming SHA-256 artifact hashes and atomic, permission-restricted JSON manifests/exports. |
 | `vardrrunner/identity.py` | Stable per-installation UUID + human label. Uses exclusive first creation, fails closed on corruption, and supports a `VARDRRUNNER_NAME` deployment override. |
 | `vardrrunner/service.py` | Pure service-plan generation plus argv-only native manager execution for systemd, launchd, and Windows Scheduled Tasks. Definitions never contain credentials. |
+| `vardrrunner/compatibility.py` | Version/capability advertisement and total evaluation of optional backend constraints. Legacy responses remain compatible; definite mismatches block queue claims. |
+| `vardrrunner/resources.py` | Bounded environment-driven target, artifact, concurrency, and free-disk policy shared by direct, pipeline, and queue execution. |
+| `vardrrunner/updates.py` | Explicit release-check orchestration and 24-hour atomic cache. Network access remains isolated in `api.py`. |
 | `vardrrunner/policy.py` | All parsing and presentation of the backend's advisory `warnings` array. Isolated so a backend shape change touches one file; parsing is total and never raises. |
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
@@ -66,6 +69,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
 | `vardrrunner/commands/service.py` | `service install|status|uninstall` — preview and manage native per-user supervision. |
+| `vardrrunner/commands/updates.py` | `update check` — inspect public release metadata; never installs automatically. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
 | `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — continuous worker (poll + heartbeat) with PID file and graceful shutdown. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
@@ -77,18 +81,21 @@ requires VardrMap ≥ v0.22.0.
 1. **Poll and journal** — `GET /jobs/pending` returns queued jobs for this operator. The
    runner opens a local run record before any claim; if durable state is unavailable it
    fails closed and claims nothing.
-2. **Validate and resolve targets** — validate the envelope/config, verify the tool, then
-   expand scope/recon targets. Only a count and sanitized command profile enter the journal;
-   target values and credentials do not.
+2. **Validate and resolve targets** — validate the envelope/schema/config, verify the tool,
+   then expand scope/recon targets. Target shape and the local count ceiling are enforced;
+   only a count and sanitized command profile enter the journal. Target values and
+   credentials do not.
 3. **Claim** — `POST /jobs/{id}/claim` atomically transitions `pending → running`. The
    response is classified (ADR 0008): `409` is a lost race and the runner skips the job
    without marking it failed; `403` is **stop-work** and halts; `401`/`429`/`5xx` are
    reported with their category. Advisory policy warnings on the response are printed
    before any tool runs and emitted as a `policy_warning` event.
-4. **Execute** — `runner.py` spawns the tool as an argv list (never `shell=True` with server
-   data), records its PID, and captures output to a run directory. Emits `running`.
-5. **Hash and upload** — stream a SHA-256 digest and size into the journal before POSTing
-   results. Emits `uploaded` after a confirmed response.
+4. **Execute** — after verifying the configured free-disk reserve, `runner.py` spawns the
+   tool as an argv list (never `shell=True` with server data), records its PID, and captures
+   output to a run directory. Emits `running`.
+5. **Hash and upload** — enforce the local artifact-size ceiling, then stream a SHA-256
+   digest and size into the journal before POSTing results. Emits `uploaded` after a
+   confirmed response.
 6. **Finalize** — mark the backend job done/failed, close the journal record, and atomically
    write `manifest.json` beside the artifact.
 
@@ -98,6 +105,9 @@ Events are posted via `POST /jobs/{id}/events` so the backend Terminal can rende
 On daemon start and every 60 s thereafter, the runner sends `POST /runner/heartbeat` with
 stable runner UUID/name, hostname, runner version, OS, and per-tool availability + versions.
 Identity fields are additive; older backends may ignore them and retain hostname identity.
+The payload also advertises supported job schemas and named capabilities. An optional
+compatibility response can require runner versions/capabilities/schemas; definite mismatches
+pause claims while heartbeats continue, and absent metadata means legacy-compatible.
 The backend marks a
 runner **online** if `last_seen` is within 5 minutes. Heartbeats are upserted per
 `(owner, hostname)`, so multiple machines show up independently in the backend's Bridge.
@@ -112,6 +122,11 @@ Windows liveness is checked via a ctypes probe (plain `os.kill` on Windows is
 Daemon logs rotate at 5 MiB with three backups. Text remains the interactive default;
 `--log-format json` emits one redacted JSON object per line with schema version, UTC
 timestamp, level, event, runner ID, process ID, and message.
+
+Queue concurrency defaults to one and may be raised to eight. Pending work is grouped by
+engagement: groups may run in parallel, but jobs inside one group are sequential. Each
+worker receives an isolated API session; the backend's atomic claim remains the authority
+across multiple runner processes or hosts.
 
 For unattended startup, `service.py` generates a per-user systemd unit (Linux), LaunchAgent
 (macOS), or Scheduled Task (Windows). The generated command is the same foreground daemon,
@@ -136,6 +151,7 @@ Local state lives under `~/.vardrmap/`:
 - `runner-journal.sqlite3` — sanitized execution state and recovery metadata (SQLite/WAL)
 - `runner-identity.json` — stable installation UUID, name, and original hostname
 - `daemon.jsonl` — default structured service log (rotated; service installs only)
+- `update-check.json` — public release metadata cache (24-hour TTL; no credentials)
 
 Completed job run directories also contain `manifest.json` with provenance, lifecycle
 timestamps, artifact SHA-256/size, warnings, and failure category. Manifests and audit
@@ -209,5 +225,9 @@ in depth—in a successful response's warning array.
   may block; scope and window findings warn.
 - **Blast radius is capped.** A run aborts before executing anything if the resolved target
   count exceeds 500 (`commands/run.py: MAX_TARGETS_DEFAULT`), including under `--yes`.
+- **Compatibility precedes claims.** Definite runner/backend version, capability, or schema
+  mismatches pause queue claims while heartbeat recovery remains available.
+- **Same-engagement work is serialized.** Optional concurrency applies only across groups;
+  one runner process never executes two jobs from the same engagement simultaneously.
 - **No backend coupling.** The runner must build, test, and run without the backend present
   (tests mock every HTTP and subprocess call).

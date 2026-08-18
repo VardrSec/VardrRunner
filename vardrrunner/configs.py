@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 # Severities nuclei accepts — mirrors the backend's own validation.
 NUCLEI_SEVERITIES = frozenset({"info", "low", "medium", "high", "critical"})
+SUPPORTED_JOB_SCHEMA_VERSIONS = frozenset({1})
 
 
 class ConfigError(ValueError):
@@ -27,6 +28,7 @@ class JobEnvelope:
     target_source: str
     engagement_id: str
     config: dict
+    schema_version: int = 1
 
     @classmethod
     def from_dict(cls, job: dict) -> "JobEnvelope":
@@ -34,12 +36,23 @@ class JobEnvelope:
         missing = [k for k in required if not job.get(k)]
         if missing:
             raise ConfigError(f"job missing required field(s): {', '.join(missing)}")
+        schema_version = job.get("schema_version", 1)
+        if (
+            not isinstance(schema_version, int)
+            or isinstance(schema_version, bool)
+            or schema_version not in SUPPORTED_JOB_SCHEMA_VERSIONS
+        ):
+            raise ConfigError(
+                f"unsupported job schema_version {schema_version!r}; "
+                f"supported: {sorted(SUPPORTED_JOB_SCHEMA_VERSIONS)}"
+            )
         return cls(
             id=str(job["id"]),
             tool_type=str(job["tool_type"]),
             target_source=str(job["target_source"]),
             engagement_id=str(job["engagement_id"]),
             config=job.get("config") or {},
+            schema_version=schema_version,
         )
 
 

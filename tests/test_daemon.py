@@ -246,7 +246,7 @@ class TestDetach:
 # ---------------------------------------------------------------------------
 
 
-def _run_start(pid_file, stop_after: int, execute=None):
+def _run_start(pid_file, stop_after: int, execute=None, heartbeat_report=None):
     """Run daemon_mod.start with all externals mocked; loop exits after N cycles."""
     execute = execute if execute is not None else MagicMock(return_value=0)
     with (
@@ -258,7 +258,7 @@ def _run_start(pid_file, stop_after: int, execute=None):
         ),
         patch("vardrrunner.commands.daemon.api.VardrMapClient"),
         patch("vardrrunner.commands.daemon.execute_pending_jobs", execute),
-        patch("vardrrunner.commands.daemon.send_heartbeat"),
+        patch("vardrrunner.commands.daemon.send_heartbeat", return_value=heartbeat_report),
     ):
         daemon_mod.start(detach=False, poll_interval=1, heartbeat_interval=60, log_file=None)
     return execute, MockThread
@@ -273,6 +273,33 @@ class TestStart:
     def test_calls_execute_pending_jobs(self, pid_file):
         execute, _ = _run_start(pid_file, stop_after=1)
         execute.assert_called_once()
+
+    def test_compatibility_block_pauses_claims(self, pid_file, capsys):
+        from vardrrunner import compatibility
+
+        report = compatibility.CompatibilityReport(
+            compatibility.CompatibilityLevel.BLOCK, ("upgrade required",)
+        )
+        execute, _ = _run_start(pid_file, stop_after=1, heartbeat_report=report)
+        execute.assert_not_called()
+        assert "claims paused" in capsys.readouterr().out
+
+    def test_invalid_resource_policy_fails_before_pid(self, pid_file):
+        from vardrrunner import resources
+
+        with (
+            patch(
+                "vardrrunner.commands.daemon.config.require_auth",
+                return_value=("http://api", "key"),
+            ),
+            patch(
+                "vardrrunner.commands.daemon.resources.load_limits",
+                side_effect=resources.ResourceLimitError("bad limit"),
+            ),
+            pytest.raises(typer.Exit),
+        ):
+            daemon_mod.start(detach=False, poll_interval=5, heartbeat_interval=60, log_file=None)
+        assert not pid_file.exists()
 
     def test_starts_heartbeat_thread(self, pid_file):
         _, MockThread = _run_start(pid_file, stop_after=1)

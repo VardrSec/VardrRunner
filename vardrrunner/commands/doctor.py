@@ -23,7 +23,17 @@ import requests
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config, credentials, identity, pipelines, redaction, runner, service
+from vardrrunner import (
+    api,
+    config,
+    credentials,
+    identity,
+    pipelines,
+    redaction,
+    resources,
+    runner,
+    service,
+)
 from vardrrunner.commands import daemon
 from vardrrunner.journal import Journal, JournalError
 
@@ -269,6 +279,25 @@ def _check_disk(production: bool = False) -> Check:
     return Check("disk space", Health.OK, human)
 
 
+def _check_resource_policy() -> Check:
+    try:
+        limits = resources.load_limits()
+    except resources.ResourceLimitError as e:
+        return Check(
+            "resource policy",
+            Health.FAIL,
+            redaction.redact_exception(e),
+            "Correct the VARDRRUNNER_MAX_* and VARDRRUNNER_MIN_FREE_DISK_MB values.",
+        )
+    return Check(
+        "resource policy",
+        Health.OK,
+        f"targets={limits.max_targets}, artifact={limits.max_artifact_bytes // 1024**2} MiB, "
+        f"concurrency={limits.max_concurrent_jobs}, "
+        f"disk-reserve={limits.min_free_disk_bytes // 1024**2} MiB",
+    )
+
+
 def _check_tools() -> list[Check]:
     checks: list[Check] = []
     available = 0
@@ -339,6 +368,7 @@ def _collect(production: bool = False) -> list[Check]:
     checks.append(_check_identity())
     checks.append(_check_journal())
     checks.append(_check_run_dir())
+    checks.append(_check_resource_policy())
     checks.append(_check_disk(production=production))
     checks += _check_tools()
     checks += _check_pipelines()

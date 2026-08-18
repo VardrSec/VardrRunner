@@ -142,7 +142,8 @@ vardrrunner doctor --production                            # strict unattended p
 
 Checks: credential source (env vs file), backend URL validity (HTTPS), config-file
 permissions, API auth, daemon PID health (running / stale), run-dir writability, free disk,
-tool versions, and per-pipeline readiness. **Failures** (no creds, bad URL, auth failure,
+effective resource policy, tool versions, and per-pipeline readiness. **Failures** (no
+creds, bad URL, auth failure,
 unwritable run dir, critically low disk, zero tools) set a non-zero exit; missing individual
 tools and low-ish disk are **warnings** that don't block.
 
@@ -160,6 +161,23 @@ to confirm connectivity and that the backend's Bridge sees this machine.
 ```bash
 vardrrunner heartbeat
 ```
+
+The heartbeat also advertises runner version, job-schema versions, and capabilities. A
+newer backend may return compatibility constraints. Definite mismatches pause queue claims;
+warnings and legacy responses do not.
+
+---
+
+## `update` — check for runner releases
+
+```bash
+vardrrunner update check [--force] [--json]
+```
+
+Checks public PyPI metadata and reports whether a newer semantic version exists. Results
+are cached for 24 hours under `~/.vardrmap/update-check.json`; `--force` bypasses the cache.
+This command never installs or upgrades software. Use `pipx upgrade vardrrunner` or
+`uv tool upgrade vardrrunner` after reviewing the release.
 
 ---
 
@@ -216,6 +234,11 @@ wildcard entries from the engagement's scope):
 With `--from-recon`, `--limit` caps how many recon items are pulled (default 100 for
 httpx/nuclei, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
 (httpx and nuclei only).
+
+All sources are treated as untrusted. Empty entries are removed and duplicates collapsed;
+targets containing control characters, whitespace, a leading option marker, non-HTTP URL
+schemes, or URL credentials are rejected before a subprocess starts. Target files are
+limited to 10 MiB. The same validation applies to backend data and pipeline handoffs.
 
 ### Per-tool options
 | Command | Options |
@@ -303,6 +326,12 @@ vardrrunner jobs run      # claim and execute all currently pending jobs, then e
 `jobs run` auto-sends a heartbeat first, then for each pending job: claims it
 (`POST /jobs/{id}/claim`), resolves targets, executes, and reports lifecycle events.
 This is the same execution core the daemon uses.
+
+Before claim, the runner validates the job schema, target shape/count, and free-disk
+reserve. Before upload it enforces the artifact ceiling. Defaults are 500 targets, 100 MiB
+per artifact, 512 MiB free, and one worker. `VARDRRUNNER_MAX_CONCURRENT_JOBS` may enable up
+to eight workers across engagements; jobs belonging to one engagement always remain
+sequential and each worker uses an isolated API client.
 
 ### How claim outcomes are reported
 

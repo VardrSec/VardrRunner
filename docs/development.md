@@ -26,7 +26,7 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **686 tests** at ~95% coverage (CI floor: 95%), all hermetic: no network, no real
+- **760 tests** at ~95% coverage (CI floor: 95%), all hermetic: no network, no real
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
@@ -61,6 +61,10 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_audit.py` | sanitized list/show/export behavior and atomic export failures |
 | `tests/test_identity.py` | stable UUID creation, concurrent first use, labels, corruption and IO failures |
 | `tests/test_service.py` | cross-platform service plans, command safety, install/status/uninstall behavior |
+| `tests/test_compatibility.py` | version parsing, capability/schema negotiation, legacy and malformed responses |
+| `tests/test_resources.py` | bounded environment policy, disk reserve, and artifact ceilings |
+| `tests/test_updates.py` | cached release checks and human/JSON command output |
+| `tests/test_phase4_safety.py` | target shape, queue ceilings, compatibility gate, and engagement-safe concurrency |
 | `tests/test_nmap.py` | nmap target normalization + profile + `run nmap` command |
 | `tests/test_status.py` | tool detection + status output |
 | `tests/test_doctor.py` | preflight checks, exit codes, and `--json` report |
@@ -124,5 +128,9 @@ export VARDRMAP_URL=http://localhost:8000
 export VARDRMAP_API_KEY=vmap_devkey
 export VARDRRUNNER_TOOL_TIMEOUT=300        # optional: per-tool run ceiling, seconds
 export VARDRUNNER_NAME=chicago-runner-1   # optional: heartbeat/display label override
+export VARDRRUNNER_MAX_TARGETS=500          # queue target ceiling (1..100000)
+export VARDRRUNNER_MAX_ARTIFACT_MB=100      # output ceiling before upload (1..10240)
+export VARDRRUNNER_MAX_CONCURRENT_JOBS=1    # parallel engagement groups (1..8)
+export VARDRRUNNER_MIN_FREE_DISK_MB=512     # required reserve before claim/execute
 ```
 Env values take precedence over the config file.
