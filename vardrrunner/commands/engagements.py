@@ -2,7 +2,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config
+from vardrrunner import api, config, redaction
 
 console = Console()
 
@@ -14,7 +14,7 @@ def list_engagements():
         client = api.VardrMapClient(url, key)
         engagements = client.engagements()
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]Error:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
     if not engagements:
@@ -30,9 +30,9 @@ def list_engagements():
 
     for p in engagements:
         table.add_row(
-            p["id"],
-            p["name"],
-            p.get("platform") or "—",
+            redaction.redact_text(str(p["id"])),
+            redaction.redact_text(str(p["name"])),
+            redaction.redact_text(str(p.get("platform") or "—")),
             str(p.get("findings_count", 0)),
             str(p.get("scans_count", 0)),
         )
@@ -46,7 +46,7 @@ def show_scope(engagement_id: str):
         client = api.VardrMapClient(url, key)
         scope = client.scope(engagement_id)
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]Error:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
     in_scope = scope.get("in", [])
@@ -59,9 +59,13 @@ def show_scope(engagement_id: str):
     if in_scope:
         console.print("[bold green]In scope:[/bold green]")
         for item in in_scope:
-            console.print(f"  [green]+[/green] {item['value']}  [dim]{item.get('kind', '')}[/dim]")
+            value = redaction.redact_rich_text(str(item.get("value", "")))
+            kind = redaction.redact_rich_text(str(item.get("kind", "")))
+            console.print(f"  [green]+[/green] {value}  [dim]{kind}[/dim]")
 
     if out_scope:
         console.print("[bold red]Out of scope:[/bold red]")
         for item in out_scope:
-            console.print(f"  [red]-[/red] {item['value']}  [dim]{item.get('kind', '')}[/dim]")
+            value = redaction.redact_rich_text(str(item.get("value", "")))
+            kind = redaction.redact_rich_text(str(item.get("kind", "")))
+            console.print(f"  [red]-[/red] {value}  [dim]{kind}[/dim]")

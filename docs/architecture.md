@@ -110,8 +110,8 @@ are the ones most likely to run unattended (ADR 0009).
 
 The **API key** resolves from `VARDRMAP_API_KEY` env > **OS keychain** (`keyring`) > config
 file. `vardrrunner login` stores it in the keychain by default; `logout` removes it. On a
-headless box with no keyring backend, login falls back to the plaintext config file with a
-warning (servers should use the env var). The backend URL must be HTTPS (except `localhost`,
+headless box with no keyring backend, login fails closed unless the operator explicitly
+passes `--allow-plaintext-credentials` (servers should use the env var). The backend URL must be HTTPS (except `localhost`,
 or with `VARDRRUNNER_ALLOW_INSECURE=1`) so the key is never sent in cleartext. The API key is
 the runner's only credential; it is never logged or printed.
 
@@ -127,7 +127,8 @@ impossible to miss, not to enforce them.
 execution. It is the operator's own emergency brake, not the platform
 second-guessing them, and it is never presented as a generic claim failure. The
 daemon remembers which engagements refused and stops re-claiming their jobs every
-cycle; a restart re-checks, so lifting stop-work needs no special command.
+cycle. It rechecks after 60 seconds, so lifting stop-work restores availability without a
+daemon restart or special command.
 
 `403` carries this single meaning because VardrMap answers cross-account access
 with `404` rather than `403`, so object existence is never disclosed. That
@@ -148,9 +149,10 @@ It is deliberately **not** a guarantee that secrets never touch disk: a tool
 writes its own artifacts and the runner does not rewrite them. It governs what
 the runner *says* about them.
 
-Everything in a policy payload is **untrusted remote data**. It is rendered as
-text and recorded; it never influences control flow beyond display, and it is
-never interpolated into a command line.
+Everything in a policy payload is **untrusted remote data**. It is redacted and Rich-escaped
+before display or recording, and is never interpolated into a command line. Findings remain
+advisory except `stop_work_active`, which blocks whether represented as HTTP 403 or—defence
+in depth—in a successful response's warning array.
 
 ## Design invariants
 - **All HTTP goes through `api.py`.** No ad-hoc requests elsewhere.

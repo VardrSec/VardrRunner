@@ -26,6 +26,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from rich.markup import escape
+
 MASK = "***REDACTED***"
 
 # Maximum depth the recursive walker will descend. Backend payloads are
@@ -159,6 +161,22 @@ def redact_exception(exc: BaseException) -> str:
     anywhere the result is logged, displayed or transmitted.
     """
     return f"{type(exc).__name__}: {redact_text(str(exc))}"
+
+
+def redact_rich_text(text: str) -> str:
+    """Redact secrets and escape Rich markup in untrusted display text.
+
+    Backend messages, tool errors, and exception strings are untrusted.  Secret
+    masking alone is insufficient when Rich will parse ``[...]`` tags: crafted
+    text could hide or restyle the operator warning around it.  Use this helper
+    whenever untrusted text is interpolated into a Rich ``Console.print`` call.
+    """
+    return escape(redact_text(text))
+
+
+def redact_rich_exception(exc: BaseException) -> str:
+    """Sanitize an exception for interpolation into Rich console output."""
+    return escape(redact_exception(exc))
 
 
 def redact_url(url: str) -> str:

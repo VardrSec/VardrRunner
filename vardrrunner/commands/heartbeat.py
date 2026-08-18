@@ -10,7 +10,7 @@ import socket
 
 from rich.console import Console
 
-from vardrrunner import __version__, api, config, runner
+from vardrrunner import __version__, api, config, redaction, runner
 
 console = Console()
 
@@ -51,6 +51,8 @@ def send_heartbeat(quiet: bool = False) -> None:
                 console.print(f"  {name}: {status}")
     except Exception as e:
         if not quiet:
-            console.print(f"[yellow]Heartbeat failed:[/yellow] {e}")
+            console.print(
+                f"[yellow]Heartbeat failed:[/yellow] {redaction.redact_rich_exception(e)}"
+            )
         else:
-            logging.warning("Heartbeat failed: %s", e)
+            logging.warning("Heartbeat failed: %s", redaction.redact_exception(e))

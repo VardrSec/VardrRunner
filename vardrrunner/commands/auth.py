@@ -4,7 +4,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config, credentials, keychain
+from vardrrunner import api, config, credentials, keychain, redaction
 
 console = Console()
 app = typer.Typer(help="Authentication commands.")
@@ -42,7 +42,7 @@ def login_vardrmap(
     try:
         config.validate_api_url(api_url)
     except config.InvalidApiUrl as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]Error:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
     # Verify the key works before saving
@@ -51,7 +51,7 @@ def login_vardrmap(
         client = api.VardrMapClient(api_url, api_key)
         user = client.whoami()
     except Exception as e:
-        console.print(f"[red]Authentication failed:[/red] {e}")
+        console.print(f"[red]Authentication failed:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
     console.print(
@@ -113,12 +113,12 @@ def whoami():
         client = api.VardrMapClient(url, key)
         user = client.whoami()
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]Error:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
     table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_row("[dim]GitHub ID[/dim]", str(user.get("github_id", "—")))
-    table.add_row("[dim]Username[/dim]", str(user.get("username", "—")))
-    table.add_row("[dim]Email[/dim]", str(user.get("email", "—")))
-    table.add_row("[dim]API URL[/dim]", url)
+    table.add_row("[dim]GitHub ID[/dim]", redaction.redact_text(str(user.get("github_id", "—"))))
+    table.add_row("[dim]Username[/dim]", redaction.redact_text(str(user.get("username", "—"))))
+    table.add_row("[dim]Email[/dim]", redaction.redact_text(str(user.get("email", "—"))))
+    table.add_row("[dim]API URL[/dim]", redaction.redact_url(url))
     console.print(table)

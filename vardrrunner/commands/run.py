@@ -15,7 +15,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config, configs, handlers, runner
+from vardrrunner import api, config, configs, handlers, redaction, runner
 
 _PRUNE_AFTER_DAYS = 7
 
@@ -80,7 +80,7 @@ def _execute(run_callable):
     try:
         return run_callable()
     except runner.ToolTimeout as e:
-        console.print(f"[red]{e}[/red]")
+        console.print(f"[red]{redaction.redact_rich_exception(e)}[/red]")
         raise typer.Exit(1) from e
 
 
@@ -88,7 +88,7 @@ def _confirm(targets: list[str], tool: str, yes: bool) -> None:
     """Show a dry-run preview and ask for confirmation unless --yes is passed."""
     console.print(f"\n[bold]Targets ({len(targets)}):[/bold]")
     for t in targets[:10]:
-        console.print(f"  {t}")
+        console.print(f"  {redaction.redact_rich_text(t)}")
     if len(targets) > 10:
         console.print(f"  [dim]… and {len(targets) - 10} more[/dim]")
 
@@ -104,14 +104,16 @@ def _build_config(tool: str, raw: dict):
     try:
         return handlers.REGISTRY[tool].parse_config(raw)
     except configs.ConfigError as e:
-        console.print(f"[red]Invalid options:[/red] {e}")
+        console.print(f"[red]Invalid options:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
 
 def _finish(tool: str, client: api.VardrMapClient, engagement_id: str, targets, tool_cfg, run_dir):
     """Execute a tool handler and upload its output — shared by every direct command."""
     handler = handlers.REGISTRY[tool]
-    console.print(f"\nRunning {handler.running_label(targets, tool_cfg)}… → [dim]{run_dir}[/dim]")
+    label = redaction.redact_rich_text(handler.running_label(targets, tool_cfg))
+    safe_run_dir = redaction.redact_rich_text(str(run_dir))
+    console.print(f"\nRunning {label}… → [dim]{safe_run_dir}[/dim]")
     output = _execute(lambda: handler.execute(targets, run_dir, tool_cfg))
 
     if output is None or not output.exists() or output.stat().st_size == 0:
@@ -122,10 +124,10 @@ def _finish(tool: str, client: api.VardrMapClient, engagement_id: str, targets, 
     try:
         summary = handler.upload(client, engagement_id, output)
     except Exception as e:
-        console.print(f"[red]Upload failed:[/red] {e}")
-        console.print(f"Raw output saved at [dim]{output}[/dim]")
+        console.print(f"[red]Upload failed:[/red] {redaction.redact_rich_exception(e)}")
+        console.print(f"Raw output saved at [dim]{redaction.redact_rich_text(str(output))}[/dim]")
         raise typer.Exit(1) from e
-    console.print(f"[green]Done.[/green] {summary}")
+    console.print(f"[green]Done.[/green] {redaction.redact_rich_text(str(summary))}")
 
 
 def run_httpx(

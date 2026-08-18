@@ -12,6 +12,7 @@ here so they cannot drift into disagreeing about the same machine.
 
 from __future__ import annotations
 
+import os
 import platform
 import stat
 from dataclasses import dataclass
@@ -63,7 +64,10 @@ class CredentialStatus:
 def inspect() -> CredentialStatus:
     """Gather credential posture. Read-only; never raises on a corrupt config."""
     path = config.CONFIG_FILE
-    exists = path.exists()
+    try:
+        exists = path.exists()
+    except OSError:
+        exists = False
 
     try:
         data = config.load()
@@ -78,19 +82,39 @@ def inspect() -> CredentialStatus:
     mode_str: str | None = None
     world_readable = False
     if exists and platform.system() != "Windows":
-        mode = stat.S_IMODE(path.stat().st_mode)
-        mode_str = oct(mode)
-        world_readable = plaintext and bool(mode & 0o077)
+        try:
+            mode = stat.S_IMODE(path.stat().st_mode)
+            mode_str = oct(mode)
+            world_readable = plaintext and bool(mode & 0o077)
+        except OSError:
+            # Posture inspection must remain available on a broken machine;
+            # doctor reports the unreadable config separately.
+            pass
+
+    # Derive the source from the data already read above. Calling
+    # config.credential_source()/get_api_url() here would parse a corrupt file a
+    # second time and defeat the recovery path above.
+    api_url = os.environ.get(config.ENV_API_URL) or data.get("api_url")
+    if not isinstance(api_url, str):
+        api_url = None
+    if os.environ.get(config.ENV_API_KEY):
+        source = "environment"
+    elif api_url and keychain.get_key(api_url):
+        source = "keychain"
+    elif plaintext:
+        source = "config file"
+    else:
+        source = None
 
     return CredentialStatus(
-        source=config.credential_source(),
+        source=source,
         keychain_available=keychain.available(),
         plaintext_in_config=plaintext,
         config_file=path,
         config_file_exists=exists,
         config_mode=mode_str,
         world_readable=world_readable,
-        api_url=config.get_api_url(),
+        api_url=api_url,
     )
 
 

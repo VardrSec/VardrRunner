@@ -14,6 +14,8 @@ environment variables or the legacy config file.
 
 import logging
 
+from vardrrunner import redaction
+
 SERVICE = "vardrrunner"
 # Secrets other than the API key (e.g. VardrGate identity credentials) are stored
 # under a separate service so they never collide with backend API keys.
@@ -28,7 +30,7 @@ def available() -> bool:
 
         return not isinstance(keyring.get_keyring(), keyring.backends.fail.Keyring)
     except Exception as e:
-        logging.debug("keychain availability check failed: %s", e)
+        logging.debug("keychain availability check failed: %s", redaction.redact_exception(e))
         return False
 
 
@@ -39,7 +41,11 @@ def get_key(api_url: str) -> str | None:
 
         return keyring.get_password(SERVICE, api_url)
     except Exception as e:
-        logging.debug("keychain get_key failed for %s: %s", api_url, e)
+        logging.debug(
+            "keychain get_key failed for %s: %s",
+            redaction.redact_url(api_url),
+            redaction.redact_exception(e),
+        )
         return None
 
 
@@ -51,7 +57,11 @@ def set_key(api_url: str, api_key: str) -> bool:
         keyring.set_password(SERVICE, api_url, api_key)
         return True
     except Exception as e:
-        logging.debug("keychain set_key failed for %s: %s", api_url, e)
+        logging.debug(
+            "keychain set_key failed for %s: %s",
+            redaction.redact_url(api_url),
+            redaction.redact_exception(e),
+        )
         return False
 
 
@@ -67,7 +77,11 @@ def get_secret(account: str) -> str | None:
 
         return keyring.get_password(SECRET_SERVICE, account)
     except Exception as e:
-        logging.debug("keychain get_secret failed for %s: %s", account, e)
+        logging.debug(
+            "keychain get_secret failed for %s: %s",
+            redaction.redact_text(account),
+            redaction.redact_exception(e),
+        )
         return None
 
 
@@ -79,5 +93,9 @@ def delete_key(api_url: str) -> bool:
         keyring.delete_password(SERVICE, api_url)
         return True
     except Exception as e:
-        logging.debug("keychain delete_key failed for %s: %s", api_url, e)
+        logging.debug(
+            "keychain delete_key failed for %s: %s",
+            redaction.redact_url(api_url),
+            redaction.redact_exception(e),
+        )
         return False

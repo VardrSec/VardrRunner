@@ -23,7 +23,7 @@ import requests
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config, credentials, pipelines, runner
+from vardrrunner import api, config, credentials, pipelines, redaction, runner
 from vardrrunner.commands import daemon
 
 console = Console()
@@ -146,7 +146,7 @@ def _check_auth() -> Check:
     try:
         user = api.VardrMapClient(url, key).whoami()
         who = user.get("username") or user.get("github_id") or "unknown"
-        return Check("api auth", Health.OK, f"authenticated as {who}")
+        return Check("api auth", Health.OK, f"authenticated as {redaction.redact_text(str(who))}")
     except requests.HTTPError as e:
         code = e.response.status_code if e.response is not None else "?"
         return Check(
@@ -159,7 +159,7 @@ def _check_auth() -> Check:
         return Check(
             "api auth",
             Health.FAIL,
-            f"backend unreachable: {e}",
+            f"backend unreachable: {redaction.redact_exception(e)}",
             "Check the backend URL and network connectivity.",
         )
 
@@ -190,7 +190,7 @@ def _check_run_dir() -> Check:
         return Check(
             "run dir writable",
             Health.FAIL,
-            f"{runs}: {e}",
+            f"{redaction.redact_text(str(runs))}: {redaction.redact_exception(e)}",
             "Ensure your home directory exists and is writable.",
         )
 
@@ -202,7 +202,9 @@ def _check_disk() -> Check:
     try:
         free = shutil.disk_usage(target).free
     except OSError as e:
-        return Check("disk space", Health.WARN, f"could not determine: {e}")
+        return Check(
+            "disk space", Health.WARN, f"could not determine: {redaction.redact_exception(e)}"
+        )
     human = f"{free / 1024**3:.1f} GiB free"
     if free < _DISK_FAIL_BYTES:
         return Check("disk space", Health.FAIL, human, "Free up disk before running scans.")
@@ -273,7 +275,7 @@ def _collect() -> list[Check]:
             Check(
                 "config file",
                 Health.FAIL,
-                str(e),
+                redaction.redact_exception(e),
                 f"Delete {config.CONFIG_FILE} or run `vardrrunner login vardrmap` to reset.",
             )
         )
@@ -297,9 +299,11 @@ _GLYPH = {
 def _print_text(checks: list[Check], failed: list[Check], warned: list[Check]) -> None:
     console.print("\n[bold]VardrRunner Doctor[/bold]")
     for c in checks:
-        console.print(f"  {_GLYPH[c.status]} {c.name}: {c.detail}")
+        name = redaction.redact_rich_text(c.name)
+        detail = redaction.redact_rich_text(c.detail)
+        console.print(f"  {_GLYPH[c.status]} {name}: {detail}")
         if c.remediation and c.status is not Health.OK:
-            console.print(f"      [dim]→ {c.remediation}[/dim]")
+            console.print(f"      [dim]→ {redaction.redact_rich_text(c.remediation)}[/dim]")
     console.print()
     if failed:
         console.print(
@@ -338,7 +342,7 @@ def run_doctor(as_json: bool = False) -> None:
                 for c in checks
             ],
         }
-        console.print_json(data=payload)
+        console.print_json(data=redaction.redact(payload))
     else:
         _print_text(checks, failed, warned)
 

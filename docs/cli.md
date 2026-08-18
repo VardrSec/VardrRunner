@@ -18,7 +18,7 @@ rename keep working.
 Authenticate to a Vardr product. Verifies the key against `GET /me` before saving anything,
 then stores it in the **OS keychain** (macOS Keychain / Windows Credential Locker / Linux
 Secret Service). The backend URL is kept in `~/.vardrmap/config.json`. On a machine with no
-keyring backend, it falls back to the plaintext config file with a warning.
+keyring backend, login fails closed unless cleartext storage is explicitly accepted.
 
 ```bash
 vardrrunner login vardrmap
@@ -43,10 +43,10 @@ POSIX shells to `~/.bash_history` or equivalent. Omitting `--key` reads it with 
 disabled, so it never reaches your history.
 
 That is the only thing the prompt protects. **Where the key is then stored does not depend
-on how you supplied it:** if an OS keychain is available it goes there, and if one is not,
-`login` falls back to writing it in cleartext to `~/.vardrmap/config.json` — printing a
-warning when it does. `vardrrunner status` and `doctor` both report which source is in use.
-On a headless box or a container, where a keyring backend usually is not present, set
+on how you supplied it:** if an OS keychain is available it goes there; otherwise login
+refuses unless `--allow-plaintext-credentials` was supplied. `vardrrunner credentials` and
+`doctor` both report which source is in use. On a headless box or a container, where a
+keyring backend usually is not present, set
 `VARDRMAP_API_KEY` in the environment instead of logging in at all; nothing is written to
 disk on that path.
 

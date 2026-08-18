@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from vardrrunner import api, configs, keychain, runner
+from vardrrunner import api, configs, keychain, redaction, runner
 from vardrrunner.targets import _is_wildcard, _resolve_targets
 
 
@@ -43,7 +43,11 @@ def _extract_jsonl_field(output: Path, *fields: str) -> list[str]:
                     targets.append(val)
                     break
     except OSError as e:
-        logging.warning("Failed to read tool output %s: %s", output, e)
+        logging.warning(
+            "Failed to read tool output %s: %s",
+            redaction.redact_text(str(output)),
+            redaction.redact_exception(e),
+        )
     return targets
 
 

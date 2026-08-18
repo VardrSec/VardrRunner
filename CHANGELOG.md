@@ -7,6 +7,32 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.31.1] — 2026-08-18
+
+Phase 1 completion and integration hardening. See
+[`changelog/v0.31.1.md`](changelog/v0.31.1.md).
+
+### Fixed
+
+- A `stop_work_active` finding returned in a successful claim response now blocks execution;
+  the helper that detected it previously existed only in unit tests and was not connected to
+  the job lifecycle.
+- Stop-work suppression now expires after 60 seconds and rechecks the backend. Lifting the
+  halt restores work without requiring a daemon restart, while repeated refusals remain
+  bounded to one per minute rather than every poll.
+- Credential posture inspection now genuinely survives corrupt or unreadable configuration;
+  it no longer catches one parse and then calls helpers that parse the same file again.
+- Redaction is applied across CLI errors, policy findings, job listings/configuration,
+  heartbeat and keychain logs, pipeline summaries, status/doctor output, engagement/scope
+  display, and direct run output. Untrusted Rich markup is escaped after secret masking.
+
+### Security
+
+- Job configurations displayed by `jobs list` are recursively sanitized, including literal
+  VardrGate identity credentials.
+- Backend-controlled warning text, engagement metadata, scope values, usernames and result
+  summaries can no longer inject Rich markup into the operator terminal.
+
 ## [0.31.0] — 2026-08-17
 
 Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See

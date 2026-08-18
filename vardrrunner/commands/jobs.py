@@ -8,6 +8,8 @@ done/fail); the per-tool specifics live in ``vardrrunner.handlers``.
 """
 
 import logging
+import time
+from collections.abc import Callable, MutableMapping
 
 import typer
 from rich.console import Console
@@ -18,6 +20,11 @@ from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.run import _confirm, _make_run_dir
 
 console = Console()
+
+# Stop-work is rechecked periodically rather than every daemon poll.  A
+# permanent in-memory block would leave work unavailable after the operator
+# lifts the halt until someone notices and restarts the service.
+STOP_WORK_RECHECK_SECONDS = 60.0
 
 
 def list_jobs() -> None:
@@ -38,13 +45,14 @@ def list_jobs() -> None:
     table.add_column("Created")
 
     for j in jobs:
-        cfg_str = "  ".join(f"{k}={v}" for k, v in (j.get("config") or {}).items())
+        safe_cfg = redaction.redact(j.get("config") or {})
+        cfg_str = "  ".join(f"{k}={v}" for k, v in safe_cfg.items())
         table.add_row(
-            j["id"][:8] + "…",
-            j["tool_type"],
-            j["target_source"],
+            redaction.redact_text(str(j["id"]))[:8] + "…",
+            redaction.redact_text(str(j["tool_type"])),
+            redaction.redact_text(str(j["target_source"])),
             cfg_str or "—",
-            j.get("created_at", "")[:16],
+            redaction.redact_text(str(j.get("created_at", "")))[:16],
         )
 
     console.print(table)
@@ -74,7 +82,7 @@ def _fail_job(client: api.VardrMapClient, con: Console, job_id: str, error: str)
     which is precisely where a credential ends up.
     """
     safe = redaction.redact_text(error)[:500]
-    con.print(f"[red]Job failed:[/red] {safe}")
+    con.print(f"[red]Job failed:[/red] {redaction.redact_rich_text(error)[:500]}")
     client.complete_job(job_id, "failed", error=safe)
     _emit(client, job_id, "failed", safe)
 
@@ -96,7 +104,7 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
         if job_id:
             _fail_job(client, con, str(job_id), f"malformed job: {e}")
         else:
-            con.print(f"[red]Skipping malformed job:[/red] {e}")
+            con.print(f"[red]Skipping malformed job:[/red] {redaction.redact_rich_exception(e)}")
         return
 
     job_id = env.id
@@ -105,7 +113,7 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
     engagement_id = env.engagement_id
     cfg = env.config
 
-    con.rule(f"Job {job_id[:8]}… — {tool_type} / {target_src}")
+    con.rule(redaction.redact_rich_text(f"Job {job_id[:8]}… — {tool_type} / {target_src}"))
 
     handler = handlers.REGISTRY.get(tool_type)
     if handler is None:
@@ -140,16 +148,22 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
     except errors.StopWorkError as e:
         # The operator's own halt switch. Never presented as a claim failure,
         # and never silently retried — see StopWork handling in the daemon.
-        con.print(f"[bold red]STOP-WORK — not running this job.[/bold red] {e}")
-        _emit(client, job_id, "blocked", f"stop-work engaged: {e}")
+        con.print(
+            "[bold red]STOP-WORK — not running this job.[/bold red] "
+            f"{redaction.redact_rich_text(str(e))}"
+        )
+        _emit(client, job_id, "blocked", f"stop-work engaged: {redaction.redact_text(str(e))}")
         raise
     except errors.ClaimRace as e:
         # Expected and benign: the job belongs to whoever won. Leave it pending
         # for them; marking it failed would destroy another runner's work.
-        con.print(f"[dim]Skipping — {e}[/dim]")
+        con.print(f"[dim]Skipping — {redaction.redact_rich_text(str(e))}[/dim]")
         return
     except errors.RunnerError as e:
-        con.print(f"[red]Could not claim job ({e.category.value}):[/red] {e}")
+        con.print(
+            f"[red]Could not claim job ({e.category.value}):[/red] "
+            f"{redaction.redact_rich_text(str(e))}"
+        )
         return
     except Exception as e:
         # Daemon boundary: an unclassified claim failure must not kill the poll
@@ -157,7 +171,8 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
         safe = redaction.redact_exception(e)
         logging.warning("Unclassified claim failure for job %s: %s", job_id, safe)
         con.print(
-            f"[red]Could not claim job ({errors.FailureCategory.UNKNOWN.value}):[/red] {safe}"
+            f"[red]Could not claim job ({errors.FailureCategory.UNKNOWN.value}):[/red] "
+            f"{redaction.redact_rich_exception(e)}"
         )
         return
 
@@ -169,14 +184,34 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
         for line in policy.format_warnings(warnings):
             con.print(line)
         _emit(client, job_id, "policy_warning", policy.summarize(warnings))
+        if policy.has_stop_work(warnings):
+            reason = next(w.describe() for w in warnings if w.reason == "stop_work_active")
+            safe_reason = redaction.redact_text(reason)
+            con.print(
+                "[bold red]STOP-WORK — not running this job.[/bold red] "
+                f"{redaction.redact_rich_text(reason)}"
+            )
+            _emit(client, job_id, "blocked", safe_reason)
+            # A warning arrives only after a successful claim, so release the
+            # job back to pending before halting. Otherwise it would remain
+            # stuck in running even though no subprocess started.
+            try:
+                client.complete_job(job_id, "pending")
+            except Exception as release_error:
+                logging.warning(
+                    "Failed to release stop-work job %s: %s",
+                    job_id,
+                    redaction.redact_exception(release_error),
+                )
+            raise errors.StopWorkError(safe_reason, reason="stop_work_active")
 
     _emit(client, job_id, "started", f"claimed job · {len(targets)} target(s) from {target_src}")
     _emit(client, job_id, "targets_resolved", f"{len(targets)} target(s) from {target_src}")
 
     run_dir = _make_run_dir()
-    label = handler.running_label(targets, tool_cfg)
+    label = redaction.redact_text(str(handler.running_label(targets, tool_cfg)))
     try:
-        con.print(f"Running {label}…")
+        con.print(f"Running {redaction.redact_rich_text(label)}…")
         _emit(client, job_id, "running", f"running {label}")
         output = handler.execute(targets, run_dir, tool_cfg)
 
@@ -187,8 +222,9 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
 
         con.print("Uploading results…")
         summary = handler.upload(client, engagement_id, output, job_id=job_id)
-        con.print(f"[green]Done.[/green] {summary}")
-        _emit(client, job_id, "uploaded", summary)
+        safe_summary = redaction.redact_text(str(summary))
+        con.print(f"[green]Done.[/green] {redaction.redact_rich_text(safe_summary)}")
+        _emit(client, job_id, "uploaded", safe_summary)
         _complete_done(client, job_id)
     except runner.ToolTimeout as e:
         _fail_job(client, con, job_id, str(e))
@@ -200,41 +236,50 @@ def execute_pending_jobs(
     client: api.VardrMapClient,
     con: Console,
     yes: bool = True,
-    blocked_engagements: set[str] | None = None,
+    blocked_engagements: MutableMapping[str, float] | None = None,
+    *,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
-    ``blocked_engagements`` accumulates engagements whose stop-work switch is
-    engaged. Pass a set that outlives the call (the daemon does) and this runner
-    stops re-attempting those jobs every polling cycle: the refusal is reported
-    once, then their jobs are skipped quietly until the process restarts or
-    stop-work is lifted. Omit it and the suppression lasts for this batch only.
+    ``blocked_engagements`` maps engagements whose stop-work switch is engaged
+    to the monotonic time when they should be checked again. Pass a mapping that
+    outlives the call (the daemon does) to avoid a refusal every poll while still
+    discovering when the operator lifts stop-work. Omit it and suppression lasts
+    for this batch only.
     """
     jobs_list = client.pending_jobs()
     if not jobs_list:
         return 0
 
-    blocked = blocked_engagements if blocked_engagements is not None else set()
+    blocked = blocked_engagements if blocked_engagements is not None else {}
+    now = monotonic()
 
     con.print(f"Found [bold]{len(jobs_list)}[/bold] pending job(s).")
     for job in jobs_list:
         engagement_id = str(job.get("engagement_id") or "")
-        if engagement_id and engagement_id in blocked:
+        retry_at = blocked.get(engagement_id, 0.0) if engagement_id else 0.0
+        if retry_at > now:
+            remaining = max(1, int(retry_at - now))
             con.print(
-                f"[dim]Skipping job {str(job.get('id', ''))[:8]}… — "
-                f"stop-work still engaged for engagement {engagement_id}.[/dim]"
+                f"[dim]Skipping job {redaction.redact_rich_text(str(job.get('id', ''))[:8])}… — "
+                "stop-work recheck for engagement "
+                f"{redaction.redact_rich_text(engagement_id)} in {remaining}s.[/dim]"
             )
             continue
+        if engagement_id:
+            blocked.pop(engagement_id, None)
         try:
             _execute_one(client, con, job, yes)
         except errors.StopWorkError:
             # Reported already by _execute_one. Remember the engagement so the
-            # daemon does not re-claim and re-refuse it on every poll.
+            # daemon does not re-claim and re-refuse it on every poll, but set a
+            # bounded recheck so lifting stop-work restores availability.
             if engagement_id:
-                blocked.add(engagement_id)
+                blocked[engagement_id] = monotonic() + STOP_WORK_RECHECK_SECONDS
             con.print(
                 "[yellow]No further jobs will be claimed for this engagement "
-                "until stop-work is lifted.[/yellow]"
+                f"for {int(STOP_WORK_RECHECK_SECONDS)}s, then it will be rechecked.[/yellow]"
             )
     return len(jobs_list)
 

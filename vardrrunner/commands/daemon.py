@@ -170,7 +170,7 @@ def start(
     try:
         config.require_auth()
     except Exception as e:
-        console.print(f"[red]Not authenticated:[/red] {e}")
+        console.print(f"[red]Not authenticated:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
     out = console
@@ -216,7 +216,7 @@ def start(
     # Engagements whose stop-work switch refused a claim. Held for the life of
     # the daemon so a halted engagement is not re-claimed and re-refused every
     # poll_interval seconds; restarting the daemon re-checks it.
-    _stop_work_blocked: set[str] = set()
+    _stop_work_blocked: dict[str, float] = {}
     try:
         while not _shutdown_requested():
             try:
