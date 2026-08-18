@@ -28,6 +28,14 @@ vardrrunner login vardrmap
 |--------|---------|
 | `--url` | Backend base URL; prompted for if omitted |
 | `--key` | The `vmap_` API key; prompted for (with hidden input) if omitted |
+| `--allow-plaintext-credentials` | Permit cleartext storage when no OS keychain exists |
+
+**Login fails closed.** With no OS keychain available — or when a keychain write fails —
+`login` verifies your key, **saves nothing**, and exits 1 rather than quietly writing
+cleartext to `~/.vardrmap/config.json`. It prints three routes: use `VARDRMAP_API_KEY`
+(recommended for servers; nothing touches disk), install a keyring backend, or pass
+`--allow-plaintext-credentials` to accept it deliberately. See
+[ADR 0009](adr/0009-fail-closed-credential-storage.md).
 
 **Prefer the prompt for the key.** Passing `--key` puts a live credential into your shell
 history — on PowerShell it persists to `(Get-PSReadlineOption).HistorySavePath`, and on
@@ -51,6 +59,20 @@ place (re-authenticate with `login`); warns if `VARDRMAP_API_KEY` is still set.
 ```bash
 vardrrunner logout
 ```
+
+## `credentials`
+Report how this machine is authenticated, without ever displaying the key: source
+(`environment` / `keychain` / `config file`), whether it is encrypted at rest, keychain
+availability, whether the config file holds cleartext, and file permissions. Exits
+non-zero when no credential is configured, so it composes into provisioning scripts.
+
+```bash
+vardrrunner credentials
+```
+
+Only the OS keychain counts as **encrypted at rest**. `VARDRMAP_API_KEY` is not written
+to disk by the runner — a real improvement — but any process running as your user can
+read it, so it is reported as unencrypted rather than safe.
 
 ## `whoami`
 Show the identity tied to the configured API key (`GET /me`). Confirms *which* account a

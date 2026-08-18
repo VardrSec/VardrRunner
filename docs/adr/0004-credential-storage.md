@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-17
+- **Amended by:** [ADR 0009](0009-fail-closed-credential-storage.md) — the plaintext fallback described below is no longer silent; `login` now refuses without an explicit opt-in.
 
 ## Context
 The API key is the runner's only credential and grants access to a user's bug-bounty

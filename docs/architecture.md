@@ -47,6 +47,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/keychain.py` | OS keychain wrapper (`keyring`) for the API key. Degrades gracefully (returns None/False) when no backend is present, so servers fall back to env/file. |
 | `vardrrunner/configs.py` | Typed, validated tool configs (`HttpxConfig`, `NucleiConfig`, `NmapConfig`, `SubfinderConfig`, `VardrGateConfig`). Raw backend dicts are parsed into frozen dataclasses up front; invalid values raise `ConfigError` and fail the job fast. |
 | `vardrrunner/errors.py` | The failure taxonomy (`FailureCategory`) and `RunnerError` hierarchy, plus `classify_status()` — the single place an HTTP status becomes a domain meaning. Imports nothing from the package or outside stdlib, so it is the bottom of the dependency graph (see ADR 0008). |
+| `vardrrunner/credentials.py` | Describes credential posture — source, encryption at rest, keychain availability, cleartext state, file permissions — without ever returning the key. Shared by `doctor` and `credentials` so they cannot disagree about the same machine (ADR 0009). |
 | `vardrrunner/redaction.py` | The single sanitization layer. Everything the runner emits — job events, failure reasons, log lines, errors — passes through here first. Masks by key name and by value pattern; deterministic, idempotent, depth-bounded, and never raises. |
 | `vardrrunner/policy.py` | All parsing and presentation of the backend's advisory `warnings` array. Isolated so a backend shape change touches one file; parsing is total and never raises. |
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
@@ -102,6 +103,10 @@ Local state lives under `~/.vardrmap/`:
 
 The one exception is the daemon PID file, `~/.vardrrunner.pid`, which is deliberately
 outside `~/.vardrmap/` — it belongs to the runner process, not to a backend's config.
+
+`login` **fails closed**: with no OS keychain it refuses to write a cleartext key unless
+`--allow-plaintext-credentials` is passed, because the machines without a keyring backend
+are the ones most likely to run unattended (ADR 0009).
 
 The **API key** resolves from `VARDRMAP_API_KEY` env > **OS keychain** (`keyring`) > config
 file. `vardrrunner login` stores it in the keychain by default; `logout` removes it. On a

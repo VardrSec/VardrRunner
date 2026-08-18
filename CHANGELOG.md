@@ -7,6 +7,43 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.31.0] — 2026-08-17
+
+Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See
+[`changelog/v0.31.0.md`](changelog/v0.31.0.md) and
+[ADR 0009](docs/adr/0009-fail-closed-credential-storage.md).
+
+### Changed
+
+- **BREAKING — `login` no longer writes a cleartext key silently.** When no OS keychain is
+  available (or a keychain write fails), `vardrrunner login vardrmap` now verifies the key,
+  **saves nothing**, and exits 1 with three routes forward: `VARDRMAP_API_KEY`, install a
+  keyring backend, or pass the new `--allow-plaintext-credentials`. The machines without a
+  keyring backend are exactly the ones that run unattended, so "the command succeeded" was
+  the wrong thing to optimise for. Every other login path is unchanged.
+
+### Added
+
+- **`vardrrunner credentials`** — reports key source, whether it is encrypted at rest,
+  keychain availability, whether the config file holds cleartext, and file permissions.
+  Never displays the key. Exits non-zero when unauthenticated, so it composes into
+  provisioning scripts.
+- **`--allow-plaintext-credentials`** on `login vardrmap`, the explicit opt-in.
+- **`doctor` reports credential storage posture** — encrypted at rest, environment
+  variable, or cleartext — plus a warning when no keyring backend exists.
+- **`vardrrunner/credentials.py`** — one module describing credential posture, shared by
+  `doctor` and `credentials` so they cannot describe the same machine differently.
+
+### Security
+
+- A present-but-broken keyring is treated as absent rather than silently downgraded to
+  cleartext.
+- Nothing is persisted before the refusal, so a failed login cannot leave a half-configured
+  machine.
+- The environment variable is deliberately **not** reported as "encrypted at rest": it is
+  not written to disk by the runner, but any process running as that user can read it.
+
+
 ## [0.30.0] — 2026-08-17
 
 Phase 1b of the enterprise-grade roadmap: one sanitization layer in front of

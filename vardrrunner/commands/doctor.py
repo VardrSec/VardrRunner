@@ -23,7 +23,7 @@ import requests
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config, pipelines, runner
+from vardrrunner import api, config, credentials, pipelines, runner
 from vardrrunner.commands import daemon
 
 console = Console()
@@ -63,7 +63,37 @@ def _check_credentials() -> list[Check]:
             )
         ]
 
+    posture = credentials.inspect()
     checks = [Check("credentials", Health.OK, f"API key source: {source}")]
+
+    # Storage posture: a working runner with a cleartext key is healthy but not
+    # safe, and an operator provisioning a VPS needs to know which they have.
+    if posture.at_rest_encrypted:
+        checks.append(Check("credential storage", Health.OK, "OS keychain (encrypted at rest)"))
+    elif posture.source == "environment":
+        checks.append(
+            Check("credential storage", Health.OK, "environment variable (not written to disk)")
+        )
+    elif posture.plaintext_in_config:
+        checks.append(
+            Check(
+                "credential storage",
+                Health.WARN,
+                f"cleartext in {posture.config_file}",
+                "Install a keyring backend and re-run login, or use VARDRMAP_API_KEY.",
+            )
+        )
+
+    if not posture.keychain_available:
+        checks.append(
+            Check(
+                "os keychain",
+                Health.WARN,
+                "no keyring backend on this machine",
+                "Install gnome-keyring/kwallet (Linux), or use VARDRMAP_API_KEY on servers.",
+            )
+        )
+
     try:
         config.validate_api_url(url)
         checks.append(Check("backend url", Health.OK, url))
