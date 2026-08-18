@@ -7,6 +7,36 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.30.0] — 2026-08-17
+
+Phase 1b of the enterprise-grade roadmap: one sanitization layer in front of
+every trust boundary. See [`changelog/v0.30.0.md`](changelog/v0.30.0.md).
+
+### Added
+
+- **`vardrrunner/redaction.py` — centralized sanitization.** A single, deterministic
+  redactor applied before data crosses a trust boundary. Masks by **key name**
+  (`api_key`, `authorization`, `cookie`, `token`, `value_env`, `value_keychain`, …,
+  normalising `X-API-KEY` and `Auth-Token` to the same forms) *and* by **value pattern**
+  (`vmap_` keys, `Bearer`/`Basic` headers, cookies, secret query parameters, `key=value`
+  assignments in free text), plus `redact_url()` for `https://user:pass@host` userinfo and
+  `redact_exception()` for messages that quote the failing request.
+
+### Security
+
+- **Job events, failure reasons and daemon poll errors are now sanitized.** Event text is
+  written to the backend and rendered in its Terminal; failure reasons routinely quote the
+  command, URL or payload that failed, which is exactly where a credential ends up. All
+  three went out unredacted before this release.
+- Redaction is **depth-bounded** (12 levels): an untrusted payload cannot turn
+  sanitization into a denial of service, and a subtree beyond the bound is replaced with a
+  marker rather than emitted unchecked.
+- Redaction **never raises**. Sanitizing must not be the reason a job dies, so an
+  unparseable value is returned unchanged — but the recursive walker masks by key name as
+  well as value pattern, so an unrecognised *shape* still cannot become an exfiltration
+  path.
+
+
 ## [0.29.0] — 2026-08-17
 
 Phase 1a of the enterprise-grade roadmap: the runner can now tell a halt order

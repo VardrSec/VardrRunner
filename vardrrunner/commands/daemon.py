@@ -30,7 +30,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config
+from vardrrunner import api, config, redaction
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.jobs import execute_pending_jobs
 
@@ -232,7 +232,9 @@ def start(
                 # backend is polled politely instead of hammered every 5 seconds.
                 _error_streak += 1
                 backoff = min(poll_interval * (2 ** (_error_streak - 1)), 300)
-                out.print(f"[red]Poll error:[/red] {e}  (retry in {backoff}s)")
+                out.print(
+                    f"[red]Poll error:[/red] {redaction.redact_exception(e)}  (retry in {backoff}s)"
+                )
                 _stop.wait(timeout=backoff)
                 continue
             _stop.wait(timeout=poll_interval)

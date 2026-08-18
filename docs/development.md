@@ -26,7 +26,7 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **463 tests** at ~96% coverage (CI floor: 95%), all hermetic: no network, no real
+- **588 tests** at ~96% coverage (CI floor: 95%), all hermetic: no network, no real
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
@@ -34,6 +34,10 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 ### What the tests cover
 | File | Area |
 |------|------|
+| `tests/test_redaction.py` | the sanitization layer, adversarially: secret shapes, key spellings, hostile nesting, and whether it is actually wired into each boundary |
+| `tests/test_errors.py` | failure taxonomy, status classification, stable wire values |
+| `tests/test_policy.py` | advisory-warning parsing, incl. payloads that must not raise |
+| `tests/test_job_policy.py` | stop-work, claim race, auth/backend failures, advisory display |
 | `tests/test_config.py` | credential resolution, HTTPS validation, auth |
 | `tests/test_credentials.py` | keychain resolution (env > keychain > file), login/logout, fallback |
 | `tests/test_keychain.py` | the `keyring` wrapper itself, incl. graceful degradation |

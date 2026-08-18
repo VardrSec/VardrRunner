@@ -14,7 +14,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
   - `commands/` — one module per group: `auth`, `daemon`, `doctor`, `heartbeat`, `imports`, `jobs`, `pipeline`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (463 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite (588 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
 - `.github/workflows/` — CI (lint + tests on every push)
@@ -26,6 +26,9 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
 - Every behavior-changing change updates docs **and** `CHANGELOG.md` in the same commit
 - All backend communication through `api.py` — no scattered HTTP calls
 - Never log, print, or commit the API key; it lives in the OS keychain
+- **Everything crossing a trust boundary goes through `redaction.py`** — job events,
+  failure reasons, logs, errors. Never format a raw exception or payload into output;
+  use `redact_text`/`redact_exception`/`redact`/`redact_url` (ADR 0008, v0.30.0)
 - Never build shell strings from unsanitized server data — always pass argv lists
 
 ## Security
