@@ -33,6 +33,8 @@ from rich.console import Console
 from vardrrunner import api, config, redaction
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.jobs import execute_pending_jobs
+from vardrrunner.journal import Journal
+from vardrrunner.recovery import reconcile
 
 console = Console()
 
@@ -173,6 +175,16 @@ def start(
         console.print(f"[red]Not authenticated:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
+    # Opening and migrating the journal is a startup gate. The daemon must not
+    # claim work it cannot durably account for.
+    try:
+        journal_store = Journal(config.journal_file())
+    except Exception as e:
+        console.print(
+            f"[red]Execution journal unavailable:[/red] {redaction.redact_rich_exception(e)}"
+        )
+        raise typer.Exit(1) from e
+
     out = console
     _log = None
     if log_file:
@@ -222,7 +234,14 @@ def start(
             try:
                 url, key = config.require_auth()
                 client = api.VardrMapClient(url, key)
-                count = execute_pending_jobs(client, out, blocked_engagements=_stop_work_blocked)
+                reconcile(journal_store, client, url, out)
+                count = execute_pending_jobs(
+                    client,
+                    out,
+                    blocked_engagements=_stop_work_blocked,
+                    journal_store=journal_store,
+                    backend_url=url,
+                )
                 if count:
                     out.print(f"[dim]Cycle complete — {count} job(s) executed.[/dim]")
                 _error_streak = 0

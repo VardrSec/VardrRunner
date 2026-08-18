@@ -7,6 +7,35 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.32.0] — 2026-08-18
+
+Phase 2 of the enterprise-grade roadmap: durable execution, crash reconciliation, run
+manifests, and local audit export. See [`changelog/v0.32.0.md`](changelog/v0.32.0.md) and
+[ADR 0010](docs/adr/0010-durable-execution-journal.md).
+
+### Added
+
+- Transactional SQLite/WAL execution journal with an explicit lifecycle state machine and
+  one-active-attempt-per-job invariant.
+- Startup reconciliation that resumes complete artifacts and pending finalization while
+  conservatively refusing ambiguous upload replay.
+- Child-process PID recording, streaming artifact SHA-256/size, and atomic per-run
+  `manifest.json` files.
+- `vardrrunner audit list|show|export` for sanitized local execution evidence.
+
+### Security
+
+- Queue work now fails closed before claim if the journal is unavailable or incompatible.
+- Journal profiles exclude raw targets, VardrGate test cases, credentials, headers, and
+  request bodies; manifests and exports are redacted again at write time.
+- Automatic recovery never repeats a non-idempotent upload whose outcome is unknown.
+
+### Reliability
+
+- Dead or restarted workers no longer leave recoverable jobs silently stuck in `running`.
+- SQLite handles are short-lived and always explicitly closed; WAL permits concurrent
+  read-only audit inspection while the daemon runs.
+
 ## [0.31.1] — 2026-08-18
 
 Phase 1 completion and integration hardening. See

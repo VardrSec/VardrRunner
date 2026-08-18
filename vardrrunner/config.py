@@ -18,6 +18,7 @@ from vardrrunner import keychain
 CONFIG_DIR = Path.home() / ".vardrmap"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 RUNS_DIR = CONFIG_DIR / "runs"
+JOURNAL_FILE = CONFIG_DIR / "runner-journal.sqlite3"
 
 # Environment overrides — useful for containers, CI, and headless VPS daemons,
 # where a config file is awkward. Env always takes precedence over the file.
@@ -42,6 +43,10 @@ def config_dir() -> Path:
 
 def runs_dir() -> Path:
     return RUNS_DIR
+
+
+def journal_file() -> Path:
+    return JOURNAL_FILE
 
 
 def load() -> dict:

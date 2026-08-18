@@ -365,3 +365,33 @@ def test_tool_version_returns_unknown_when_no_match():
     with patch("shutil.which", return_value="/usr/bin/httpx"), patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(stdout="no version here", stderr="", returncode=0)
         assert runner.tool_version("httpx") == "unknown"
+
+
+def test_process_observer_receives_pid_and_uses_popen(tmp_path):
+    temp = tmp_path / "targets.txt"
+    temp.write_text("example.com")
+    process = MagicMock(pid=4321)
+    process.wait.return_value = 0
+    seen = []
+    with patch("subprocess.Popen", return_value=process) as popen:
+        with runner.observe_process(seen.append):
+            runner._run_tool(["httpx"], str(temp), "httpx", 10)
+    assert seen == [4321]
+    popen.assert_called_once_with(["httpx"])
+    assert not temp.exists()
+
+
+def test_process_is_killed_if_observer_cannot_persist_pid(tmp_path):
+    temp = tmp_path / "targets.txt"
+    temp.write_text("example.com")
+    process = MagicMock(pid=4321)
+
+    def fail(_pid):
+        raise RuntimeError("journal unavailable")
+
+    with patch("subprocess.Popen", return_value=process):
+        with runner.observe_process(fail):
+            with pytest.raises(RuntimeError, match="journal unavailable"):
+                runner._run_tool(["httpx"], str(temp), "httpx", 10)
+    process.kill.assert_called_once()
+    process.wait.assert_called_once()

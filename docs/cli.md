@@ -142,6 +142,28 @@ vardrrunner heartbeat
 
 ---
 
+## `audit` — local execution evidence
+
+Queue-driven jobs are recorded in `~/.vardrmap/runner-journal.sqlite3`. Audit commands are
+local and never contact the backend:
+
+```bash
+vardrrunner audit list [--since <iso-timestamp>] [--limit 100] [--json]
+vardrrunner audit show <run-id>
+vardrrunner audit export --output audit.json [--since <iso-timestamp>] [--limit 10000]
+```
+
+`list` shows recent lifecycle outcomes, `show` prints one full sanitized record, and
+`export` atomically writes a versioned JSON document suitable for incident review or
+retention. Records include target counts, sanitized tool settings, lifecycle timestamps,
+failure categories, policy warnings, and artifact SHA-256/size. They exclude raw targets,
+credentials, request bodies, and headers.
+
+Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
+journal remains the recovery source of truth; manifests are portable run evidence.
+
+---
+
 ## `run` — run a tool locally and upload results
 ```bash
 vardrrunner run httpx     --engagement <id> [options]
@@ -265,7 +287,7 @@ This is the same execution core the daemon uses.
 
 | Outcome | Behaviour |
 |---|---|
-| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. The engagement is then skipped for the rest of the daemon's life rather than re-claimed every poll; restart to re-check. |
+| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. That engagement is suppressed for 60 seconds, then rechecked automatically. |
 | **Claim race** (`409`) | Another runner won. Skipped quietly, **not** marked failed — the job is theirs to finish. |
 | **Auth** (`401`) | Reported as `auth`. Re-run `vardrrunner login vardrmap`. |
 | **Rate limited** (`429`) | Reported as `rate_limited`; the daemon backs off. |
@@ -323,6 +345,11 @@ Options for `daemon start`:
   timestamp, and Rich markup is rendered to plain text rather than written literally.
 - Poll failures back off exponentially (5 s → 10 s → 20 s …, capped at 5 min) and reset on
   the next successful poll, so a downed backend isn't hammered.
+- The daemon opens the SQLite execution journal before writing its PID or claiming work.
+  Journal failure is a startup failure, preventing unaccounted execution.
+- Every poll first reconciles interrupted runs. Complete artifacts can resume upload and a
+  confirmed upload can resume finalization. An upload with an unknown outcome is never
+  duplicated automatically; it is retained as an `upload_failed` audit record.
 - Shutdown is cooperative: `stop` removes the PID file; the daemon notices and exits
   cleanly (graceful SIGTERM handling on Unix, ctypes liveness probe on Windows).
 

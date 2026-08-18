@@ -1,7 +1,7 @@
 # VardrRunner — Architecture
 
 ## Role in the VardrSec system
-VardrRunner is a **stateless local client**. A VardrSec backend (VardrMap today) owns the
+VardrRunner is a **durable local execution client**. A VardrSec backend (VardrMap today) owns the
 queue, the database, and the UI. The runner owns *execution*: it runs tools on the
 operator's machine and reports back. The two are fully decoupled and communicate only via
 JSON over HTTP — there is no shared code, no shared database, and no import dependency in
@@ -49,6 +49,9 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/errors.py` | The failure taxonomy (`FailureCategory`) and `RunnerError` hierarchy, plus `classify_status()` — the single place an HTTP status becomes a domain meaning. Imports nothing from the package or outside stdlib, so it is the bottom of the dependency graph (see ADR 0008). |
 | `vardrrunner/credentials.py` | Describes credential posture — source, encryption at rest, keychain availability, cleartext state, file permissions — without ever returning the key. Shared by `doctor` and `credentials` so they cannot disagree about the same machine (ADR 0009). |
 | `vardrrunner/redaction.py` | The single sanitization layer. Everything the runner emits — job events, failure reasons, log lines, errors — passes through here first. Masks by key name and by value pattern; deterministic, idempotent, depth-bounded, and never raises. |
+| `vardrrunner/journal.py` | Transactional SQLite execution journal and explicit run state machine. WAL mode supports concurrent audit readers; a partial unique index permits only one unfinished attempt per backend job. |
+| `vardrrunner/recovery.py` | Startup reconciliation for interrupted jobs. Resumes known-safe artifact uploads, retries finalization, and refuses automatic replay when an upload outcome is ambiguous. |
+| `vardrrunner/manifests.py` | Streaming SHA-256 artifact hashes and atomic, permission-restricted JSON manifests/exports. |
 | `vardrrunner/policy.py` | All parsing and presentation of the backend's advisory `warnings` array. Isolated so a backend shape change touches one file; parsing is total and never raises. |
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
@@ -58,6 +61,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/run.py` | `run httpx|subfinder|nuclei|nmap|dnsx|naabu` — execute one tool, upload results (shares the typed-config + handler path). |
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
+| `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
 | `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — continuous worker (poll + heartbeat) with PID file and graceful shutdown. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
@@ -66,19 +70,23 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/engagements.py` | `engagements` (list) and `scope` (show in/out-of-scope items) — renamed from `commands/programs.py` in v0.27.0. |
 
 ## Job execution lifecycle
-1. **Poll** — `GET /jobs/pending` returns queued jobs for this operator.
-2. **Claim** — `POST /jobs/{id}/claim` atomically transitions `pending → running`. The
+1. **Poll and journal** — `GET /jobs/pending` returns queued jobs for this operator. The
+   runner opens a local run record before any claim; if durable state is unavailable it
+   fails closed and claims nothing.
+2. **Validate and resolve targets** — validate the envelope/config, verify the tool, then
+   expand scope/recon targets. Only a count and sanitized command profile enter the journal;
+   target values and credentials do not.
+3. **Claim** — `POST /jobs/{id}/claim` atomically transitions `pending → running`. The
    response is classified (ADR 0008): `409` is a lost race and the runner skips the job
    without marking it failed; `403` is **stop-work** and halts; `401`/`429`/`5xx` are
    reported with their category. Advisory policy warnings on the response are printed
    before any tool runs and emitted as a `policy_warning` event.
-3. **Resolve targets** — expand scope (e.g. wildcard → subfinder), normalize (e.g.
-   `strip_url_to_host` for nmap). Emits `targets_resolved`.
 4. **Execute** — `runner.py` spawns the tool as an argv list (never `shell=True` with server
-   data), capturing output to a run directory. Emits `running`.
-5. **Upload** — parse tool output and POST results to the backend. Emits `uploaded`.
-6. **Report** — emit `done` or, on any failure (including a missing tool), `failed` with a
-   clear reason. The job is never left silently incomplete.
+   data), records its PID, and captures output to a run directory. Emits `running`.
+5. **Hash and upload** — stream a SHA-256 digest and size into the journal before POSTing
+   results. Emits `uploaded` after a confirmed response.
+6. **Finalize** — mark the backend job done/failed, close the journal record, and atomically
+   write `manifest.json` beside the artifact.
 
 Events are posted via `POST /jobs/{id}/events` so the backend Terminal can render live logs.
 
@@ -95,11 +103,27 @@ removes the PID file as a cooperative shutdown signal and the daemon exits grace
 Windows liveness is checked via a ctypes probe (plain `os.kill` on Windows is
 `TerminateProcess` and would kill the daemon it was meant to check).
 
+Before each poll, reconciliation inspects unfinished records for the configured backend:
+
+- work interrupted before claim is closed locally;
+- a dead claimed/executing job with no complete artifact is failed on the backend;
+- an existing, complete artifact is hashed, uploaded, and finalized;
+- a confirmed upload awaiting only the final PATCH is finalized without re-uploading;
+- an upload whose response was lost is **not replayed automatically**, because the current
+  backend import contract has no idempotency key. It is closed as `upload_failed` while the
+  local artifact and audit record remain available.
+
 ## Configuration & secrets
 Local state lives under `~/.vardrmap/`:
 - `config.json` — the backend `api_url` (normally **no secret**; only holds a plaintext
   `api_key` in the no-keychain fallback)
 - `runs/` — timestamped tool output directories, pruned after 7 days
+- `runner-journal.sqlite3` — sanitized execution state and recovery metadata (SQLite/WAL)
+
+Completed job run directories also contain `manifest.json` with provenance, lifecycle
+timestamps, artifact SHA-256/size, warnings, and failure category. Manifests and audit
+exports pass through the same redaction layer as terminal and backend output. Raw targets,
+API keys, identity credentials, request bodies, and headers are never journaled.
 
 The one exception is the daemon PID file, `~/.vardrrunner.pid`, which is deliberately
 outside `~/.vardrmap/` — it belongs to the runner process, not to a backend's config.
@@ -161,6 +185,9 @@ in depth—in a successful response's warning array.
   daemon never blocks forever.
 - **Failures are loud, and classified.** A missing/failed tool fails the job; it is never
   skipped silently. Every reported failure carries a `FailureCategory`.
+- **No unjournaled claims.** Queue work is not claimed unless local durable state is writable.
+- **Ambiguous uploads are not replayed.** Recovery favors duplicate prevention when the
+  backend cannot prove idempotency; artifacts remain available for operator review.
 - **Advisory stays advisory.** Only stop-work and explicitly configured local deny rules
   may block; scope and window findings warn.
 - **Blast radius is capped.** A run aborts before executing anything if the resolved target

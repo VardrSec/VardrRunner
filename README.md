@@ -29,6 +29,10 @@ results, and heartbeats so the backend always knows which machines are online.
 - **Importers** — pull existing `nuclei` / `httpx` output files into the backend
 - **Real heartbeat** — reports hostname, version, OS, and per-tool availability so the
   backend's Bridge shows live machine status
+- **Crash-safe queue execution** — journals each backend job in local SQLite before claim,
+  reconciles interrupted work, hashes artifacts, and writes portable run manifests
+- **Sanitized audit evidence** — `audit list`, `audit show`, and atomic JSON exports without
+  raw targets, credentials, request bodies, or headers
 - **Live job events** — emits `started → targets_resolved → running → uploaded → done/failed`
   so the backend Terminal shows real-time logs
 - **Preflight (`doctor`)** — one command validates the whole machine (creds, URL, perms,
@@ -109,6 +113,7 @@ vardrrunner engagements                                       # list your engage
 vardrrunner scope <engagement-id>                             # show in/out-of-scope items
 vardrrunner jobs list                                         # show the backend queue
 vardrrunner jobs run                                          # claim + execute all pending jobs once
+vardrrunner audit list                                        # inspect durable local job evidence
 vardrrunner run subfinder --engagement <engagement-id>        # run a single tool and upload results
 vardrrunner import nuclei --engagement <engagement-id> -f out.jsonl
 ```
@@ -120,10 +125,10 @@ See **[docs/cli.md](docs/cli.md)** for the full command reference.
 
 **Desktop / dev:** `vardrrunner login` stores your API key in the **OS keychain** (macOS
 Keychain, Windows Credential Locker, Linux Secret Service), leaving only the backend URL in
-`~/.vardrmap/config.json`. Where no keyring backend is available it falls back to writing
-the key in cleartext to that same file, warning you when it does — so on headless boxes and
-containers prefer `VARDRMAP_API_KEY` below. `vardrrunner status` reports which source is
-actually in use, and `vardrrunner logout` removes the key from both.
+`~/.vardrmap/config.json`. Where no keyring backend is available, login fails closed unless
+you explicitly pass `--allow-plaintext-credentials`; on headless boxes and containers,
+prefer `VARDRMAP_API_KEY` below. `vardrrunner credentials` reports which source is actually
+in use, and `vardrrunner logout` removes the key from both.
 
 **CI / servers / containers:** set credentials via environment variables (no keychain
 needed). The key resolves in this order — **`VARDRMAP_API_KEY` env → OS keychain → config
@@ -152,7 +157,7 @@ pip install -e ".[dev]"   # editable install + dev tools (pytest, ruff, mypy)
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
-pytest tests              # 605 tests; all subprocess + HTTP calls are mocked
+pytest tests              # 648 tests; all subprocess + HTTP calls are mocked
 ```
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
 95% coverage floor on Python 3.10/3.11/3.12 (Linux) plus a 3.12 smoke on Windows and

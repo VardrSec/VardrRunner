@@ -7,6 +7,7 @@ uniform *lifecycle* (availability → config → targets → claim → run → u
 done/fail); the per-tool specifics live in ``vardrrunner.handlers``.
 """
 
+import json
 import logging
 import time
 from collections.abc import Callable, MutableMapping
@@ -18,6 +19,8 @@ from rich.table import Table
 from vardrrunner import api, config, configs, errors, handlers, policy, redaction, runner
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.run import _confirm, _make_run_dir
+from vardrrunner.journal import Journal, Phase, RunRecord, utc_now
+from vardrrunner.recovery import reconcile
 
 console = Console()
 
@@ -25,6 +28,18 @@ console = Console()
 # permanent in-memory block would leave work unavailable after the operator
 # lifts the halt until someone notices and restarts the service.
 STOP_WORK_RECHECK_SECONDS = 60.0
+
+_AUDIT_CONFIG_FIELDS = frozenset(
+    {"limit", "status_code", "severity", "templates", "timeout", "top_ports", "timing"}
+)
+
+
+def _journal_profile(tool_type: str, cfg: dict) -> dict:
+    """Keep operational settings while excluding targets, requests, and credentials."""
+    profile = {key: cfg[key] for key in _AUDIT_CONFIG_FIELDS if key in cfg}
+    if tool_type == "vardrgate_api_test" and isinstance(cfg.get("execution"), dict):
+        profile["execution"] = redaction.redact(cfg["execution"])
+    return profile
 
 
 def list_jobs() -> None:
@@ -93,7 +108,14 @@ def _complete_done(client: api.VardrMapClient, job_id: str, note: str = "") -> N
     _emit(client, job_id, "done", note)
 
 
-def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool) -> None:
+def _execute_one(
+    client: api.VardrMapClient,
+    con: Console,
+    job: dict,
+    yes: bool,
+    journal_store: Journal | None = None,
+    backend_url: str | None = None,
+) -> None:
     """Run a single job through the uniform lifecycle, delegating specifics to its handler."""
     # Validate the job envelope before touching any field — a drifted/partial payload
     # must fail cleanly, not crash the loop with a KeyError.
@@ -113,35 +135,82 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
     engagement_id = env.engagement_id
     cfg = env.config
 
+    record: RunRecord | None = None
+    if journal_store is not None:
+        record = journal_store.begin(
+            job_id=job_id,
+            backend_url=backend_url or str(client.base),
+            engagement_id=engagement_id,
+            job_type=tool_type,
+            tool=tool_type,
+            target_source=target_src,
+            command_profile=_journal_profile(tool_type, cfg),
+        )
+        if record.phase != Phase.DISCOVERED:
+            raise errors.RunnerError(
+                f"job {job_id} already has unfinished journal run {record.run_id}"
+            )
+        record = journal_store.transition(record.run_id, Phase.VALIDATING)
+
+    def finish(
+        phase: Phase,
+        status: str,
+        category: errors.FailureCategory | None = None,
+        reason: str = "",
+    ) -> None:
+        if journal_store is not None and record is not None:
+            journal_store.finish(
+                record.run_id,
+                phase,
+                status=status,
+                failure_category=category.value if category else None,
+                failure_reason=reason or None,
+            )
+
+    def fail(category: errors.FailureCategory, reason: str) -> None:
+        _fail_job(client, con, job_id, reason)
+        finish(Phase.FAILED, "failed", category, reason)
+
     con.rule(redaction.redact_rich_text(f"Job {job_id[:8]}… — {tool_type} / {target_src}"))
 
     handler = handlers.REGISTRY.get(tool_type)
     if handler is None:
-        _fail_job(client, con, job_id, f"unknown tool type {tool_type!r}")
+        fail(errors.FailureCategory.UNSUPPORTED_JOB, f"unknown tool type {tool_type!r}")
         return
     # Capability check before claiming — never claim work this runner can't do.
     if not runner.tool_available(handler.tool):
-        _fail_job(client, con, job_id, f"'{handler.tool}' not found on PATH")
+        fail(errors.FailureCategory.TOOL_MISSING, f"'{handler.tool}' not found on PATH")
         return
 
     try:
         tool_cfg = handler.parse_config(cfg)
     except configs.ConfigError as e:
-        _fail_job(client, con, job_id, f"invalid config: {e}")
+        fail(errors.FailureCategory.INVALID_CONFIG, f"invalid config: {e}")
         return
 
     try:
         targets = handler.resolve_targets(client, engagement_id, target_src, tool_cfg)
     except Exception as e:  # resolution failure must not crash the loop
-        _fail_job(client, con, job_id, f"failed to resolve targets: {e}")
+        fail(errors.FailureCategory.TARGET_RESOLUTION, f"failed to resolve targets: {e}")
         return
+
+    if journal_store is not None and record is not None:
+        record = journal_store.transition(
+            record.run_id, Phase.TARGETS_RESOLVED, target_count=len(targets)
+        )
 
     if not targets:
         con.print("[yellow]No targets resolved — marking job done.[/yellow]")
+        if journal_store is not None and record is not None:
+            record = journal_store.transition(record.run_id, Phase.FINALIZING)
         _complete_done(client, job_id, "no targets resolved")
+        finish(Phase.DONE, "done")
         return
 
     _confirm(targets, tool_type, yes)
+
+    if journal_store is not None and record is not None:
+        record = journal_store.transition(record.run_id, Phase.CLAIMING)
 
     try:
         claimed = client.claim_job(job_id)
@@ -153,17 +222,20 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
             f"{redaction.redact_rich_text(str(e))}"
         )
         _emit(client, job_id, "blocked", f"stop-work engaged: {redaction.redact_text(str(e))}")
+        finish(Phase.STOP_WORK, "not_claimed", errors.FailureCategory.STOP_WORK, str(e))
         raise
     except errors.ClaimRace as e:
         # Expected and benign: the job belongs to whoever won. Leave it pending
         # for them; marking it failed would destroy another runner's work.
         con.print(f"[dim]Skipping — {redaction.redact_rich_text(str(e))}[/dim]")
+        finish(Phase.SKIPPED, "claim_race", errors.FailureCategory.CLAIM_RACE, str(e))
         return
     except errors.RunnerError as e:
         con.print(
             f"[red]Could not claim job ({e.category.value}):[/red] "
             f"{redaction.redact_rich_text(str(e))}"
         )
+        finish(Phase.FAILED, "claim_failed", e.category, str(e))
         return
     except Exception as e:
         # Daemon boundary: an unclassified claim failure must not kill the poll
@@ -174,13 +246,28 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
             f"[red]Could not claim job ({errors.FailureCategory.UNKNOWN.value}):[/red] "
             f"{redaction.redact_rich_exception(e)}"
         )
+        finish(
+            Phase.FAILED,
+            "claim_failed",
+            errors.FailureCategory.UNKNOWN,
+            redaction.redact_exception(e),
+        )
         return
+
+    if journal_store is not None and record is not None:
+        record = journal_store.transition(record.run_id, Phase.CLAIMED, claimed_at=utc_now())
 
     # Advisory findings from the backend's policy evaluation. Shown before any
     # tool runs so the operator sees them while they can still intervene; they
     # do not block, by design (ADR 0001 amendment).
     warnings = policy.parse_warnings(claimed)
     if warnings:
+        if journal_store is not None and record is not None:
+            record = journal_store.transition(
+                record.run_id,
+                Phase.CLAIMED,
+                warnings_json=json.dumps(redaction.redact([w.__dict__ for w in warnings])),
+            )
         for line in policy.format_warnings(warnings):
             con.print(line)
         _emit(client, job_id, "policy_warning", policy.summarize(warnings))
@@ -203,33 +290,89 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
                     job_id,
                     redaction.redact_exception(release_error),
                 )
+            finish(
+                Phase.STOP_WORK,
+                "released",
+                errors.FailureCategory.STOP_WORK,
+                safe_reason,
+            )
             raise errors.StopWorkError(safe_reason, reason="stop_work_active")
 
     _emit(client, job_id, "started", f"claimed job · {len(targets)} target(s) from {target_src}")
     _emit(client, job_id, "targets_resolved", f"{len(targets)} target(s) from {target_src}")
 
     run_dir = _make_run_dir()
+    if journal_store is not None and record is not None:
+        record = journal_store.transition(
+            record.run_id,
+            Phase.EXECUTING,
+            run_dir=str(run_dir),
+            last_event="tool execution started",
+        )
     label = redaction.redact_text(str(handler.running_label(targets, tool_cfg)))
+    stage = Phase.EXECUTING
     try:
         con.print(f"Running {redaction.redact_rich_text(label)}…")
         _emit(client, job_id, "running", f"running {label}")
-        output = handler.execute(targets, run_dir, tool_cfg)
+        if journal_store is not None and record is not None:
+            run_id = record.run_id
+
+            def record_pid(pid: int) -> None:
+                journal_store.transition(run_id, Phase.EXECUTING, pid=pid)
+
+            with runner.observe_process(record_pid):
+                output = handler.execute(targets, run_dir, tool_cfg)
+        else:
+            output = handler.execute(targets, run_dir, tool_cfg)
 
         if output is None or not output.exists() or output.stat().st_size == 0:
             con.print("[yellow]No output produced — nothing to upload.[/yellow]")
+            if journal_store is not None and record is not None:
+                record = journal_store.transition(
+                    record.run_id, Phase.FINALIZING, pid=None, last_event="no artifact produced"
+                )
             _complete_done(client, job_id, f"{tool_type} produced no output")
+            finish(Phase.DONE, "done")
             return
 
+        if journal_store is not None and record is not None:
+            record = journal_store.attach_artifact(record.run_id, output)
+            stage = Phase.ARTIFACT_READY
         con.print("Uploading results…")
+        if journal_store is not None and record is not None:
+            record = journal_store.transition(
+                record.run_id,
+                Phase.UPLOADING,
+                pid=None,
+                upload_state="in_progress",
+                last_event="artifact upload started",
+            )
+            stage = Phase.UPLOADING
         summary = handler.upload(client, engagement_id, output, job_id=job_id)
         safe_summary = redaction.redact_text(str(summary))
         con.print(f"[green]Done.[/green] {redaction.redact_rich_text(safe_summary)}")
         _emit(client, job_id, "uploaded", safe_summary)
+        if journal_store is not None and record is not None:
+            record = journal_store.transition(
+                record.run_id,
+                Phase.FINALIZING,
+                upload_state="succeeded",
+                last_event=safe_summary,
+            )
+            stage = Phase.FINALIZING
         _complete_done(client, job_id)
+        finish(Phase.DONE, "done")
     except runner.ToolTimeout as e:
         _fail_job(client, con, job_id, str(e))
+        finish(Phase.FAILED, "failed", errors.FailureCategory.TOOL_TIMEOUT, str(e))
     except Exception as e:
         _fail_job(client, con, job_id, str(e))
+        category = (
+            errors.FailureCategory.UPLOAD_FAILED
+            if stage in {Phase.ARTIFACT_READY, Phase.UPLOADING, Phase.FINALIZING}
+            else errors.FailureCategory.TOOL_FAILED
+        )
+        finish(Phase.FAILED, "failed", category, str(e))
 
 
 def execute_pending_jobs(
@@ -239,6 +382,8 @@ def execute_pending_jobs(
     blocked_engagements: MutableMapping[str, float] | None = None,
     *,
     monotonic: Callable[[], float] = time.monotonic,
+    journal_store: Journal | None = None,
+    backend_url: str | None = None,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
@@ -270,7 +415,14 @@ def execute_pending_jobs(
         if engagement_id:
             blocked.pop(engagement_id, None)
         try:
-            _execute_one(client, con, job, yes)
+            _execute_one(
+                client,
+                con,
+                job,
+                yes,
+                journal_store=journal_store,
+                backend_url=backend_url,
+            )
         except errors.StopWorkError:
             # Reported already by _execute_one. Remember the engagement so the
             # daemon does not re-claim and re-refuse it on every poll, but set a
@@ -289,7 +441,11 @@ def run_jobs(yes: bool = False) -> None:
     send_heartbeat(quiet=True)
     url, key = config.require_auth()
     client = api.VardrMapClient(url, key)
-    executed = execute_pending_jobs(client, console, yes=yes)
+    journal_store = Journal(config.journal_file())
+    reconcile(journal_store, client, url, console)
+    executed = execute_pending_jobs(
+        client, console, yes=yes, journal_store=journal_store, backend_url=url
+    )
     if executed == 0:
         console.print("[dim]No pending jobs.[/dim]")
         raise typer.Exit(0)

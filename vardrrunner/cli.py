@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner.commands import auth, engagements, imports, jobs, run
+from vardrrunner.commands import audit, auth, engagements, imports, jobs, run
 from vardrrunner.commands import credentials as credentials_cmd
 from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import doctor as doctor_cmd
@@ -69,6 +69,38 @@ def logout():
 def credentials():
     """Show where the API key comes from and how exposed it is (never shows the key)."""
     credentials_cmd.show_credentials()
+
+
+audit_app = typer.Typer(
+    help="Inspect and export the sanitized local execution journal.", no_args_is_help=True
+)
+app.add_typer(audit_app, name="audit")
+
+
+@audit_app.command("list")
+def audit_list(
+    since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
+    limit: int = typer.Option(100, "--limit", min=1, max=10_000),
+    as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+):
+    """List recent journaled job runs."""
+    audit.list_runs(since=since, limit=limit, as_json=as_json)
+
+
+@audit_app.command("show")
+def audit_show(run_id: str = typer.Argument(..., help="Full journal run ID")):
+    """Show one journaled run as sanitized JSON."""
+    audit.show_run(run_id)
+
+
+@audit_app.command("export")
+def audit_export(
+    output: Path = typer.Option(..., "--output", "-o", help="Destination JSON file"),
+    since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
+    limit: int = typer.Option(10_000, "--limit", min=1, max=10_000),
+):
+    """Atomically export sanitized journal records."""
+    audit.export_runs(output=output, since=since, limit=limit)
 
 
 @app.command()

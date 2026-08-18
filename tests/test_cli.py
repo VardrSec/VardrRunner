@@ -73,6 +73,24 @@ class TestWhoamiCommand:
         mock.assert_called_once()
 
 
+class TestAuditCommands:
+    def test_list_delegates(self):
+        with patch("vardrrunner.commands.audit.list_runs") as mock:
+            invoke("audit", "list", "--limit", "12", "--json")
+        mock.assert_called_once_with(since=None, limit=12, as_json=True)
+
+    def test_show_delegates(self):
+        with patch("vardrrunner.commands.audit.show_run") as mock:
+            invoke("audit", "show", "run-1")
+        mock.assert_called_once_with("run-1")
+
+    def test_export_delegates(self, tmp_path):
+        output = tmp_path / "audit.json"
+        with patch("vardrrunner.commands.audit.export_runs") as mock:
+            invoke("audit", "export", "--output", str(output), "--limit", "50")
+        mock.assert_called_once_with(output=output, since=None, limit=50)
+
+
 # ---------------------------------------------------------------------------
 # Engagement / scope
 # ---------------------------------------------------------------------------
