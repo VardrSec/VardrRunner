@@ -19,3 +19,4 @@ the way it does.
 | [0005](0005-run-scoped-pipelines.md) | Run-scoped pipeline isolation via local handoff files | Accepted |
 | [0006](0006-vardrgate-api-test-handler.md) | VardrGate as a job type, executed via binary contract | Accepted |
 | [0007](0007-local-secret-resolution.md) | Local secret resolution for VardrGate identities | Accepted |
+| [0008](0008-error-classification-and-policy-handling.md) | Error classification and advisory policy handling | Accepted |

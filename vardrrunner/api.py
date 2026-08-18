@@ -1,6 +1,9 @@
 """
 Thin wrapper around requests for authenticated calls to the VardrMap API.
-All methods raise requests.HTTPError on non-2xx responses.
+Generic get/post/patch raise requests.HTTPError on non-2xx responses. The
+job-lifecycle calls (claim_job, complete_job) instead raise classified
+vardrrunner.errors.RunnerError subclasses, so callers can distinguish a
+stop-work refusal from a claim race without inspecting status codes.
 
 The session retries transient failures (connection errors and 429/5xx) with
 exponential backoff so a long-running daemon survives network blips and brief
@@ -16,7 +19,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from vardrrunner import __version__
+from vardrrunner import __version__, errors
 
 # Statuses worth retrying: rate-limit + transient server/proxy errors.
 _RETRY_STATUSES = (429, 500, 502, 503, 504)
@@ -132,16 +135,43 @@ class VardrMapClient:
         """Return all pending jobs owned by the authenticated user."""
         return self.get("/jobs/pending").get("jobs", [])
 
+    def _classified(self, response: requests.Response) -> dict:
+        """Return parsed JSON, or raise a classified domain error on non-2xx.
+
+        Used on the job-lifecycle calls, where the runner must tell a stop-work
+        refusal apart from a lost claim race, an expired key and a backend
+        outage. The generic get/post/patch keep raising ``requests.HTTPError``
+        so existing diagnostic callers are unaffected.
+        """
+        if response.ok:
+            return response.json()
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        raise errors.classify_status(response.status_code, body) from requests.HTTPError(
+            f"HTTP {response.status_code}", response=response
+        )
+
     def claim_job(self, job_id: str) -> dict:
-        """Atomically claim a pending job. Raises HTTPError 409 if already claimed."""
-        return self.post(f"/jobs/{job_id}/claim")
+        """Atomically claim a pending job.
+
+        Raises :class:`~vardrrunner.errors.ClaimRace` when another runner won,
+        :class:`~vardrrunner.errors.StopWorkError` when the engagement's halt
+        switch is engaged, and other :class:`~vardrrunner.errors.RunnerError`
+        subclasses for auth and backend failures. The returned dict carries a
+        ``warnings`` array of advisory policy findings.
+        """
+        r = self.session.post(self._url(f"/jobs/{job_id}/claim"), timeout=60)
+        return self._classified(r)
 
     def complete_job(self, job_id: str, status: str, error: str = "") -> dict:
         """Mark a job done or failed."""
         payload: dict = {"status": status}
         if error:
             payload["error_message"] = error
-        return self.patch(f"/jobs/{job_id}", json=payload)
+        r = self.session.patch(self._url(f"/jobs/{job_id}"), json=payload, timeout=30)
+        return self._classified(r)
 
     def patch(self, path: str, json: dict | None = None) -> Any:
         r = self.session.patch(self._url(path), json=json, timeout=30)

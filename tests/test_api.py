@@ -229,7 +229,7 @@ def test_pending_jobs_missing_key():
 
 def test_claim_job():
     c = _client()
-    with patch.object(c, "post", return_value={"status": "claimed"}):
+    with patch.object(c.session, "post", return_value=_mock_response({"status": "claimed"})):
         assert c.claim_job("j1") == {"status": "claimed"}
 
 

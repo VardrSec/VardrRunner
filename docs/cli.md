@@ -236,8 +236,34 @@ vardrrunner jobs list     # show pending/running jobs for your account
 vardrrunner jobs run      # claim and execute all currently pending jobs, then exit
 ```
 `jobs run` auto-sends a heartbeat first, then for each pending job: claims it
-(`POST /jobs/{id}/claim`, skipping on `409`), resolves targets, executes, and reports
-lifecycle events. This is the same execution core the daemon uses.
+(`POST /jobs/{id}/claim`), resolves targets, executes, and reports lifecycle events.
+This is the same execution core the daemon uses.
+
+### How claim outcomes are reported
+
+| Outcome | Behaviour |
+|---|---|
+| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. The engagement is then skipped for the rest of the daemon's life rather than re-claimed every poll; restart to re-check. |
+| **Claim race** (`409`) | Another runner won. Skipped quietly, **not** marked failed — the job is theirs to finish. |
+| **Auth** (`401`) | Reported as `auth`. Re-run `vardrrunner login vardrmap`. |
+| **Rate limited** (`429`) | Reported as `rate_limited`; the daemon backs off. |
+| **Backend down** (`5xx`) | Reported as `backend_unavailable`; the daemon backs off and retries. |
+| **Anything else** | Reported as `unknown` and logged. The job is left pending and the worker stays alive. |
+
+### Advisory policy warnings
+
+The backend evaluates authorization, testing window and scope on claim. Findings come back
+as warnings and are printed **before any tool runs**, so you see them while you can still
+intervene:
+
+```
+⚠ Target is not in the recorded scope: a.com not in scope
+⚠ Outside the agreed testing window
+```
+
+They do **not** block execution — that is deliberate, and staying in scope remains your
+responsibility. They are also emitted as a `policy_warning` job event so the backend
+Terminal records them. Stop-work is the only policy condition that halts.
 
 Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`, `nmap`,
 `dnsx`, `naabu`) plus `vardrgate_api_test`, which runs a VardrGate API authorization

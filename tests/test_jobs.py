@@ -105,33 +105,49 @@ def test_client_pending_jobs():
     assert result == [{"id": "abc"}]
 
 
+def _ok_response(json_data):
+    """A successful requests.Response stand-in for the classified lifecycle calls."""
+    r = MagicMock()
+    r.ok = True
+    r.json.return_value = json_data
+    return r
+
+
 def test_client_claim_job():
     from vardrrunner.api import VardrMapClient
 
     client = VardrMapClient("http://api", "key")
-    with patch.object(client, "post", return_value={"status": "running"}) as mock_post:
+    with patch.object(
+        client.session, "post", return_value=_ok_response({"status": "running"})
+    ) as mock_post:
         client.claim_job("job-123")
-    mock_post.assert_called_once_with("/jobs/job-123/claim")
+    assert mock_post.call_args[0][0].endswith("/jobs/job-123/claim")
 
 
 def test_client_complete_job_done():
     from vardrrunner.api import VardrMapClient
 
     client = VardrMapClient("http://api", "key")
-    with patch.object(client, "patch", return_value={"status": "done"}) as mock_patch:
+    with patch.object(
+        client.session, "patch", return_value=_ok_response({"status": "done"})
+    ) as mock_patch:
         client.complete_job("job-123", "done")
-    mock_patch.assert_called_once_with("/jobs/job-123", json={"status": "done"})
+    assert mock_patch.call_args.kwargs["json"] == {"status": "done"}
 
 
 def test_client_complete_job_failed_with_error():
     from vardrrunner.api import VardrMapClient
 
     client = VardrMapClient("http://api", "key")
-    with patch.object(client, "patch", return_value={"status": "failed"}) as mock_patch:
+    with patch.object(
+        client.session, "patch", return_value=_ok_response({"status": "failed"})
+    ) as mock_patch:
         client.complete_job("job-123", "failed", error="timeout")
-    mock_patch.assert_called_once_with(
-        "/jobs/job-123", json={"status": "failed", "error_message": "timeout"}
-    )
+    assert mock_patch.call_args.kwargs["json"] == {
+        "status": "failed",
+        "error_message": "timeout",
+    }
+    assert mock_patch.call_args[0][0].endswith("/jobs/job-123")
 
 
 # ---------------------------------------------------------------------------

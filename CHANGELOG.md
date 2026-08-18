@@ -7,6 +7,50 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-08-17
+
+Phase 1a of the enterprise-grade roadmap: the runner can now tell a halt order
+from a lost race. See [`changelog/v0.29.0.md`](changelog/v0.29.0.md) and
+[ADR 0008](docs/adr/0008-error-classification-and-policy-handling.md).
+
+### Fixed
+
+- **Stop-work was indistinguishable from a claim race, and retried forever.** The
+  job-claim path caught every exception in one handler whose comment anticipated only a
+  `409`, so a stop-work refusal (`403`), an expired key (`401`), a backend outage (`5xx`)
+  and a genuine race all printed the same line and left the job pending — and the daemon
+  re-claimed the halted job every `poll_interval` seconds with no explanation. Each is now
+  reported distinctly, and a stop-work engagement is skipped for the life of the daemon
+  rather than re-attempted every cycle. Restarting re-checks it.
+
+### Added
+
+- **`vardrrunner/errors.py` — one failure taxonomy.** `FailureCategory` plus a
+  `RunnerError` hierarchy, and `classify_status()` as the single place an HTTP status
+  becomes a domain meaning. Category values are stable identifiers written to durable
+  records from the execution journal onward.
+- **`vardrrunner/policy.py` — advisory policy findings are now surfaced.** The backend's
+  `warnings` array (authorization, testing window, scope) was previously never read. It is
+  now printed **before any tool runs**, while the operator can still intervene, and emitted
+  as a `policy_warning` job event. Warnings remain advisory and do not block — only
+  stop-work halts.
+
+### Changed
+
+- `claim_job()` and `complete_job()` raise classified `RunnerError` subclasses, chained
+  from the original `HTTPError`. The generic `get`/`post`/`patch` still raise
+  `requests.HTTPError`, so `doctor` and `status` are unaffected.
+- `execute_pending_jobs()` accepts an optional `blocked_engagements` set for stop-work
+  suppression. Existing callers are unaffected.
+
+### Security
+
+- Policy payloads are treated as untrusted display data: rendered and recorded, never used
+  for control flow beyond display, never interpolated into a command line. Parsing is total
+  — a malformed payload yields no warnings rather than raising, so a display failure cannot
+  abort a job the backend already permitted.
+
+
 ## [0.28.1] — 2026-08-17
 
 ### Fixed
