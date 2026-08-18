@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from vardrrunner import redaction
+
 # Human labels for the reason codes VardrMap emits. An unknown code is shown
 # verbatim rather than dropped — a finding the runner does not recognise is
 # still a finding the operator needs to see.
@@ -103,7 +105,7 @@ def has_stop_work(warnings: tuple[PolicyWarning, ...]) -> bool:
 
 def format_warnings(warnings: tuple[PolicyWarning, ...]) -> list[str]:
     """Render findings as Rich-markup lines, ready to print before execution."""
-    return [f"[yellow]⚠ {w.describe()}[/yellow]" for w in warnings]
+    return [f"[yellow]⚠ {redaction.redact_rich_text(w.describe())}[/yellow]" for w in warnings]
 
 
 def summarize(warnings: tuple[PolicyWarning, ...]) -> str:

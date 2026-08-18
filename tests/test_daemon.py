@@ -6,8 +6,10 @@ Platform-dependent paths (Windows vs POSIX) are tested by monkeypatching the
 module-level _IS_WINDOWS flag rather than relying on the host OS.
 """
 
+import json
 import os
 import signal
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -68,6 +70,57 @@ class TestReadPid:
     def test_empty_file_returns_none(self, pid_file):
         pid_file.write_text("")
         assert daemon_mod._read_pid() is None
+
+    @pytest.mark.parametrize("value", ["0", "-1"])
+    def test_nonpositive_pid_returns_none(self, pid_file, value):
+        pid_file.write_text(value)
+        assert daemon_mod._read_pid() is None
+
+
+class TestPidClaim:
+    def test_claim_is_exclusive_and_owner_only(self, pid_file):
+        daemon_mod._claim_pid_file(os.getpid())
+        assert daemon_mod._read_pid() == os.getpid()
+        if os.name != "nt":
+            assert pid_file.stat().st_mode & 0o077 == 0
+        with pytest.raises(daemon_mod.DaemonStateError, match="already running"):
+            daemon_mod._claim_pid_file(os.getpid())
+
+    def test_stale_file_is_replaced(self, pid_file):
+        pid_file.write_text("2000000000")
+        daemon_mod._claim_pid_file(os.getpid())
+        assert daemon_mod._read_pid() == os.getpid()
+
+    def test_stale_file_removal_failure_is_classified(self, pid_file):
+        pid_file.write_text("bad")
+        with (
+            patch.object(Path, "unlink", side_effect=OSError("locked")),
+            pytest.raises(daemon_mod.DaemonStateError, match="remove stale"),
+        ):
+            daemon_mod._claim_pid_file(os.getpid())
+
+    def test_pid_create_failure_is_classified(self, pid_file):
+        with (
+            patch("vardrrunner.commands.daemon.os.open", side_effect=OSError("denied")),
+            pytest.raises(daemon_mod.DaemonStateError, match="create"),
+        ):
+            daemon_mod._claim_pid_file(os.getpid())
+
+    def test_pid_write_failure_cleans_up_and_is_classified(self, pid_file):
+        with (
+            patch("vardrrunner.commands.daemon.os.fdopen", side_effect=OSError("disk full")),
+            pytest.raises(daemon_mod.DaemonStateError, match="open"),
+        ):
+            daemon_mod._claim_pid_file(os.getpid())
+        assert not pid_file.exists()
+
+    def test_pid_flush_failure_cleans_up_and_is_classified(self, pid_file):
+        with (
+            patch("vardrrunner.commands.daemon.os.fsync", side_effect=OSError("disk full")),
+            pytest.raises(daemon_mod.DaemonStateError, match="write"),
+        ):
+            daemon_mod._claim_pid_file(os.getpid())
+        assert not pid_file.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +298,7 @@ class TestDetach:
 # ---------------------------------------------------------------------------
 
 
-def _run_start(pid_file, stop_after: int, execute=None):
+def _run_start(pid_file, stop_after: int, execute=None, heartbeat_report=None):
     """Run daemon_mod.start with all externals mocked; loop exits after N cycles."""
     execute = execute if execute is not None else MagicMock(return_value=0)
     with (
@@ -257,7 +310,7 @@ def _run_start(pid_file, stop_after: int, execute=None):
         ),
         patch("vardrrunner.commands.daemon.api.VardrMapClient"),
         patch("vardrrunner.commands.daemon.execute_pending_jobs", execute),
-        patch("vardrrunner.commands.daemon.send_heartbeat"),
+        patch("vardrrunner.commands.daemon.send_heartbeat", return_value=heartbeat_report),
     ):
         daemon_mod.start(detach=False, poll_interval=1, heartbeat_interval=60, log_file=None)
     return execute, MockThread
@@ -269,9 +322,47 @@ class TestStart:
         _run_start(pid_file, stop_after=1)
         assert not pid_file.exists()
 
+    @pytest.mark.parametrize(("poll", "heartbeat"), [(0, 60), (5, 0)])
+    def test_rejects_invalid_intervals(self, pid_file, poll, heartbeat):
+        with pytest.raises(typer.Exit):
+            daemon_mod.start(
+                detach=False,
+                poll_interval=poll,
+                heartbeat_interval=heartbeat,
+                log_file=None,
+            )
+        assert not pid_file.exists()
+
     def test_calls_execute_pending_jobs(self, pid_file):
         execute, _ = _run_start(pid_file, stop_after=1)
         execute.assert_called_once()
+
+    def test_compatibility_block_pauses_claims(self, pid_file, capsys):
+        from vardrrunner import compatibility
+
+        report = compatibility.CompatibilityReport(
+            compatibility.CompatibilityLevel.BLOCK, ("upgrade required",)
+        )
+        execute, _ = _run_start(pid_file, stop_after=1, heartbeat_report=report)
+        execute.assert_not_called()
+        assert "claims paused" in capsys.readouterr().out
+
+    def test_invalid_resource_policy_fails_before_pid(self, pid_file):
+        from vardrrunner import resources
+
+        with (
+            patch(
+                "vardrrunner.commands.daemon.config.require_auth",
+                return_value=("http://api", "key"),
+            ),
+            patch(
+                "vardrrunner.commands.daemon.resources.load_limits",
+                side_effect=resources.ResourceLimitError("bad limit"),
+            ),
+            pytest.raises(typer.Exit),
+        ):
+            daemon_mod.start(detach=False, poll_interval=5, heartbeat_interval=60, log_file=None)
+        assert not pid_file.exists()
 
     def test_starts_heartbeat_thread(self, pid_file):
         _, MockThread = _run_start(pid_file, stop_after=1)
@@ -307,7 +398,12 @@ class TestStart:
         log = tmp_path / "daemon.log"
         with patch("vardrrunner.commands.daemon._detach") as mock_detach:
             daemon_mod.start(detach=True, poll_interval=5, heartbeat_interval=60, log_file=log)
-        mock_detach.assert_called_once_with(poll_interval=5, heartbeat_interval=60, log_file=log)
+        mock_detach.assert_called_once_with(
+            poll_interval=5,
+            heartbeat_interval=60,
+            log_file=log,
+            log_format=daemon_mod.LogFormat.TEXT,
+        )
 
     def test_poll_error_does_not_crash_daemon(self, pid_file):
         """A transient API error is caught and the loop continues."""
@@ -376,6 +472,20 @@ class TestRotatingLogFile:
 
         content = log.read_text(encoding="utf-8")
         assert "part one part two" in content
+
+    def test_json_lines_are_structured_and_redacted(self, tmp_path):
+        log = tmp_path / "daemon.jsonl"
+        f = daemon_mod._RotatingLogFile(
+            log, log_format=daemon_mod.LogFormat.JSON, runner_id="runner-123"
+        )
+        f.write("request token=vmap_abcdefgh failed\n")
+        f.close()
+        payload = json.loads(log.read_text(encoding="utf-8"))
+        assert payload["log_schema_version"] == 1
+        assert payload["event"] == "console"
+        assert payload["runner_id"] == "runner-123"
+        assert payload["pid"] == os.getpid()
+        assert "vmap_abcdefgh" not in payload["message"]
 
     def test_returns_byte_count(self, tmp_path):
         log = tmp_path / "daemon.log"

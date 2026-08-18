@@ -34,7 +34,7 @@ def _client(claim_result=None, claim_error=None):
     return c
 
 
-def _run(client, tmp_path, blocked=None):
+def _run(client, tmp_path, blocked=None, monotonic=lambda: 100.0):
     """Drive one batch with tools and target resolution stubbed out."""
     con = Console(record=True, width=200)
     with (
@@ -46,7 +46,13 @@ def _run(client, tmp_path, blocked=None):
         handler.tool = "httpx"
         handler.resolve_targets.return_value = ["https://app.example.com"]
         handler.execute.return_value = None  # no output → completes without upload
-        jobs_cmd.execute_pending_jobs(client, con, yes=True, blocked_engagements=blocked)
+        jobs_cmd.execute_pending_jobs(
+            client,
+            con,
+            yes=True,
+            blocked_engagements=blocked,
+            monotonic=monotonic,
+        )
     return con.export_text()
 
 
@@ -86,15 +92,23 @@ class TestStopWork:
     def test_engagement_is_suppressed_for_subsequent_polls(self, tmp_path):
         """The daemon's memory: a halted engagement must not be re-claimed every
         poll_interval seconds forever."""
-        blocked: set[str] = set()
+        blocked: dict[str, float] = {}
         client = _client(claim_error=errors.StopWorkError("halted"))
         _run(client, tmp_path, blocked=blocked)
-        assert blocked == {"eng-1"}
+        assert blocked == {"eng-1": 160.0}
 
         client.claim_job.reset_mock()
         out = _run(client, tmp_path, blocked=blocked)
         client.claim_job.assert_not_called()
-        assert "stop-work still engaged" in out
+        assert "stop-work recheck" in out
+
+    def test_engagement_is_rechecked_after_suppression_expires(self, tmp_path):
+        """Lifting stop-work must restore availability without a daemon restart."""
+        blocked = {"eng-1": 160.0}
+        client = _client(claim_result={})
+        _run(client, tmp_path, blocked=blocked, monotonic=lambda: 161.0)
+        client.claim_job.assert_called_once_with("job-1")
+        assert blocked == {}
 
 
 class TestClaimRace:
@@ -105,10 +119,10 @@ class TestClaimRace:
 
     def test_does_not_suppress_the_engagement(self, tmp_path):
         """A race is normal contention, not a halt — the next poll should retry."""
-        blocked: set[str] = set()
+        blocked: dict[str, float] = {}
         client = _client(claim_error=errors.ClaimRace("raced"))
         _run(client, tmp_path, blocked=blocked)
-        assert blocked == set()
+        assert blocked == {}
 
 
 class TestOtherClaimFailures:
@@ -176,3 +190,28 @@ class TestAdvisoryWarnings:
         client = _client(claim_result={"warnings": "not-a-list"})
         out = _run(client, tmp_path)
         assert "Could not claim job" not in out
+
+    def test_stop_work_warning_blocks_even_after_successful_claim(self, tmp_path):
+        """Defence in depth for backend paths that return stop-work as a warning."""
+        client = _client(claim_result={"warnings": [{"reason": "stop_work_active"}]})
+        blocked: dict[str, float] = {}
+        con = Console(record=True, width=200)
+        with (
+            patch("vardrrunner.commands.jobs.runner.tool_available", return_value=True),
+            patch("vardrrunner.commands.jobs._make_run_dir", return_value=tmp_path),
+            patch("vardrrunner.commands.jobs.handlers.REGISTRY") as reg,
+        ):
+            handler = reg.get.return_value
+            handler.tool = "httpx"
+            handler.resolve_targets.return_value = ["https://a.com"]
+            jobs_cmd.execute_pending_jobs(
+                client,
+                con,
+                yes=True,
+                blocked_engagements=blocked,
+                monotonic=lambda: 100.0,
+            )
+            handler.execute.assert_not_called()
+        assert blocked == {"eng-1": 160.0}
+        assert "STOP-WORK" in con.export_text()
+        client.complete_job.assert_called_once_with("job-1", "pending")

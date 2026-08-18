@@ -138,6 +138,15 @@ class TestExceptionsAndUrls:
         url = "https://vardrmap-production.up.railway.app/jobs/pending"
         assert redaction.redact_url(url) == url
 
+    def test_rich_text_masks_secrets_and_escapes_markup(self):
+        out = redaction.redact_rich_text(f"[link=https://evil]click[/link] {KEY}")
+        assert KEY not in out
+        assert r"\[link=" in out and r"\[/link]" in out
+
+    def test_rich_exception_masks_and_escapes(self):
+        out = redaction.redact_rich_exception(ValueError(f"[bold]{KEY}[/bold]"))
+        assert KEY not in out and r"\[bold]" in out
+
 
 class TestBoundaryApplication:
     """The layer is only worth anything if it is actually wired in."""
@@ -183,3 +192,23 @@ class TestBoundaryApplication:
             reg.get.return_value.resolve_targets.return_value = ["https://a.com"]
             jobs_cmd.execute_pending_jobs(client, con, yes=True)
         assert KEY not in con.export_text()
+
+    def test_job_list_redacts_literal_credentials(self, capsys):
+        client = MagicMock()
+        client.pending_jobs.return_value = [
+            {
+                "id": "job-1",
+                "tool_type": "vardrgate_api_test",
+                "target_source": "inline",
+                "created_at": "2026-08-18T00:00:00Z",
+                "config": {"identity": {"credential": {"value": KEY}}},
+            }
+        ]
+        with (
+            patch("vardrrunner.commands.jobs.config.require_auth", return_value=("https://a", KEY)),
+            patch("vardrrunner.commands.jobs.api.VardrMapClient", return_value=client),
+        ):
+            jobs_cmd.list_jobs()
+        output = capsys.readouterr().out
+        assert KEY not in output
+        assert redaction.MASK in output

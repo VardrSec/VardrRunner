@@ -10,13 +10,16 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner.commands import auth, engagements, imports, jobs, run
+from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run
 from vardrrunner.commands import credentials as credentials_cmd
 from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import doctor as doctor_cmd
 from vardrrunner.commands import heartbeat as heartbeat_cmd
 from vardrrunner.commands import pipeline as pipeline_cmd
+from vardrrunner.commands import service as service_cmd
+from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
+from vardrrunner.commands import updates as updates_cmd
 
 console = Console()
 
@@ -29,6 +32,49 @@ app = typer.Typer(
     help="Local runner for VardrMap. Runs tools locally, uploads results to your VardrMap instance.",
     no_args_is_help=True,
 )
+
+
+@app.command("init")
+def initialize(
+    api_url: str | None = typer.Option(None, "--url", help="VardrMap API base URL"),
+    api_key: str | None = typer.Option(
+        None, "--key", help="vmap_ API key (prefer the hidden prompt or environment)"
+    ),
+    name: str | None = typer.Option(None, "--name", help="Human label for this runner"),
+    production: bool = typer.Option(
+        False, "--production", help="Require the strict unattended doctor profile"
+    ),
+    install_service: bool = typer.Option(
+        False, "--install-service", help="Install the native per-user worker service"
+    ),
+    start_service: bool = typer.Option(
+        True, "--start-service/--no-start-service", help="Start an installed service now"
+    ),
+    env_file: Path | None = typer.Option(
+        None, "--env-file", help="Linux systemd credential environment file"
+    ),
+    allow_plaintext: bool = typer.Option(
+        False,
+        "--allow-plaintext-credentials",
+        help="Explicitly permit cleartext key storage when no keychain is available",
+    ),
+    non_interactive: bool = typer.Option(
+        False, "--non-interactive", help="Never prompt; fail if required input is missing"
+    ),
+):
+    """Guided auth, identity, service, and health setup for a new runner."""
+    setup_cmd.initialize(
+        api_url=api_url,
+        api_key=api_key,
+        name=name,
+        production=production,
+        install_service=install_service,
+        start_service=start_service,
+        env_file=env_file,
+        allow_plaintext=allow_plaintext,
+        non_interactive=non_interactive,
+    )
+
 
 # --------------------------------------------------------------------------- #
 # Auth
@@ -48,9 +94,14 @@ def status():
 @app.command()
 def doctor(
     as_json: bool = typer.Option(False, "--json", help="Emit a machine-readable JSON report"),
+    production: bool = typer.Option(
+        False,
+        "--production",
+        help="Require durable state, secure credentials, disk headroom, and a service",
+    ),
 ):
     """Deep preflight before unattended use — exits non-zero on actionable failures."""
-    doctor_cmd.run_doctor(as_json=as_json)
+    doctor_cmd.run_doctor(as_json=as_json, production=production)
 
 
 @app.command()
@@ -71,10 +122,103 @@ def credentials():
     credentials_cmd.show_credentials()
 
 
+audit_app = typer.Typer(
+    help="Inspect and export the sanitized local execution journal.", no_args_is_help=True
+)
+app.add_typer(audit_app, name="audit")
+
+
+@audit_app.command("list")
+def audit_list(
+    since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
+    limit: int = typer.Option(100, "--limit", min=1, max=10_000),
+    as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+):
+    """List recent journaled job runs."""
+    audit.list_runs(since=since, limit=limit, as_json=as_json)
+
+
+@audit_app.command("show")
+def audit_show(run_id: str = typer.Argument(..., help="Full journal run ID")):
+    """Show one journaled run as sanitized JSON."""
+    audit.show_run(run_id)
+
+
+@audit_app.command("export")
+def audit_export(
+    output: Path = typer.Option(..., "--output", "-o", help="Destination JSON file"),
+    since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
+    limit: int = typer.Option(10_000, "--limit", min=1, max=10_000),
+):
+    """Atomically export sanitized journal records."""
+    audit.export_runs(output=output, since=since, limit=limit)
+
+
 @app.command()
 def whoami():
     """Show the identity tied to the configured API key."""
     auth.whoami()
+
+
+identity_app = typer.Typer(help="Inspect or label this runner installation.", no_args_is_help=True)
+app.add_typer(identity_app, name="identity")
+
+
+@identity_app.command("show")
+def identity_show():
+    """Show the stable runner ID, name, and hostname."""
+    identity.show()
+
+
+@identity_app.command("set-name")
+def identity_set_name(name: str = typer.Argument(..., help="Human label, up to 128 characters")):
+    """Persist a human-readable runner name."""
+    identity.set_name(name)
+
+
+service_app = typer.Typer(
+    help="Manage VardrRunner as a per-user background service.", no_args_is_help=True
+)
+app.add_typer(service_app, name="service")
+
+
+@service_app.command("install")
+def service_install(
+    env_file: Path | None = typer.Option(
+        None, "--env-file", help="systemd EnvironmentFile path (never copied or displayed)"
+    ),
+    start: bool = typer.Option(True, "--start/--no-start", help="Start after installation"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print the plan without changing host state"
+    ),
+):
+    """Install a systemd user unit, launchd agent, or Windows scheduled task."""
+    service_cmd.install(env_file=env_file, start=start, dry_run=dry_run)
+
+
+@service_app.command("uninstall")
+def service_uninstall():
+    """Stop and remove the installed background service."""
+    service_cmd.uninstall()
+
+
+@service_app.command("status")
+def service_status():
+    """Query the native service manager."""
+    service_cmd.show_status()
+
+
+update_app = typer.Typer(help="Check for VardrRunner releases.", no_args_is_help=True)
+app.add_typer(update_app, name="update")
+
+
+@update_app.command("check")
+def update_check(
+    force: bool = typer.Option(False, "--force", help="Ignore the 24-hour local cache"),
+    as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+):
+    """Check PyPI for a newer release; never installs automatically."""
+    updates_cmd.check(force=force, as_json=as_json)
 
 
 # --------------------------------------------------------------------------- #
@@ -152,11 +296,22 @@ app.add_typer(daemon_app, name="daemon")
 @daemon_app.command("start")
 def daemon_start(
     detach: bool = typer.Option(False, "--detach", "-d", help="Run in background"),
-    poll_interval: int = typer.Option(5, "--poll-interval", help="Seconds between job polls"),
+    poll_interval: int = typer.Option(
+        5, "--poll-interval", min=1, max=3600, help="Seconds between job polls"
+    ),
     heartbeat_interval: int = typer.Option(
-        60, "--heartbeat-interval", help="Seconds between heartbeats"
+        60,
+        "--heartbeat-interval",
+        min=1,
+        max=86400,
+        help="Seconds between heartbeats",
     ),
     log_file: Path | None = typer.Option(None, "--log-file", help="Append output to file"),
+    log_format: daemon_cmd.LogFormat = typer.Option(
+        daemon_cmd.LogFormat.TEXT,
+        "--log-format",
+        help="Log encoding: text or newline-delimited JSON",
+    ),
 ):
     """Start the daemon (foreground by default, use --detach for background)."""
     daemon_cmd.start(
@@ -164,6 +319,7 @@ def daemon_start(
         poll_interval=poll_interval,
         heartbeat_interval=heartbeat_interval,
         log_file=log_file,
+        log_format=log_format,
     )
 
 

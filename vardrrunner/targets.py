@@ -7,6 +7,8 @@ This lives in its own module (rather than in `commands/run.py`) so both the dire
 """
 
 from pathlib import Path
+from typing import NoReturn
+from urllib.parse import urlsplit
 
 import typer
 from rich.console import Console
@@ -17,6 +19,55 @@ console = Console()
 
 # Wildcard prefixes we refuse to scan directly (enumerate with subfinder first).
 _WILDCARD_PREFIXES = ("*.", "*")
+MAX_TARGET_LENGTH = 2048
+MAX_TARGET_FILE_BYTES = 10 * 1024**2
+
+
+class TargetValidationError(ValueError):
+    """A target has an unsafe or unsupported shape."""
+
+
+def validate_targets(targets: list[str]) -> list[str]:
+    """Validate, trim, and de-duplicate targets without changing authorization policy."""
+    clean: list[str] = []
+    seen: set[str] = set()
+    for index, raw in enumerate(targets, start=1):
+        if not isinstance(raw, str):
+            raise TargetValidationError(f"target {index} is not a string")
+        value = raw.strip()
+        if not value:
+            continue
+        if len(value) > MAX_TARGET_LENGTH:
+            raise TargetValidationError(f"target {index} exceeds {MAX_TARGET_LENGTH} characters")
+        if any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise TargetValidationError(f"target {index} contains control characters")
+        if any(char.isspace() for char in value):
+            raise TargetValidationError(f"target {index} contains whitespace")
+        if value.startswith("-"):
+            raise TargetValidationError(f"target {index} begins with an option marker")
+        if "://" in value:
+            parsed = urlsplit(value)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise TargetValidationError(f"target {index} is not an http(s) URL")
+            if parsed.username is not None or parsed.password is not None:
+                raise TargetValidationError(f"target {index} contains URL credentials")
+        if value not in seen:
+            seen.add(value)
+            clean.append(value)
+    return clean
+
+
+def _safe(targets: list[str]) -> list[str]:
+    try:
+        return validate_targets(targets)
+    except TargetValidationError as exc:
+        console.print(f"[red]Invalid target input:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+
+def _malformed_source(source: str) -> NoReturn:
+    console.print(f"[red]Invalid target data:[/red] malformed {source} response")
+    raise typer.Exit(1)
 
 
 def _is_wildcard(value: str) -> bool:
@@ -35,20 +86,37 @@ def _resolve_targets(
 ) -> list[str]:
     """Collect the target list from the chosen source."""
     if target:
-        return [target]
+        return _safe([target])
 
     if targets_file:
         if not targets_file.exists():
             console.print(f"[red]File not found:[/red] {targets_file}")
             raise typer.Exit(1)
-        return [line.strip() for line in targets_file.read_text().splitlines() if line.strip()]
+        try:
+            if targets_file.stat().st_size > MAX_TARGET_FILE_BYTES:
+                raise TargetValidationError(
+                    f"target file exceeds {MAX_TARGET_FILE_BYTES // 1024**2} MiB"
+                )
+            lines = targets_file.read_text().splitlines()
+        except (OSError, TargetValidationError) as exc:
+            console.print(f"[red]Could not read target file:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        return _safe([line for line in lines if line.strip()])
 
     if scope:
         raw = client.scope(engagement_id)
+        if not isinstance(raw, dict):
+            _malformed_source("scope")
         in_scope = raw.get("in", [])
+        if not isinstance(in_scope, list):
+            _malformed_source("scope")
         resolved, skipped = [], []
         for item in in_scope:
+            if not isinstance(item, dict):
+                _malformed_source("scope")
             val = item.get("value", "")
+            if not isinstance(val, str):
+                _malformed_source("scope")
             if _is_wildcard(val):
                 skipped.append(val)
             else:
@@ -59,16 +127,20 @@ def _resolve_targets(
             )
             for s in skipped:
                 console.print(f"  [dim]skip:[/dim] {s}")
-        return resolved
+        return _safe(resolved)
 
     if from_recon:
         items = client.recon(engagement_id, limit=limit, status_code=status_code)
+        if not isinstance(items, list):
+            _malformed_source("recon")
         targets = []
         for item in items:
+            if not isinstance(item, dict):
+                _malformed_source("recon")
             val = item.get("url") or item.get("host")
-            if val:
+            if isinstance(val, str) and val:
                 targets.append(val)
-        return targets
+        return _safe(targets)
 
     console.print(
         "[red]No target source specified.[/red] Use --scope, --from-recon, --target, or --targets."

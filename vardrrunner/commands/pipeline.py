@@ -28,7 +28,8 @@ from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 
-from vardrrunner import api, config, configs, handlers, pipelines, runner
+from vardrrunner import api, config, configs, handlers, pipelines, redaction, resources, runner
+from vardrrunner import targets as targets_module
 from vardrrunner.commands.run import MAX_TARGETS_DEFAULT, _make_run_dir, validate_max_targets
 
 console = Console()
@@ -170,9 +171,20 @@ def _run_stage(
             return _StageResult(
                 status="failed",
                 should_continue=continue_on_error,
-                summary=f"target resolution: {e}",
+                summary=f"target resolution: {redaction.redact_exception(e)}",
                 elapsed=time.monotonic() - t0,
             )
+
+    try:
+        targets = targets_module.validate_targets(targets)
+    except targets_module.TargetValidationError as e:
+        return _StageResult(
+            status="aborted",
+            should_continue=continue_on_error,
+            targets=len(targets),
+            summary=f"unsafe target input: {redaction.redact_exception(e)}",
+            elapsed=time.monotonic() - t0,
+        )
 
     if not targets:
         return _StageResult(
@@ -192,13 +204,24 @@ def _run_stage(
 
     run_dir = _make_run_dir()
     try:
+        limits = resources.load_limits()
+        resources.ensure_free_space(run_dir, limits.min_free_disk_bytes)
+    except resources.ResourceLimitError as e:
+        return _StageResult(
+            status="aborted",
+            should_continue=continue_on_error,
+            targets=len(targets),
+            summary=redaction.redact_exception(e),
+            elapsed=time.monotonic() - t0,
+        )
+    try:
         output = handler.execute(targets, run_dir, config_obj)
     except Exception as e:
         return _StageResult(
             status="failed",
             should_continue=continue_on_error,
             targets=len(targets),
-            summary=str(e),
+            summary=redaction.redact_exception(e),
             elapsed=time.monotonic() - t0,
         )
 
@@ -211,13 +234,24 @@ def _run_stage(
         )
 
     try:
+        resources.enforce_artifact(output, limits.max_artifact_bytes)
+    except resources.ResourceLimitError as e:
+        return _StageResult(
+            status="aborted",
+            should_continue=continue_on_error,
+            targets=len(targets),
+            summary=redaction.redact_exception(e),
+            elapsed=time.monotonic() - t0,
+        )
+
+    try:
         summary = handler.upload(client, engagement_id, output)
     except Exception as e:
         return _StageResult(
             status="failed",
             should_continue=continue_on_error,
             targets=len(targets),
-            summary=f"upload: {e}",
+            summary=f"upload: {redaction.redact_exception(e)}",
             elapsed=time.monotonic() - t0,
         )
 
@@ -231,7 +265,7 @@ def _run_stage(
         status="done",
         should_continue=True,
         targets=len(targets),
-        summary=summary,
+        summary=redaction.redact_text(str(summary)),
         elapsed=time.monotonic() - t0,
         handoff=next_handoff,
     )
@@ -275,7 +309,7 @@ def run_pipeline(
         try:
             configs.NucleiConfig.from_dict({"severity": severity})
         except configs.ConfigError as e:
-            console.print(f"[red]Invalid --severity:[/red] {e}")
+            console.print(f"[red]Invalid --severity:[/red] {redaction.redact_rich_exception(e)}")
             raise typer.Exit(1) from e
 
     url, key = config.require_auth()
@@ -403,8 +437,11 @@ def _run_pipeline_dry(
     config_obj = handler.parse_config(cfg_dict)
     try:
         targets = handler.resolve_targets(client, engagement_id, first.source, config_obj)
+        targets = targets_module.validate_targets(targets)
     except Exception as e:
-        console.print(f"[red]Could not resolve stage-1 targets:[/red] {e}")
+        console.print(
+            f"[red]Could not resolve stage-1 targets:[/red] {redaction.redact_rich_exception(e)}"
+        )
         raise typer.Exit(1) from e
 
     n = len(targets)

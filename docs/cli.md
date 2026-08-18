@@ -14,11 +14,43 @@ rename keep working.
 
 ---
 
+## `init` — guided host setup
+
+```bash
+vardrrunner init
+vardrrunner init --production --install-service
+vardrrunner init --non-interactive --name runner-a --production --install-service
+```
+
+`init` composes the secure setup steps in their required order: configure or reuse auth,
+create the stable runner identity, initialize the durable journal, optionally install the
+native per-user service, then run `doctor`. Setup succeeds only when the final doctor
+profile succeeds. It is safe to rerun; completed local state is reused.
+
+| Option | Purpose |
+|--------|---------|
+| `--url` / `--key` | Supply VardrMap credentials; omit `--key` interactively for a hidden prompt |
+| `--name` | Set the durable human runner label |
+| `--production` | Require the strict unattended doctor profile |
+| `--install-service` | Install the native per-user background worker |
+| `--start-service` / `--no-start-service` | Start after installation (default: start) |
+| `--env-file <path>` | Attach an existing Linux systemd credential environment file; also enables service installation |
+| `--allow-plaintext-credentials` | Explicitly accept config-file key storage if no keychain exists |
+| `--non-interactive` | Never prompt; fail if auth input is missing |
+
+Non-interactive setup accepts existing environment credentials. For an installed service,
+those credentials must also survive a fresh process: use keychain/config auth, or on Linux
+pass an operator-owned, owner-readable-only (`chmod 600`) `--env-file`. Setup never creates
+or displays a secret env file. As with `login`, prefer the hidden prompt over `--key` so the
+credential does not enter shell history.
+
+---
+
 ## `login`
 Authenticate to a Vardr product. Verifies the key against `GET /me` before saving anything,
 then stores it in the **OS keychain** (macOS Keychain / Windows Credential Locker / Linux
 Secret Service). The backend URL is kept in `~/.vardrmap/config.json`. On a machine with no
-keyring backend, it falls back to the plaintext config file with a warning.
+keyring backend, login fails closed unless cleartext storage is explicitly accepted.
 
 ```bash
 vardrrunner login vardrmap
@@ -43,10 +75,10 @@ POSIX shells to `~/.bash_history` or equivalent. Omitting `--key` reads it with 
 disabled, so it never reaches your history.
 
 That is the only thing the prompt protects. **Where the key is then stored does not depend
-on how you supplied it:** if an OS keychain is available it goes there, and if one is not,
-`login` falls back to writing it in cleartext to `~/.vardrmap/config.json` — printing a
-warning when it does. `vardrrunner status` and `doctor` both report which source is in use.
-On a headless box or a container, where a keyring backend usually is not present, set
+on how you supplied it:** if an OS keychain is available it goes there; otherwise login
+refuses unless `--allow-plaintext-credentials` was supplied. `vardrrunner credentials` and
+`doctor` both report which source is in use. On a headless box or a container, where a
+keyring backend usually is not present, set
 `VARDRMAP_API_KEY` in the environment instead of logging in at all; nothing is written to
 disk on that path.
 
@@ -81,6 +113,21 @@ key belongs to without printing the key itself.
 ```bash
 vardrrunner whoami
 ```
+
+---
+
+## `identity`
+
+Each installation has a stable UUID independent of hostname and a human-readable label:
+
+```bash
+vardrrunner identity show
+vardrrunner identity set-name chicago-runner-1
+```
+
+The first identity is created at `~/.vardrmap/runner-identity.json` with owner-only
+permissions. Corrupt state fails closed; it is never silently replaced with a new UUID.
+Set `VARDRUNNER_NAME` for a deployment-time label override without rewriting the file.
 
 ---
 
@@ -122,13 +169,20 @@ non-zero on any actionable failure, and prints a remediation hint per problem.
 ```bash
 vardrrunner doctor && vardrrunner daemon start --detach   # gate provisioning on health
 vardrrunner doctor --json                                  # machine-readable report
+vardrrunner doctor --production                            # strict unattended profile
 ```
 
 Checks: credential source (env vs file), backend URL validity (HTTPS), config-file
 permissions, API auth, daemon PID health (running / stale), run-dir writability, free disk,
-tool versions, and per-pipeline readiness. **Failures** (no creds, bad URL, auth failure,
+effective resource policy, tool versions, and per-pipeline readiness. **Failures** (no
+creds, bad URL, auth failure,
 unwritable run dir, critically low disk, zero tools) set a non-zero exit; missing individual
 tools and low-ish disk are **warnings** that don't block.
+
+`--production` additionally treats plaintext credentials as a failure, raises disk
+thresholds to 1 GiB minimum / 5 GiB warning, verifies the execution journal and stable
+identity, and requires either a live daemon or active native service. JSON output includes
+`"profile": "standard" | "production"`.
 
 ---
 
@@ -139,6 +193,45 @@ to confirm connectivity and that the backend's Bridge sees this machine.
 ```bash
 vardrrunner heartbeat
 ```
+
+The heartbeat also advertises runner version, job-schema versions, and capabilities. A
+newer backend may return compatibility constraints. Definite mismatches pause queue claims;
+warnings and legacy responses do not.
+
+---
+
+## `update` — check for runner releases
+
+```bash
+vardrrunner update check [--force] [--json]
+```
+
+Checks public PyPI metadata and reports whether a newer semantic version exists. Results
+are cached for 24 hours under `~/.vardrmap/update-check.json`; `--force` bypasses the cache.
+This command never installs or upgrades software. Use `pipx upgrade vardrrunner` or
+`uv tool upgrade vardrrunner` after reviewing the release.
+
+---
+
+## `audit` — local execution evidence
+
+Queue-driven jobs are recorded in `~/.vardrmap/runner-journal.sqlite3`. Audit commands are
+local and never contact the backend:
+
+```bash
+vardrrunner audit list [--since <iso-timestamp>] [--limit 100] [--json]
+vardrrunner audit show <run-id>
+vardrrunner audit export --output audit.json [--since <iso-timestamp>] [--limit 10000]
+```
+
+`list` shows recent lifecycle outcomes, `show` prints one full sanitized record, and
+`export` atomically writes a versioned JSON document suitable for incident review or
+retention. Records include target counts, sanitized tool settings, lifecycle timestamps,
+failure categories, policy warnings, and artifact SHA-256/size. They exclude raw targets,
+credentials, request bodies, and headers.
+
+Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
+journal remains the recovery source of truth; manifests are portable run evidence.
 
 ---
 
@@ -173,6 +266,11 @@ wildcard entries from the engagement's scope):
 With `--from-recon`, `--limit` caps how many recon items are pulled (default 100 for
 httpx/nuclei, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
 (httpx and nuclei only).
+
+All sources are treated as untrusted. Empty entries are removed and duplicates collapsed;
+targets containing control characters, whitespace, a leading option marker, non-HTTP URL
+schemes, or URL credentials are rejected before a subprocess starts. Target files are
+limited to 10 MiB. The same validation applies to backend data and pipeline handoffs.
 
 ### Per-tool options
 | Command | Options |
@@ -261,11 +359,17 @@ vardrrunner jobs run      # claim and execute all currently pending jobs, then e
 (`POST /jobs/{id}/claim`), resolves targets, executes, and reports lifecycle events.
 This is the same execution core the daemon uses.
 
+Before claim, the runner validates the job schema, target shape/count, and free-disk
+reserve. Before upload it enforces the artifact ceiling. Defaults are 500 targets, 100 MiB
+per artifact, 512 MiB free, and one worker. `VARDRRUNNER_MAX_CONCURRENT_JOBS` may enable up
+to eight workers across engagements; jobs belonging to one engagement always remain
+sequential and each worker uses an isolated API client.
+
 ### How claim outcomes are reported
 
 | Outcome | Behaviour |
 |---|---|
-| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. The engagement is then skipped for the rest of the daemon's life rather than re-claimed every poll; restart to re-check. |
+| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. That engagement is suppressed for 60 seconds, then rechecked automatically. |
 | **Claim race** (`409`) | Another runner won. Skipped quietly, **not** marked failed — the job is theirs to finish. |
 | **Auth** (`401`) | Reported as `auth`. Re-run `vardrrunner login vardrmap`. |
 | **Rate limited** (`429`) | Reported as `rate_limited`; the daemon backs off. |
@@ -315,6 +419,11 @@ Options for `daemon start`:
 | `--poll-interval N` | 5 | Seconds between job polls |
 | `--heartbeat-interval N` | 60 | Seconds between heartbeats |
 | `--log-file <path>` | none | Append output to a rotating log file |
+| `--log-format text|json` | `text` | Human text or redacted JSON Lines |
+
+Poll intervals are bounded to 1–3600 seconds and heartbeat intervals to 1–86400 seconds.
+The PID file is claimed with exclusive creation, so concurrent starts cannot both become
+workers; malformed or dead PID state is replaced as stale.
 
 - The PID file is `~/.vardrrunner.pid`. A double-start guard prevents two daemons from
   running at once, and `daemon status` cleans up a stale PID file.
@@ -323,8 +432,51 @@ Options for `daemon start`:
   timestamp, and Rich markup is rendered to plain text rather than written literally.
 - Poll failures back off exponentially (5 s → 10 s → 20 s …, capped at 5 min) and reset on
   the next successful poll, so a downed backend isn't hammered.
+- The daemon opens the SQLite execution journal before writing its PID or claiming work.
+  Journal failure is a startup failure, preventing unaccounted execution.
+- Every poll first reconciles interrupted runs. Complete artifacts can resume upload and a
+  confirmed upload can resume finalization. An upload with an unknown outcome is never
+  duplicated automatically; it is retained as an `upload_failed` audit record.
 - Shutdown is cooperative: `stop` removes the PID file; the daemon notices and exits
   cleanly (graceful SIGTERM handling on Unix, ctypes liveness probe on Windows).
+
+JSON log records contain `log_schema_version`, UTC `timestamp`, `level`, `event`, stable
+`runner_id`, `pid`, and redacted `message`. Rotation remains 5 MiB × four files total.
+
+---
+
+## `service` — native unattended startup
+
+```bash
+vardrrunner service install [--no-start] [--dry-run]
+vardrrunner service status
+vardrrunner service uninstall
+```
+
+The command installs a systemd **user** unit on Linux, LaunchAgent on macOS, or per-user
+ONLOGON Scheduled Task on Windows. It runs the foreground daemon with rotating JSON logs;
+no separate worker implementation is introduced. `--dry-run` prints paths and manager
+commands without changing the host.
+
+Actual installation first verifies local authentication, the execution journal, and stable
+identity so a broken configuration does not enter a native supervisor restart loop.
+
+Authentication must be available to a newly started service process. A keychain or
+explicitly accepted config credential satisfies this. Credentials that exist only in the
+current shell are rejected unless Linux `--env-file` is supplied; macOS and Windows users
+must use keychain/config resolution or an established external supervisor. Linux env files
+must already exist with mode `0600`; a missing file is a service startup failure rather than
+being silently ignored.
+
+On Linux only, `--env-file <path>` adds a systemd `EnvironmentFile` reference. The file is
+never copied or displayed, and no secret is embedded in the unit. macOS and Windows should
+use the OS keychain or config-based credential resolution. Windows hosts that must start
+before user logon should use their existing enterprise supervisor rather than the per-user
+task.
+
+A systemd user unit starts at boot only when user lingering is enabled. The installer does
+not change that host policy; it prints the administrator command
+`loginctl enable-linger <user>` after installation.
 
 ---
 

@@ -12,6 +12,9 @@ import subprocess
 import tempfile
 import urllib.parse
 import xml.etree.ElementTree as ET
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 # Allowlist maps subcommand names to their executable names.
@@ -41,6 +44,26 @@ class ToolError(Exception):
     """Raised when a tool subprocess exits with a non-zero return code."""
 
 
+_PROCESS_OBSERVER: ContextVar[Callable[[int], None] | None] = ContextVar(
+    "vardrrunner_process_observer", default=None
+)
+
+
+@contextmanager
+def observe_process(callback: Callable[[int], None]) -> Iterator[None]:
+    """Report the spawned tool PID to the current execution context.
+
+    Job execution uses this to durably record the child process. Direct CLI
+    runs do not install an observer and retain the simpler ``subprocess.run``
+    path.
+    """
+    token = _PROCESS_OBSERVER.set(callback)
+    try:
+        yield
+    finally:
+        _PROCESS_OBSERVER.reset(token)
+
+
 def _resolve_timeout(override: int | None) -> int:
     """Pick the effective timeout: explicit override > env var > default."""
     if override and override > 0:
@@ -67,8 +90,25 @@ def _run_tool(cmd: list[str], temp_file: str, tool: str, timeout: int | None) ->
     Raises ToolError on any non-zero exit code — callers must not treat failure as success.
     """
     seconds = _resolve_timeout(timeout)
+    observer = _PROCESS_OBSERVER.get()
     try:
-        result = subprocess.run(cmd, check=False, timeout=seconds)
+        if observer is None:
+            result = subprocess.run(cmd, check=False, timeout=seconds)
+        else:
+            process = subprocess.Popen(cmd)
+            try:
+                observer(process.pid)
+            except Exception:
+                process.kill()
+                process.wait()
+                raise
+            try:
+                returncode = process.wait(timeout=seconds)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise
+            result = subprocess.CompletedProcess(cmd, returncode)
     except subprocess.TimeoutExpired as e:
         raise ToolTimeout(f"{tool} timed out after {seconds}s and was killed") from e
     finally:

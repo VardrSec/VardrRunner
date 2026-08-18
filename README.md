@@ -29,6 +29,16 @@ results, and heartbeats so the backend always knows which machines are online.
 - **Importers** — pull existing `nuclei` / `httpx` output files into the backend
 - **Real heartbeat** — reports hostname, version, OS, and per-tool availability so the
   backend's Bridge shows live machine status
+- **Crash-safe queue execution** — journals each backend job in local SQLite before claim,
+  reconciles interrupted work, hashes artifacts, and writes portable run manifests
+- **Sanitized audit evidence** — `audit list`, `audit show`, and atomic JSON exports without
+  raw targets, credentials, request bodies, or headers
+- **Small-team operations** — stable runner UUID/name, rotating JSON logs, strict production
+  preflight, and native systemd/launchd/Windows Scheduled Task management
+- **Guided verified setup** — one idempotent `init` command for interactive onboarding or
+  non-interactive host provisioning, ending in a doctor acceptance gate
+- **Bounded execution** — schema/capability negotiation, target and artifact ceilings,
+  free-disk reserve, and optional parallelism that never overlaps one engagement
 - **Live job events** — emits `started → targets_resolved → running → uploaded → done/failed`
   so the backend Terminal shows real-time logs
 - **Preflight (`doctor`)** — one command validates the whole machine (creds, URL, perms,
@@ -97,11 +107,12 @@ above does. Inside a venv you'll need it activated; `pipx`/`uv` avoid that entir
 
 ## Quick start
 ```bash
-vardrrunner login vardrmap     # prompts for backend URL + API key; key goes to your OS keychain
-vardrrunner status             # show config, version, and which tools are detected
-vardrrunner heartbeat          # confirm the backend can see this machine
-vardrrunner daemon start       # run the continuous worker (poll jobs + heartbeat)
+vardrrunner init               # guided auth, runner name, optional service, and health gate
 ```
+
+For an unattended host, use `vardrrunner init --production --install-service`. Existing
+individual `login`, `identity`, `doctor`, and `service` commands remain available when you
+want to control each step separately.
 
 ### One-shot usage
 ```bash
@@ -109,6 +120,9 @@ vardrrunner engagements                                       # list your engage
 vardrrunner scope <engagement-id>                             # show in/out-of-scope items
 vardrrunner jobs list                                         # show the backend queue
 vardrrunner jobs run                                          # claim + execute all pending jobs once
+vardrrunner audit list                                        # inspect durable local job evidence
+vardrrunner identity set-name chicago-runner-1                # durable human label
+vardrrunner update check                                      # check; never auto-install
 vardrrunner run subfinder --engagement <engagement-id>        # run a single tool and upload results
 vardrrunner import nuclei --engagement <engagement-id> -f out.jsonl
 ```
@@ -120,10 +134,10 @@ See **[docs/cli.md](docs/cli.md)** for the full command reference.
 
 **Desktop / dev:** `vardrrunner login` stores your API key in the **OS keychain** (macOS
 Keychain, Windows Credential Locker, Linux Secret Service), leaving only the backend URL in
-`~/.vardrmap/config.json`. Where no keyring backend is available it falls back to writing
-the key in cleartext to that same file, warning you when it does — so on headless boxes and
-containers prefer `VARDRMAP_API_KEY` below. `vardrrunner status` reports which source is
-actually in use, and `vardrrunner logout` removes the key from both.
+`~/.vardrmap/config.json`. Where no keyring backend is available, login fails closed unless
+you explicitly pass `--allow-plaintext-credentials`; on headless boxes and containers,
+prefer `VARDRMAP_API_KEY` below. `vardrrunner credentials` reports which source is actually
+in use, and `vardrrunner logout` removes the key from both.
 
 **CI / servers / containers:** set credentials via environment variables (no keychain
 needed). The key resolves in this order — **`VARDRMAP_API_KEY` env → OS keychain → config
@@ -135,9 +149,19 @@ file**:
 | `VARDRMAP_API_KEY` | Your `vmap_` API key |
 | `VARDRRUNNER_TOOL_TIMEOUT` | Per-tool run timeout in seconds (default 1800); a hung tool is killed and the job marked failed |
 | `VARDRRUNNER_ALLOW_INSECURE` | Set to `1` to permit a plain-HTTP backend URL (not recommended) |
+| `VARDRUNNER_NAME` | Optional display/heartbeat label; does not replace the stable UUID |
+| `VARDRUNNER_MAX_TARGETS` | Queue target ceiling (default 500; range 1–100000) |
+| `VARDRUNNER_MAX_ARTIFACT_MB` | Artifact ceiling before upload (default 100 MiB; range 1–10240) |
+| `VARDRUNNER_MAX_CONCURRENT_JOBS` | Parallel engagement groups (default 1; range 1–8) |
+| `VARDRUNNER_MIN_FREE_DISK_MB` | Required free-space reserve (default 512 MiB; 0 disables) |
 
 The runner refuses to send your API key over plain HTTP to a non-local host, so a mistyped
 `http://` URL can't leak your key.
+
+An installed service does not inherit arbitrary variables from the shell that installed
+it. If credentials exist only in environment variables, Linux service setup requires an
+operator-owned `--env-file`; macOS/Windows should use keychain/config credentials or an
+existing supervisor. VardrRunner never creates, reads, or prints the env file's secrets.
 
 ## Documentation
 - [docs/architecture.md](docs/architecture.md) — how the runner is structured and how it talks to the backend
@@ -152,7 +176,7 @@ pip install -e ".[dev]"   # editable install + dev tools (pytest, ruff, mypy)
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
-pytest tests              # 605 tests; all subprocess + HTTP calls are mocked
+pytest tests              # 794 tests; all subprocess + HTTP calls are mocked
 ```
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
 95% coverage floor on Python 3.10/3.11/3.12 (Linux) plus a 3.12 smoke on Windows and

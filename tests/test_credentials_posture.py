@@ -113,12 +113,10 @@ class TestInspect:
                 "vardrrunner.credentials.config.load",
                 side_effect=config_mod.InvalidConfigFile("bad"),
             ),
-            patch("vardrrunner.credentials.config.credential_source", return_value=None),
-            patch("vardrrunner.credentials.config.get_api_url", return_value=None),
             patch("vardrrunner.credentials.keychain.available", return_value=False),
         ):
             s = credentials.inspect()
-        assert s.plaintext_in_config is False
+        assert s.plaintext_in_config is False and s.source is None and s.api_url is None
 
 
 class TestCredentialsCommand:

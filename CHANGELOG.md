@@ -7,6 +7,147 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.35.0] — 2026-08-18
+
+Phase 5 completes the enterprise-for-small-teams roadmap with guided setup and final
+host-lifecycle hardening. See [`changelog/v0.35.0.md`](changelog/v0.35.0.md) and
+[ADR 0013](docs/adr/0013-guided-setup-and-host-lifecycle.md).
+
+### Added
+
+- `vardrrunner init` guides authentication, stable naming, journal initialization,
+  optional native service installation, and a final doctor gate.
+- `init --non-interactive` for deterministic provisioning, with explicit URL/key, name,
+  production profile, service, start, and Linux environment-file options.
+- Atomic exclusive daemon PID ownership and bounded daemon poll/heartbeat intervals.
+
+### Security and reliability
+
+- Service installation now rejects credentials that exist only in the invoking shell when
+  no persistent keychain/config fallback or Linux `--env-file` is available. This prevents
+  a successful install followed by an unauthenticated restart loop.
+- Config replacement is atomic and permission-restricted; interrupted saves no longer risk
+  truncating the active configuration.
+- A keychain login rolls back the stored key if persisting its backend URL fails. Explicit
+  plaintext storage also reports write failure cleanly without claiming success.
+- Direct Python calls can no longer mistake Typer's option metadata for an explicit
+  `--allow-plaintext-credentials` opt-in.
+- Login display escapes backend-controlled account names before Rich rendering.
+- Malformed/non-positive PID state is treated as stale; PID create/write/remove failures
+  are classified and surfaced without silently starting a second daemon.
+
+## [0.34.0] — 2026-08-18
+
+Phase 4 of the enterprise-grade roadmap: explicit runner/backend compatibility,
+local resource policy, target-shape validation, bounded queue concurrency, and opt-in
+release checks. See [`changelog/v0.34.0.md`](changelog/v0.34.0.md) and
+[ADR 0012](docs/adr/0012-compatibility-and-local-safety-controls.md).
+
+### Added
+
+- Heartbeat capability and job-schema advertisement plus optional backend compatibility
+  constraints. Hard incompatibilities pause queue claims without stopping heartbeats.
+- Strict `schema_version` validation on queue jobs; legacy jobs without the field use v1.
+- Local queue ceilings for target count, artifact size, free-disk reserve, and concurrency,
+  configured through bounded `VARDRRUNNER_*` environment variables.
+- Optional parallel queue execution across engagements. Jobs for one engagement are always
+  serialized and each worker owns an isolated HTTP client.
+- `vardrrunner update check [--force] [--json]`, an explicit, non-installing PyPI release
+  check with a 24-hour atomic local cache.
+
+### Security and reliability
+
+- Targets from CLI input, files, backend scope/recon, and pipeline handoffs reject control
+  characters, whitespace, option-like prefixes, non-HTTP URL schemes, and URL credentials.
+- Target files are capped at 10 MiB and malformed backend target collections fail cleanly.
+- Free-space policy is enforced before claim; output size is enforced before upload while
+  preserving the local artifact for review.
+- `doctor` validates and reports the effective resource policy. Scope and testing-window
+  findings remain advisory; these controls do not change authorization policy semantics.
+- Fixed the documented legacy `programs` response-key fallback for engagement listing.
+
+## [0.33.0] — 2026-08-18
+
+Phase 3 of the enterprise-grade roadmap: stable runner identity, structured daemon logs,
+native user-service management, and production readiness checks. See
+[`changelog/v0.33.0.md`](changelog/v0.33.0.md) and
+[ADR 0011](docs/adr/0011-runner-identity-and-service-management.md).
+
+### Added
+
+- Stable per-installation UUID and human label in `runner-identity.json`, with
+  race-safe first creation, `VARDRRUNNER_NAME`, and `identity show|set-name`.
+- Heartbeat `runner_id` and `name` fields, additive for compatibility with older backends.
+- `daemon start --log-format json` for rotating, redacted JSON Lines logs carrying schema,
+  UTC timestamp, level, event, runner ID, PID, and message.
+- `service install|status|uninstall` for systemd user services, macOS launchd agents, and
+  Windows Scheduled Tasks, including `--dry-run` and Linux `--env-file` support.
+- `doctor --production`, which requires secure credential storage, durable identity/journal,
+  stronger disk headroom, and active supervision.
+
+### Security and reliability
+
+- Service definitions never embed API keys and are written atomically with owner-only
+  permissions. Commands use argv execution without a shell.
+- Identity corruption fails closed and is never silently replaced; concurrent first use
+  converges on one UUID.
+- Structured log messages pass through centralized redaction before serialization.
+
+## [0.32.0] — 2026-08-18
+
+Phase 2 of the enterprise-grade roadmap: durable execution, crash reconciliation, run
+manifests, and local audit export. See [`changelog/v0.32.0.md`](changelog/v0.32.0.md) and
+[ADR 0010](docs/adr/0010-durable-execution-journal.md).
+
+### Added
+
+- Transactional SQLite/WAL execution journal with an explicit lifecycle state machine and
+  one-active-attempt-per-job invariant.
+- Startup reconciliation that resumes complete artifacts and pending finalization while
+  conservatively refusing ambiguous upload replay.
+- Child-process PID recording, streaming artifact SHA-256/size, and atomic per-run
+  `manifest.json` files.
+- `vardrrunner audit list|show|export` for sanitized local execution evidence.
+
+### Security
+
+- Queue work now fails closed before claim if the journal is unavailable or incompatible.
+- Journal profiles exclude raw targets, VardrGate test cases, credentials, headers, and
+  request bodies; manifests and exports are redacted again at write time.
+- Automatic recovery never repeats a non-idempotent upload whose outcome is unknown.
+
+### Reliability
+
+- Dead or restarted workers no longer leave recoverable jobs silently stuck in `running`.
+- SQLite handles are short-lived and always explicitly closed; WAL permits concurrent
+  read-only audit inspection while the daemon runs.
+
+## [0.31.1] — 2026-08-18
+
+Phase 1 completion and integration hardening. See
+[`changelog/v0.31.1.md`](changelog/v0.31.1.md).
+
+### Fixed
+
+- A `stop_work_active` finding returned in a successful claim response now blocks execution;
+  the helper that detected it previously existed only in unit tests and was not connected to
+  the job lifecycle.
+- Stop-work suppression now expires after 60 seconds and rechecks the backend. Lifting the
+  halt restores work without requiring a daemon restart, while repeated refusals remain
+  bounded to one per minute rather than every poll.
+- Credential posture inspection now genuinely survives corrupt or unreadable configuration;
+  it no longer catches one parse and then calls helpers that parse the same file again.
+- Redaction is applied across CLI errors, policy findings, job listings/configuration,
+  heartbeat and keychain logs, pipeline summaries, status/doctor output, engagement/scope
+  display, and direct run output. Untrusted Rich markup is escaped after secret masking.
+
+### Security
+
+- Job configurations displayed by `jobs list` are recursively sanitized, including literal
+  VardrGate identity credentials.
+- Backend-controlled warning text, engagement metadata, scope values, usernames and result
+  summaries can no longer inject Rich markup into the operator terminal.
+
 ## [0.31.0] — 2026-08-17
 
 Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See

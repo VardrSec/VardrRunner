@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from vardrrunner import config
@@ -24,6 +26,13 @@ def test_save_and_load_roundtrip():
     data = {"api_url": "https://example.com", "api_key": "vmap_test123"}
     config.save(data)
     assert config.load() == data
+
+
+def test_save_is_atomic_and_owner_only(tmp_config):
+    config.save({"api_url": "https://example.com", "api_key": "vmap_test123"})
+    assert not list(tmp_config.glob(".config.json.*.tmp"))
+    if os.name != "nt":
+        assert config.CONFIG_FILE.stat().st_mode & 0o077 == 0
 
 
 def test_save_creates_parent_directories(tmp_path, monkeypatch):
@@ -62,6 +71,25 @@ def test_env_used_when_no_file(monkeypatch):
     monkeypatch.setenv(config.ENV_API_URL, "https://env.example.com")
     monkeypatch.setenv(config.ENV_API_KEY, "vmap_env")
     assert config.require_auth() == ("https://env.example.com", "vmap_env")
+
+
+def test_persistent_credential_source_ignores_shell_only_auth(monkeypatch):
+    monkeypatch.setenv(config.ENV_API_URL, "https://env.example.com")
+    monkeypatch.setenv(config.ENV_API_KEY, "vmap_env")
+    assert config.persistent_credential_source() is None
+
+
+def test_persistent_credential_source_detects_file_and_keychain(monkeypatch):
+    config.save({"api_url": "https://file.example.com", "api_key": "vmap_file"})
+    assert config.persistent_credential_source() == "config file"
+    config.save({"api_url": "https://file.example.com"})
+    monkeypatch.setattr("vardrrunner.keychain.get_key", lambda _url: "vmap_keychain")
+    assert config.persistent_credential_source() == "keychain"
+
+
+def test_persistent_credential_source_rejects_insecure_saved_url():
+    config.save({"api_url": "http://remote.example.com", "api_key": "vmap_file"})
+    assert config.persistent_credential_source() is None
 
 
 # --------------------------------------------------------------------------- #

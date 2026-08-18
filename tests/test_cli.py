@@ -38,6 +38,54 @@ class TestStatusCommand:
         mock.assert_called_once()
 
 
+class TestInitCommand:
+    def test_all_options_are_forwarded(self, tmp_path):
+        env_file = tmp_path / "runner.env"
+        with patch("vardrrunner.commands.setup.initialize") as mock:
+            invoke(
+                "init",
+                "--url",
+                "https://api.example.com",
+                "--key",
+                "vmap_secret",
+                "--name",
+                "runner-a",
+                "--production",
+                "--install-service",
+                "--no-start-service",
+                "--env-file",
+                str(env_file),
+                "--allow-plaintext-credentials",
+                "--non-interactive",
+            )
+        mock.assert_called_once_with(
+            api_url="https://api.example.com",
+            api_key="vmap_secret",
+            name="runner-a",
+            production=True,
+            install_service=True,
+            start_service=False,
+            env_file=env_file,
+            allow_plaintext=True,
+            non_interactive=True,
+        )
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("--poll-interval", "0"),
+            ("--heartbeat-interval", "0"),
+            ("--poll-interval", "3601"),
+            ("--heartbeat-interval", "86401"),
+        ],
+    )
+    def test_daemon_intervals_are_bounded(self, args):
+        with patch("vardrrunner.commands.daemon.start") as start:
+            result = invoke("daemon", "start", *args)
+        assert result.exit_code != 0
+        start.assert_not_called()
+
+
 class TestDoctorCommand:
     def test_delegates_to_run_doctor(self):
         with patch("vardrrunner.commands.doctor.run_doctor") as mock:
@@ -49,7 +97,13 @@ class TestDoctorCommand:
         with patch("vardrrunner.commands.doctor.run_doctor") as mock:
             mock.side_effect = SystemExit(0)
             invoke("doctor", "--json")
-        mock.assert_called_once_with(as_json=True)
+        mock.assert_called_once_with(as_json=True, production=False)
+
+    def test_production_flag_passed(self):
+        with patch("vardrrunner.commands.doctor.run_doctor") as mock:
+            mock.side_effect = SystemExit(0)
+            invoke("doctor", "--production")
+        mock.assert_called_once_with(as_json=False, production=True)
 
 
 class TestHeartbeatCommand:
@@ -71,6 +125,66 @@ class TestWhoamiCommand:
         with patch("vardrrunner.commands.auth.whoami") as mock:
             invoke("whoami")
         mock.assert_called_once()
+
+
+class TestIdentityCommands:
+    def test_show(self):
+        with patch("vardrrunner.commands.identity.show") as mock:
+            invoke("identity", "show")
+        mock.assert_called_once()
+
+    def test_set_name(self):
+        with patch("vardrrunner.commands.identity.set_name") as mock:
+            invoke("identity", "set-name", "runner-a")
+        mock.assert_called_once_with("runner-a")
+
+
+class TestServiceCommands:
+    def test_install_options(self, tmp_path):
+        env_file = tmp_path / "runner.env"
+        with patch("vardrrunner.commands.service.install") as mock:
+            invoke(
+                "service",
+                "install",
+                "--env-file",
+                str(env_file),
+                "--no-start",
+                "--dry-run",
+            )
+        mock.assert_called_once_with(env_file=env_file, start=False, dry_run=True)
+
+    def test_status_and_uninstall(self):
+        with patch("vardrrunner.commands.service.show_status") as status:
+            invoke("service", "status")
+        status.assert_called_once()
+        with patch("vardrrunner.commands.service.uninstall") as uninstall:
+            invoke("service", "uninstall")
+        uninstall.assert_called_once()
+
+
+class TestUpdateCommands:
+    def test_check_options(self):
+        with patch("vardrrunner.commands.updates.check") as mock:
+            invoke("update", "check", "--force", "--json")
+        mock.assert_called_once_with(force=True, as_json=True)
+
+
+class TestAuditCommands:
+    def test_list_delegates(self):
+        with patch("vardrrunner.commands.audit.list_runs") as mock:
+            invoke("audit", "list", "--limit", "12", "--json")
+        mock.assert_called_once_with(since=None, limit=12, as_json=True)
+
+    def test_show_delegates(self):
+        with patch("vardrrunner.commands.audit.show_run") as mock:
+            invoke("audit", "show", "run-1")
+        mock.assert_called_once_with("run-1")
+
+    def test_export_delegates(self, tmp_path):
+        output = tmp_path / "audit.json"
+        with patch("vardrrunner.commands.audit.export_runs") as mock:
+            invoke("audit", "export", "--output", str(output), "--limit", "50")
+        mock.assert_called_once_with(output=output, since=None, limit=50)
 
 
 # ---------------------------------------------------------------------------

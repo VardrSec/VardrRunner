@@ -3,7 +3,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config
+from vardrrunner import api, config, redaction
 
 console = Console()
 
@@ -30,11 +30,12 @@ def import_file(tool: str, engagement_id: str, file: Path):
         client = api.VardrMapClient(url, key)
         result = client.import_file(engagement_id, tool, str(file))
     except Exception as e:
-        console.print(f"[red]Import failed:[/red] {e}")
+        console.print(f"[red]Import failed:[/red] {redaction.redact_rich_exception(e)}")
         raise typer.Exit(1) from e
 
     record = result.get("import_record", {})
     count = record.get("imported_count", "?")
     console.print(
-        f"[green]Imported[/green] {count} {tool} result(s) into engagement [bold]{engagement_id}[/bold]"
+        f"[green]Imported[/green] {count} {tool} result(s) into engagement "
+        f"[bold]{redaction.redact_rich_text(engagement_id)}[/bold]"
     )

@@ -72,10 +72,70 @@ def test_send_heartbeat_posts_correct_payload():
     client.send_heartbeat.assert_called_once()
     payload = client.send_heartbeat.call_args[0][0]
     assert payload["hostname"] == "test-host"
+    assert payload["runner_id"]
+    assert payload["name"] == "test-host"
     assert payload["os"] == "Linux 6.5"
     assert "httpx" in payload["tools"]
     assert payload["tools"]["httpx"]["ok"] is True
     assert payload["tools"]["httpx"]["version"] == "v1.0.0"
+    assert payload["compatibility"]["job_schema_versions"] == [1]
+
+
+def test_send_heartbeat_returns_backend_compatibility_block(caplog):
+    import logging
+
+    from vardrrunner import compatibility
+    from vardrrunner.commands.heartbeat import send_heartbeat
+
+    client = MagicMock()
+    client.send_heartbeat.return_value = {"compatibility": {"min_runner_version": "99.0.0"}}
+    with (
+        patch(
+            "vardrrunner.commands.heartbeat.config.require_auth", return_value=("http://api", "key")
+        ),
+        patch("vardrrunner.commands.heartbeat.api.VardrMapClient", return_value=client),
+        patch("vardrrunner.commands.heartbeat.runner.tool_available", return_value=False),
+        caplog.at_level(logging.ERROR),
+    ):
+        report = send_heartbeat(quiet=True)
+    assert report is not None
+    assert report.level is compatibility.CompatibilityLevel.BLOCK
+    assert any("compatibility block" in record.message.lower() for record in caplog.records)
+
+
+def test_send_heartbeat_prints_compatibility_warning(capsys):
+    from vardrrunner.commands.heartbeat import send_heartbeat
+
+    client = MagicMock()
+    client.send_heartbeat.return_value = {"compatibility": {"min_runner_version": "not-semver"}}
+    with (
+        patch(
+            "vardrrunner.commands.heartbeat.config.require_auth", return_value=("http://api", "key")
+        ),
+        patch("vardrrunner.commands.heartbeat.api.VardrMapClient", return_value=client),
+        patch("vardrrunner.commands.heartbeat.runner.tool_available", return_value=False),
+    ):
+        send_heartbeat(quiet=False)
+    assert "Compatibility warning" in capsys.readouterr().out
+
+
+def test_send_heartbeat_logs_compatibility_warning(caplog):
+    import logging
+
+    from vardrrunner.commands.heartbeat import send_heartbeat
+
+    client = MagicMock()
+    client.send_heartbeat.return_value = {"compatibility": {"min_runner_version": "not-semver"}}
+    with (
+        patch(
+            "vardrrunner.commands.heartbeat.config.require_auth", return_value=("http://api", "key")
+        ),
+        patch("vardrrunner.commands.heartbeat.api.VardrMapClient", return_value=client),
+        patch("vardrrunner.commands.heartbeat.runner.tool_available", return_value=False),
+        caplog.at_level(logging.WARNING),
+    ):
+        send_heartbeat(quiet=True)
+    assert any("compatibility warning" in record.message.lower() for record in caplog.records)
 
 
 def test_send_heartbeat_marks_missing_tools():
@@ -215,6 +275,27 @@ def test_send_heartbeat_quiet_failure_logs_warning(caplog):
         send_heartbeat(quiet=True)
 
     assert any("Heartbeat failed" in r.message for r in caplog.records)
+
+
+def test_send_heartbeat_skips_when_identity_is_broken(caplog):
+    import logging
+
+    from vardrrunner import identity
+    from vardrrunner.commands.heartbeat import send_heartbeat
+
+    with (
+        patch(
+            "vardrrunner.commands.heartbeat.config.require_auth", return_value=("http://api", "key")
+        ),
+        patch(
+            "vardrrunner.commands.heartbeat.identity.load_or_create",
+            side_effect=identity.IdentityError("broken"),
+        ),
+        patch("vardrrunner.commands.heartbeat.runner.tool_available", return_value=False),
+        caplog.at_level(logging.WARNING),
+    ):
+        send_heartbeat(quiet=True)
+    assert any("identity unavailable" in record.message for record in caplog.records)
 
 
 # ---------------------------------------------------------------------------

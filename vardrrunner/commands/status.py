@@ -9,7 +9,7 @@ import requests
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config, runner
+from vardrrunner import api, config, redaction, runner
 
 console = Console()
 
@@ -61,12 +61,16 @@ def run_status() -> None:
         user = client.whoami()
         username = user.get("username") or user.get("github_id") or "unknown"
         authed = True
-        _row(conn_table, True, f"Authenticated as [bold]{username}[/bold]")
+        _row(
+            conn_table,
+            True,
+            f"Authenticated as [bold]{redaction.redact_rich_text(str(username))}[/bold]",
+        )
     except requests.HTTPError as e:
         status_code = e.response.status_code if e.response is not None else "?"
         _row(conn_table, False, f"Authentication failed (HTTP {status_code})")
     except requests.RequestException as e:
-        _row(conn_table, False, f"API unreachable — {e}")
+        _row(conn_table, False, f"API unreachable — {redaction.redact_rich_exception(e)}")
 
     if authed:
         try:
@@ -81,7 +85,11 @@ def run_status() -> None:
             status_code = e.response.status_code if e.response is not None else "?"
             _row(conn_table, False, f"Could not fetch engagements (HTTP {status_code})")
         except requests.RequestException as e:
-            _row(conn_table, False, f"Could not fetch engagements — {e}")
+            _row(
+                conn_table,
+                False,
+                f"Could not fetch engagements — {redaction.redact_rich_exception(e)}",
+            )
 
     console.print()
     console.print("[bold]Connection[/bold]")

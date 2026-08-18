@@ -26,7 +26,7 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **605 tests** at ~96% coverage (CI floor: 95%), all hermetic: no network, no real
+- **794 tests** at ~95% coverage (CI floor: 95%), all hermetic: no network, no real
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
@@ -56,6 +56,16 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_heartbeat.py` | heartbeat payload + posting |
 | `tests/test_job_events.py` | lifecycle event emission |
 | `tests/test_runner.py` | subprocess execution, timeouts, output capture, failures |
+| `tests/test_journal.py` | SQLite schema/state-machine invariants, concurrency, hashing, manifests, and job integration |
+| `tests/test_recovery.py` | interruption reconciliation, safe resume, ambiguous-upload refusal, backend isolation |
+| `tests/test_audit.py` | sanitized list/show/export behavior and atomic export failures |
+| `tests/test_identity.py` | stable UUID creation, concurrent first use, labels, corruption and IO failures |
+| `tests/test_service.py` | cross-platform service plans, command safety, install/status/uninstall behavior |
+| `tests/test_compatibility.py` | version parsing, capability/schema negotiation, legacy and malformed responses |
+| `tests/test_resources.py` | bounded environment policy, disk reserve, and artifact ceilings |
+| `tests/test_updates.py` | cached release checks and human/JSON command output |
+| `tests/test_phase4_safety.py` | target shape, queue ceilings, compatibility gate, and engagement-safe concurrency |
+| `tests/test_setup.py` | interactive/non-interactive onboarding, option forwarding, idempotent state, and doctor gating |
 | `tests/test_nmap.py` | nmap target normalization + profile + `run nmap` command |
 | `tests/test_status.py` | tool detection + status output |
 | `tests/test_doctor.py` | preflight checks, exit codes, and `--json` report |
@@ -118,5 +128,16 @@ Or skip the file entirely with environment variables (handy for tests/containers
 export VARDRMAP_URL=http://localhost:8000
 export VARDRMAP_API_KEY=vmap_devkey
 export VARDRRUNNER_TOOL_TIMEOUT=300        # optional: per-tool run ceiling, seconds
+export VARDRUNNER_NAME=chicago-runner-1   # optional: heartbeat/display label override
+export VARDRRUNNER_MAX_TARGETS=500          # queue target ceiling (1..100000)
+export VARDRRUNNER_MAX_ARTIFACT_MB=100      # output ceiling before upload (1..10240)
+export VARDRRUNNER_MAX_CONCURRENT_JOBS=1    # parallel engagement groups (1..8)
+export VARDRRUNNER_MIN_FREE_DISK_MB=512     # required reserve before claim/execute
 ```
 Env values take precedence over the config file.
+
+For a systemd service using environment-only auth, create and permission your own env file,
+run `chmod 600 /path/to/runner.env`, then run
+`vardrrunner init --production --env-file /path/to/runner.env`. Do not commit that file.
+VardrRunner references the path but deliberately never creates or displays its secret
+contents. macOS/Windows per-user services should use keychain/config auth.

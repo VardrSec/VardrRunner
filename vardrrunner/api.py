@@ -23,6 +23,24 @@ from vardrrunner import __version__, errors
 
 # Statuses worth retrying: rate-limit + transient server/proxy errors.
 _RETRY_STATUSES = (429, 500, 502, 503, 504)
+PYPI_METADATA_URL = "https://pypi.org/pypi/vardrrunner/json"
+
+
+class ReleaseMetadataError(RuntimeError):
+    """The public package registry could not provide valid release metadata."""
+
+
+def fetch_release_metadata(timeout: int = 10) -> dict:
+    """Fetch public package metadata for the opt-in release check."""
+    try:
+        response = requests.get(PYPI_METADATA_URL, timeout=timeout)
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise ReleaseMetadataError("package registry request failed") from exc
+    if not isinstance(payload, dict):
+        raise ReleaseMetadataError("package registry returned a non-object response")
+    return payload
 
 
 class VardrMapClient:
@@ -83,9 +101,9 @@ class VardrMapClient:
 
     def engagements(self) -> list[dict]:
         data = self.get("/engagements")
-        # VardrMap returns both keys during the engagements → engagements
+        # VardrMap returns both keys during the programs → engagements
         # transition; prefer the new name and fall back to the old one.
-        return data.get("engagements") or data.get("engagements", [])
+        return data.get("engagements") or data.get("programs", [])
 
     def engagement(self, engagement_id: str) -> dict:
         return self.get(f"/engagements/{engagement_id}")

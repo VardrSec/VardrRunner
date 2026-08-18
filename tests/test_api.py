@@ -5,12 +5,13 @@ resilience contract: idempotent methods retry on transient failures with backoff
 while POST/PATCH never auto-retry (so a dropped response can't double-act).
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from urllib3.util.retry import Retry
 
-from vardrrunner import __version__
+from vardrrunner import __version__, api
 from vardrrunner.api import _RETRY_STATUSES, VardrMapClient
 
 
@@ -255,6 +256,26 @@ def test_send_heartbeat():
     c = _client()
     with patch.object(c, "post", return_value={"ok": True}):
         assert c.send_heartbeat({"hostname": "box"}) == {"ok": True}
+
+
+def test_engagements_falls_back_to_legacy_programs_key():
+    client = api.VardrMapClient("https://api.test", "key")
+    with patch.object(client, "get", return_value={"programs": [{"id": "legacy"}]}):
+        assert client.engagements() == [{"id": "legacy"}]
+
+
+def test_fetch_release_metadata_validates_transport_and_shape():
+    response = MagicMock()
+    response.json.return_value = {"info": {"version": "1.2.3"}}
+    with patch("vardrrunner.api.requests.get", return_value=response):
+        assert api.fetch_release_metadata()["info"]["version"] == "1.2.3"
+    response.json.return_value = []
+    with patch("vardrrunner.api.requests.get", return_value=response):
+        with pytest.raises(api.ReleaseMetadataError):
+            api.fetch_release_metadata()
+    with patch("vardrrunner.api.requests.get", side_effect=requests.RequestException("offline")):
+        with pytest.raises(api.ReleaseMetadataError):
+            api.fetch_release_metadata()
 
 
 def test_post_event():
