@@ -40,8 +40,25 @@ console = Console()
 MAX_TARGETS_DEFAULT = 500
 
 
+def validate_max_targets(max_targets: int) -> None:
+    """Reject a negative cap.
+
+    The cap checks are written as `max_targets > 0`, so any negative value skips
+    them entirely — a silently disabled safety guard. Only 0 is documented as
+    disabling the cap, and a disabled guard should be something the operator
+    typed deliberately, not the result of a stray minus sign.
+    """
+    if max_targets < 0:
+        console.print(
+            f"[red]Aborted:[/red] --max-targets must be 0 or greater (got {max_targets}). "
+            f"Pass [bold]--max-targets 0[/bold] to disable the cap."
+        )
+        raise typer.Exit(1)
+
+
 def _check_target_cap(targets: list[str], max_targets: int) -> None:
     """Abort if target count exceeds max_targets. Skipped when max_targets == 0."""
+    validate_max_targets(max_targets)
     if max_targets > 0 and len(targets) > max_targets:
         console.print(
             f"[red]Aborted:[/red] {len(targets)} targets exceeds --max-targets {max_targets}. "
