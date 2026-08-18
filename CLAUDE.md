@@ -14,7 +14,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
   - `commands/` — one module per group: `auth`, `daemon`, `doctor`, `heartbeat`, `imports`, `jobs`, `pipeline`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (450 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite (463 tests, ~96% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
 - `.github/workflows/` — CI (lint + tests on every push)
@@ -89,3 +89,9 @@ back-compat aliases.
 command module. Two v0.28.0 fixes existed precisely because nothing asserted kwargs:
 `--max-targets` was implemented but never exposed, and `import ffuf` stayed registered
 after leaving `SUPPORTED_TOOLS`. **When adding a flag, assert the kwarg it produces.**
+
+Assert its *range*, too. v0.28.1 fixed `--max-targets -1` silently disabling the target
+cap: every guard reads `max_targets > 0`, so a negative skipped it. For any option that
+gates a safety check, test the out-of-range values, not just the happy path — a guard that
+can be switched off by a stray minus sign is worse than no guard, because the operator
+believes it is on.

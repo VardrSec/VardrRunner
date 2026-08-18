@@ -29,7 +29,7 @@ from rich.table import Table
 from rich.text import Text
 
 from vardrrunner import api, config, configs, handlers, pipelines, runner
-from vardrrunner.commands.run import MAX_TARGETS_DEFAULT, _make_run_dir
+from vardrrunner.commands.run import MAX_TARGETS_DEFAULT, _make_run_dir, validate_max_targets
 
 console = Console()
 
@@ -261,6 +261,10 @@ def run_pipeline(
     as_json: bool = False,
 ) -> None:
     """Run every stage of a pipeline in order against an engagement."""
+    # Validated once up front: `_run_stage` gates on `max_targets > 0`, so a
+    # negative value would skip the cap on every stage without saying so.
+    validate_max_targets(max_targets)
+
     stages = pipelines.PIPELINES.get(name)
     if stages is None:
         available = ", ".join(pipelines.PIPELINES)

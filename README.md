@@ -119,8 +119,11 @@ See **[docs/cli.md](docs/cli.md)** for the full command reference.
 ## Configuration
 
 **Desktop / dev:** `vardrrunner login` stores your API key in the **OS keychain** (macOS
-Keychain, Windows Credential Locker, Linux Secret Service) — no plaintext key on disk. The
-backend URL is kept in `~/.vardrmap/config.json`. Run `vardrrunner logout` to remove it.
+Keychain, Windows Credential Locker, Linux Secret Service), leaving only the backend URL in
+`~/.vardrmap/config.json`. Where no keyring backend is available it falls back to writing
+the key in cleartext to that same file, warning you when it does — so on headless boxes and
+containers prefer `VARDRMAP_API_KEY` below. `vardrrunner status` reports which source is
+actually in use, and `vardrrunner logout` removes the key from both.
 
 **CI / servers / containers:** set credentials via environment variables (no keychain
 needed). The key resolves in this order — **`VARDRMAP_API_KEY` env → OS keychain → config
@@ -149,7 +152,7 @@ pip install -e ".[dev]"   # editable install + dev tools (pytest, ruff, mypy)
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
-pytest tests              # 450 tests; all subprocess + HTTP calls are mocked
+pytest tests              # 463 tests; all subprocess + HTTP calls are mocked
 ```
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
 95% coverage floor on Python 3.10/3.11/3.12 (Linux) plus a 3.12 smoke on Windows and

@@ -57,6 +57,13 @@ def test_run_pipeline_unknown_name_exits():
 # ---------------------------------------------------------------------------
 
 
+def test_pipeline_rejects_negative_max_targets():
+    """`_run_stage` gates on `max_targets > 0`, so a negative would disable the cap
+    on every stage. run_pipeline must refuse before any stage executes."""
+    with pytest.raises(typer.Exit):
+        pipeline_cmd.run_pipeline("quick", "prog-1", yes=True, max_targets=-1)
+
+
 def test_pipeline_aborts_when_stage_exceeds_max_targets(tmp_path):
     """Pipeline stops and does not run the tool when targets > max_targets."""
     client = MagicMock()

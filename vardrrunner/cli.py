@@ -221,7 +221,7 @@ def run_httpx(
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     max_targets: int = typer.Option(
-        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
     ),
 ):
     """Run httpx locally and upload results to VardrMap."""
@@ -245,7 +245,7 @@ def run_subfinder(
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     max_targets: int = typer.Option(
-        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
     ),
 ):
     """Run subfinder against wildcard scope entries and import discovered hosts."""
@@ -275,7 +275,7 @@ def run_nuclei(
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     max_targets: int = typer.Option(
-        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
     ),
 ):
     """Run nuclei locally and upload results to VardrMap."""
@@ -312,7 +312,7 @@ def run_nmap(
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     max_targets: int = typer.Option(
-        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
     ),
 ):
     """Run nmap service discovery locally and upload open ports to VardrMap."""
@@ -344,7 +344,7 @@ def run_dnsx(
     limit: int = typer.Option(500, "--limit", help="Max recon items to use (--from-recon only)"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     max_targets: int = typer.Option(
-        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
     ),
 ):
     """Resolve hosts with dnsx and upload the resolvable ones as recon targets."""
@@ -375,7 +375,7 @@ def run_naabu(
     top_ports: int = typer.Option(100, "--top-ports", help="Number of most-common ports to scan"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     max_targets: int = typer.Option(
-        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
     ),
 ):
     """Port-scan hosts with naabu locally and upload open ports to VardrMap."""
@@ -424,7 +424,7 @@ def pipeline_run(
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit a machine-readable JSON result"),
     max_targets: int = typer.Option(
-        run.MAX_TARGETS_DEFAULT, "--max-targets", help=_MAX_TARGETS_HELP
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
     ),
 ):
     """Run every stage of a pipeline in order against an engagement."""

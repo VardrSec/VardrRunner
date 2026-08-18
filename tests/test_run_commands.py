@@ -92,6 +92,26 @@ def test_check_target_cap_disabled_by_zero():
     run_cmd._check_target_cap(["t"] * 10_000, max_targets=0)  # must not raise
 
 
+# A negative cap used to skip the check entirely, because every guard is written
+# as `max_targets > 0`. Only 0 is documented as disabling the cap, so a stray
+# minus sign must be an error rather than a silently disabled safety guard.
+@pytest.mark.parametrize("bad", [-1, -500])
+def test_validate_max_targets_rejects_negative(bad):
+    with pytest.raises(typer.Exit):
+        run_cmd.validate_max_targets(bad)
+
+
+@pytest.mark.parametrize("ok", [0, 1, 500])
+def test_validate_max_targets_accepts_zero_and_positive(ok):
+    run_cmd.validate_max_targets(ok)  # must not raise
+
+
+def test_check_target_cap_rejects_negative_before_counting():
+    """Negative must abort even when the target count is under any sane limit."""
+    with pytest.raises(typer.Exit):
+        run_cmd._check_target_cap(["t"], max_targets=-1)
+
+
 def test_run_httpx_respects_max_targets():
     p = _common_patches(["t"] * 600)
     with p[0], p[1], p[2], p[3], patch("vardrrunner.runner.run_httpx") as mock_httpx:

@@ -256,6 +256,24 @@ class TestRunCommands:
         _, kwargs = mock.call_args
         assert kwargs.get("max_targets") == run_cmd.MAX_TARGETS_DEFAULT
 
+    @pytest.mark.parametrize("tool", ["httpx", "nuclei", "nmap", "dnsx", "naabu"])
+    def test_run_rejects_negative_max_targets(self, tool):
+        """Rejected at parse time, so it never reaches the command module."""
+        with patch(f"vardrrunner.commands.run.run_{tool}") as mock:
+            result = invoke(
+                "run", tool, "--engagement", "p1", "--target", "x", "--max-targets", "-1", "--yes"
+            )
+        assert result.exit_code != 0
+        mock.assert_not_called()
+
+    def test_pipeline_rejects_negative_max_targets_at_parse_time(self):
+        with patch("vardrrunner.commands.pipeline.run_pipeline") as mock:
+            result = invoke(
+                "pipeline", "run", "quick", "--engagement", "p1", "--max-targets", "-1", "--yes"
+            )
+        assert result.exit_code != 0
+        mock.assert_not_called()
+
     def test_run_max_targets_zero_disables_the_cap(self):
         with patch("vardrrunner.commands.run.run_httpx") as mock:
             invoke(

@@ -7,8 +7,27 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.28.1] — 2026-08-17
+
+### Fixed
+
+- **A negative `--max-targets` silently disabled the target cap.** Every guard is written
+  as `max_targets > 0`, so `--max-targets -1` skipped the check entirely and let an
+  unbounded target list through — on a tool that runs nmap and nuclei. Only `0` was ever
+  documented as disabling the cap. Negative values are now rejected at parse time
+  (`min=0`), and `validate_max_targets()` rejects them again inside `_check_target_cap()`
+  and at the top of `run_pipeline()` so programmatic callers cannot skip the guard either.
+  Introduced in v0.28.0, when the option was first exposed to the command line.
+
 ### Documentation
 
+- **Corrected an overstated claim about API key storage.** `docs/cli.md` said that using
+  the hidden-input prompt "never writes it to disk in cleartext", and the README said
+  logging in means "no plaintext key on disk". Neither is true without an OS keychain: on a
+  machine with no keyring backend, `login` falls back to writing the key in cleartext to
+  `~/.vardrmap/config.json` (with a warning) regardless of how it was supplied. The prompt
+  protects shell history, nothing more. Both files now say so and point headless users at
+  `VARDRMAP_API_KEY`.
 - **Install instructions rewritten around PyPI.** `pipx install vardrrunner` is now the
   headline path rather than a "once published" placeholder, with the GitHub Release wheel
   demoted to the verify-before-installing case and source install marked as development.
