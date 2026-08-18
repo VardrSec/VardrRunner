@@ -47,6 +47,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/keychain.py` | OS keychain wrapper (`keyring`) for the API key. Degrades gracefully (returns None/False) when no backend is present, so servers fall back to env/file. |
 | `vardrrunner/configs.py` | Typed, validated tool configs (`HttpxConfig`, `NucleiConfig`, `NmapConfig`, `SubfinderConfig`, `VardrGateConfig`). Raw backend dicts are parsed into frozen dataclasses up front; invalid values raise `ConfigError` and fail the job fast. |
 | `vardrrunner/errors.py` | The failure taxonomy (`FailureCategory`) and `RunnerError` hierarchy, plus `classify_status()` — the single place an HTTP status becomes a domain meaning. Imports nothing from the package or outside stdlib, so it is the bottom of the dependency graph (see ADR 0008). |
+| `vardrrunner/redaction.py` | The single sanitization layer. Everything the runner emits — job events, failure reasons, log lines, errors — passes through here first. Masks by key name and by value pattern; deterministic, idempotent, depth-bounded, and never raises. |
 | `vardrrunner/policy.py` | All parsing and presentation of the backend's advisory `warnings` array. Isolated so a backend shape change touches one file; parsing is total and never raises. |
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
@@ -127,6 +128,20 @@ cycle; a restart re-checks, so lifting stop-work needs no special command.
 with `404` rather than `403`, so object existence is never disclosed. That
 assumption is recorded in ADR 0008 and is what would need revisiting if the
 backend contract changed.
+
+### Redaction
+
+Every value leaving the process is sanitized by `redaction.py` first: job events
+(written to the backend and rendered in its Terminal), failure reasons (printed
+*and* stored as `error_message`), log lines, and daemon poll errors. It defends
+on two axes — by key name (`api_key`, `authorization`, `cookie`, `value_env`, …,
+normalised so `X-API-KEY` matches) and by value pattern (`vmap_` keys, `Bearer`
+headers, secret query parameters, `key=value` in free text) — because either
+alone leaves a gap.
+
+It is deliberately **not** a guarantee that secrets never touch disk: a tool
+writes its own artifacts and the runner does not rewrite them. It governs what
+the runner *says* about them.
 
 Everything in a policy payload is **untrusted remote data**. It is rendered as
 text and recorded; it never influences control flow beyond display, and it is

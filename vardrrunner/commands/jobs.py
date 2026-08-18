@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config, configs, errors, handlers, policy, runner
+from vardrrunner import api, config, configs, errors, handlers, policy, redaction, runner
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.run import _confirm, _make_run_dir
 
@@ -51,18 +51,32 @@ def list_jobs() -> None:
 
 
 def _emit(client: api.VardrMapClient, job_id: str, kind: str, text: str = "") -> None:
-    """Post a job event; log failures so operators can diagnose stuck jobs."""
+    """Post a job event, sanitized.
+
+    Event text is written to the backend and rendered in its Terminal, so this
+    is a trust boundary: everything crossing it goes through the redactor first.
+    Failures are logged rather than raised — a lost event must not fail a job
+    that otherwise succeeded.
+    """
     try:
-        client.post_event(job_id, kind, text)
+        client.post_event(job_id, kind, redaction.redact_text(text))
     except Exception as e:
-        logging.warning("Failed to post event %r for job %s: %s", kind, job_id, e)
+        logging.warning(
+            "Failed to post event %r for job %s: %s", kind, job_id, redaction.redact_exception(e)
+        )
 
 
 def _fail_job(client: api.VardrMapClient, con: Console, job_id: str, error: str) -> None:
-    """Mark a job failed and emit the matching event — the single failure path."""
-    con.print(f"[red]Job failed:[/red] {error}")
-    client.complete_job(job_id, "failed", error=error[:500])
-    _emit(client, job_id, "failed", error[:500])
+    """Mark a job failed and emit the matching event — the single failure path.
+
+    The reason is sanitized before it reaches the terminal *or* the backend.
+    Failure messages routinely quote the command, URL or payload that failed,
+    which is precisely where a credential ends up.
+    """
+    safe = redaction.redact_text(error)[:500]
+    con.print(f"[red]Job failed:[/red] {safe}")
+    client.complete_job(job_id, "failed", error=safe)
+    _emit(client, job_id, "failed", safe)
 
 
 def _complete_done(client: api.VardrMapClient, job_id: str, note: str = "") -> None:
@@ -140,8 +154,11 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
     except Exception as e:
         # Daemon boundary: an unclassified claim failure must not kill the poll
         # loop or wrongly mark another runner's job failed. Logged for triage.
-        logging.warning("Unclassified claim failure for job %s: %s", job_id, e)
-        con.print(f"[red]Could not claim job ({errors.FailureCategory.UNKNOWN.value}):[/red] {e}")
+        safe = redaction.redact_exception(e)
+        logging.warning("Unclassified claim failure for job %s: %s", job_id, safe)
+        con.print(
+            f"[red]Could not claim job ({errors.FailureCategory.UNKNOWN.value}):[/red] {safe}"
+        )
         return
 
     # Advisory findings from the backend's policy evaluation. Shown before any
