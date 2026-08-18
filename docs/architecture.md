@@ -58,6 +58,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/resources.py` | Bounded environment-driven target, artifact, concurrency, and free-disk policy shared by direct, pipeline, and queue execution. |
 | `vardrrunner/updates.py` | Explicit release-check orchestration and 24-hour atomic cache. Network access remains isolated in `api.py`. |
 | `vardrrunner/policy.py` | All parsing and presentation of the backend's advisory `warnings` array. Isolated so a backend shape change touches one file; parsing is total and never raises. |
+| `vardrrunner/target_safety.py` | Classifies resolved targets (public / private / loopback / link-local / cloud metadata) and evaluates locally-configured deny rules. Classification is lexical — no DNS — so it stays fast, offline-safe, and free of a TOCTOU gap against the tool's own resolution. |
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
 | `vardrrunner/pipelines.py` | Named recon pipelines — ordered lists of `Stage(tool, source)`. Stages reference handlers; each stage writes its discovered targets to a local handoff file, which the next stage reads directly instead of querying the backend recon store. |
@@ -230,7 +231,8 @@ in depth—in a successful response's warning array.
 - **Ambiguous uploads are not replayed.** Recovery favors duplicate prevention when the
   backend cannot prove idempotency; artifacts remain available for operator review.
 - **Advisory stays advisory.** Only stop-work and explicitly configured local deny rules
-  may block; scope and window findings warn.
+  may block; scope, window, and target-classification findings warn. Nothing is denied
+  by default, and every override is recorded as a job event.
 - **Blast radius is capped.** A run aborts before executing anything if the resolved target
   count exceeds 500 (`commands/run.py: MAX_TARGETS_DEFAULT`), including under `--yes`.
 - **Compatibility precedes claims.** Definite runner/backend version, capability, or schema

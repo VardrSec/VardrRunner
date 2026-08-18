@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 import typer
 from rich.console import Console
 
-from vardrrunner import api
+from vardrrunner import api, target_safety
 
 console = Console()
 
@@ -59,10 +59,50 @@ def validate_targets(targets: list[str]) -> list[str]:
 
 def _safe(targets: list[str]) -> list[str]:
     try:
-        return validate_targets(targets)
+        clean = validate_targets(targets)
     except TargetValidationError as exc:
         console.print(f"[red]Invalid target input:[/red] {exc}")
         raise typer.Exit(1) from exc
+    return screen_targets(clean)
+
+
+def screen_targets(targets: list[str]) -> list[str]:
+    """Surface advisory findings and enforce locally-configured deny rules.
+
+    Findings (loopback, link-local, cloud metadata) are **advisory** and never
+    block — the same contract the backend's scope findings follow. Only a deny
+    rule the operator configured blocks, and ``VARDRRUNNER_ALLOW_DENIED_TARGETS``
+    overrides that explicitly.
+    """
+    for finding in target_safety.assess(targets):
+        console.print(f"[yellow]⚠ {finding.describe()}[/yellow]")
+
+    rules = target_safety.load_deny_rules()
+    allowed, denied = target_safety.apply_deny_rules(targets, rules)
+    if not denied:
+        return allowed
+
+    if target_safety.override_enabled():
+        for finding in denied:
+            console.print(
+                f"[yellow]override:[/yellow] {finding.describe()} — permitted by "
+                f"{target_safety.ENV_ALLOW_DENIED}"
+            )
+        return list(targets)
+
+    for finding in denied:
+        console.print(f"[red]blocked:[/red] {finding.describe()}")
+    if not allowed:
+        console.print(
+            f"[red]All targets blocked by local deny rules.[/red] Set "
+            f"{target_safety.ENV_ALLOW_DENIED}=1 to override."
+        )
+        raise typer.Exit(1)
+    console.print(
+        f"[yellow]{len(denied)} target(s) blocked, continuing with {len(allowed)}.[/yellow] "
+        f"Set {target_safety.ENV_ALLOW_DENIED}=1 to override."
+    )
+    return allowed
 
 
 def _malformed_source(source: str) -> NoReturn:

@@ -29,8 +29,9 @@ from vardrrunner import (
     redaction,
     resources,
     runner,
+    target_safety,
 )
-from vardrrunner import targets as target_safety
+from vardrrunner import targets as targets_module
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.run import _confirm, _make_run_dir
 from vardrrunner.journal import Journal, Phase, RunRecord, utc_now
@@ -210,8 +211,8 @@ def _execute_one(
         fail(errors.FailureCategory.TARGET_RESOLUTION, f"failed to resolve targets: {e}")
         return
     try:
-        targets = target_safety.validate_targets(targets)
-    except target_safety.TargetValidationError as e:
+        targets = targets_module.validate_targets(targets)
+    except targets_module.TargetValidationError as e:
         fail(errors.FailureCategory.TARGET_VALIDATION, str(e))
         return
     if len(targets) > limits.max_targets:
@@ -220,6 +221,39 @@ def _execute_one(
             f"resolved target count {len(targets)} exceeds local limit {limits.max_targets}",
         )
         return
+
+    # Advisory classification (loopback / link-local / cloud metadata). Shown and
+    # recorded, never blocking — the operator owns where they aim, exactly as
+    # with the backend's scope findings.
+    for finding in target_safety.assess(targets):
+        con.print(f"[yellow]⚠ {finding.describe()}[/yellow]")
+        _emit(client, job_id, "target_warning", finding.describe())
+
+    # Local deny rules are the one thing that blocks, and only when the operator
+    # configured them. The override is an env var so it also works on this,
+    # the unattended path, where there is no command line.
+    denied: tuple[target_safety.TargetFinding, ...] = ()
+    rules = target_safety.load_deny_rules()
+    if rules:
+        allowed, denied = target_safety.apply_deny_rules(targets, rules)
+        if denied and target_safety.override_enabled():
+            for finding in denied:
+                _emit(client, job_id, "deny_override", finding.describe())
+            denied = ()
+        elif denied:
+            for finding in denied:
+                con.print(f"[red]blocked:[/red] {finding.describe()}")
+                _emit(client, job_id, "target_blocked", finding.describe())
+            if not allowed:
+                fail(
+                    errors.FailureCategory.TARGET_DENIED,
+                    f"all {len(targets)} target(s) blocked by local deny rules",
+                )
+                return
+            targets = allowed
+
+    stats = target_safety.summarize(targets, targets)
+    _emit(client, job_id, "target_stats", stats.summary())
 
     if journal_store is not None and record is not None:
         record = journal_store.transition(
