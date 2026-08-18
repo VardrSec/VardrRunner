@@ -7,6 +7,33 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.33.0] — 2026-08-18
+
+Phase 3 of the enterprise-grade roadmap: stable runner identity, structured daemon logs,
+native user-service management, and production readiness checks. See
+[`changelog/v0.33.0.md`](changelog/v0.33.0.md) and
+[ADR 0011](docs/adr/0011-runner-identity-and-service-management.md).
+
+### Added
+
+- Stable per-installation UUID and human label in `runner-identity.json`, with
+  race-safe first creation, `VARDRRUNNER_NAME`, and `identity show|set-name`.
+- Heartbeat `runner_id` and `name` fields, additive for compatibility with older backends.
+- `daemon start --log-format json` for rotating, redacted JSON Lines logs carrying schema,
+  UTC timestamp, level, event, runner ID, PID, and message.
+- `service install|status|uninstall` for systemd user services, macOS launchd agents, and
+  Windows Scheduled Tasks, including `--dry-run` and Linux `--env-file` support.
+- `doctor --production`, which requires secure credential storage, durable identity/journal,
+  stronger disk headroom, and active supervision.
+
+### Security and reliability
+
+- Service definitions never embed API keys and are written atomically with owner-only
+  permissions. Commands use argv execution without a shell.
+- Identity corruption fails closed and is never silently replaced; concurrent first use
+  converges on one UUID.
+- Structured log messages pass through centralized redaction before serialization.
+
 ## [0.32.0] — 2026-08-18
 
 Phase 2 of the enterprise-grade roadmap: durable execution, crash reconciliation, run

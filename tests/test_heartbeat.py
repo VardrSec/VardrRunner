@@ -72,6 +72,8 @@ def test_send_heartbeat_posts_correct_payload():
     client.send_heartbeat.assert_called_once()
     payload = client.send_heartbeat.call_args[0][0]
     assert payload["hostname"] == "test-host"
+    assert payload["runner_id"]
+    assert payload["name"] == "test-host"
     assert payload["os"] == "Linux 6.5"
     assert "httpx" in payload["tools"]
     assert payload["tools"]["httpx"]["ok"] is True
@@ -215,6 +217,27 @@ def test_send_heartbeat_quiet_failure_logs_warning(caplog):
         send_heartbeat(quiet=True)
 
     assert any("Heartbeat failed" in r.message for r in caplog.records)
+
+
+def test_send_heartbeat_skips_when_identity_is_broken(caplog):
+    import logging
+
+    from vardrrunner import identity
+    from vardrrunner.commands.heartbeat import send_heartbeat
+
+    with (
+        patch(
+            "vardrrunner.commands.heartbeat.config.require_auth", return_value=("http://api", "key")
+        ),
+        patch(
+            "vardrrunner.commands.heartbeat.identity.load_or_create",
+            side_effect=identity.IdentityError("broken"),
+        ),
+        patch("vardrrunner.commands.heartbeat.runner.tool_available", return_value=False),
+        caplog.at_level(logging.WARNING),
+    ):
+        send_heartbeat(quiet=True)
+    assert any("identity unavailable" in record.message for record in caplog.records)
 
 
 # ---------------------------------------------------------------------------

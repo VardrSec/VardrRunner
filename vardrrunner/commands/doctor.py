@@ -23,14 +23,17 @@ import requests
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config, credentials, pipelines, redaction, runner
+from vardrrunner import api, config, credentials, identity, pipelines, redaction, runner, service
 from vardrrunner.commands import daemon
+from vardrrunner.journal import Journal, JournalError
 
 console = Console()
 
 # Free-disk thresholds for the runs directory.
 _DISK_WARN_BYTES = 1 * 1024**3  # 1 GiB → warn
 _DISK_FAIL_BYTES = 100 * 1024**2  # 100 MiB → fail
+_PRODUCTION_DISK_WARN_BYTES = 5 * 1024**3
+_PRODUCTION_DISK_FAIL_BYTES = 1 * 1024**3
 
 
 class Health(str, Enum):
@@ -50,7 +53,7 @@ class Check:
 # ── individual checks ────────────────────────────────────────────────────────
 
 
-def _check_credentials() -> list[Check]:
+def _check_credentials(production: bool = False) -> list[Check]:
     url = config.get_api_url()
     source = config.credential_source()  # never the secret itself
     if not url or source is None:
@@ -78,7 +81,7 @@ def _check_credentials() -> list[Check]:
         checks.append(
             Check(
                 "credential storage",
-                Health.WARN,
+                Health.FAIL if production else Health.WARN,
                 f"cleartext in {posture.config_file}",
                 "Install a keyring backend and re-run login, or use VARDRMAP_API_KEY.",
             )
@@ -195,7 +198,58 @@ def _check_run_dir() -> Check:
         )
 
 
-def _check_disk() -> Check:
+def _check_identity() -> Check:
+    try:
+        current = identity.load_or_create()
+    except identity.IdentityError as e:
+        return Check(
+            "runner identity",
+            Health.FAIL,
+            redaction.redact_exception(e),
+            f"Repair or remove {identity.identity_file()} and rerun doctor.",
+        )
+    return Check("runner identity", Health.OK, f"{current.name} ({current.runner_id})")
+
+
+def _check_journal() -> Check:
+    try:
+        store = Journal(config.journal_file())
+        store.list(limit=1)
+    except (OSError, JournalError) as e:
+        return Check(
+            "execution journal",
+            Health.FAIL,
+            redaction.redact_exception(e),
+            f"Ensure {config.journal_file().parent} is writable and the schema is compatible.",
+        )
+    return Check("execution journal", Health.OK, str(config.journal_file()))
+
+
+def _check_service() -> Check:
+    pid = daemon._read_pid()
+    if pid and daemon._process_alive(pid):
+        return Check("background service", Health.OK, f"daemon running (pid {pid})")
+    try:
+        plan = service.build_plan()
+        active, _detail = service.status(plan)
+    except service.ServiceError as e:
+        return Check(
+            "background service",
+            Health.FAIL,
+            redaction.redact_exception(e),
+            "Install the package on PATH, then run `vardrrunner service install`.",
+        )
+    if active:
+        return Check("background service", Health.OK, plan.kind)
+    return Check(
+        "background service",
+        Health.FAIL,
+        f"{plan.kind} is not active",
+        "Run `vardrrunner service install` or start the daemon under your supervisor.",
+    )
+
+
+def _check_disk(production: bool = False) -> Check:
     target = config.runs_dir()
     while not target.exists():
         target = target.parent
@@ -206,9 +260,11 @@ def _check_disk() -> Check:
             "disk space", Health.WARN, f"could not determine: {redaction.redact_exception(e)}"
         )
     human = f"{free / 1024**3:.1f} GiB free"
-    if free < _DISK_FAIL_BYTES:
+    fail_threshold = _PRODUCTION_DISK_FAIL_BYTES if production else _DISK_FAIL_BYTES
+    warn_threshold = _PRODUCTION_DISK_WARN_BYTES if production else _DISK_WARN_BYTES
+    if free < fail_threshold:
         return Check("disk space", Health.FAIL, human, "Free up disk before running scans.")
-    if free < _DISK_WARN_BYTES:
+    if free < warn_threshold:
         return Check("disk space", Health.WARN, human, "Low disk — large scans may fill it.")
     return Check("disk space", Health.OK, human)
 
@@ -261,13 +317,13 @@ def _check_pipelines() -> list[Check]:
     return checks
 
 
-def _collect() -> list[Check]:
+def _collect(production: bool = False) -> list[Check]:
     checks: list[Check] = []
     # Credential/permissions/auth checks all read the config file — if it's
     # corrupted we surface one clear FAIL and skip the auth attempt (which
     # would crash or mislead with a noisy follow-up error).
     try:
-        checks += _check_credentials()
+        checks += _check_credentials(production=production)
         checks.append(_check_permissions())
         checks.append(_check_auth())
     except config.InvalidConfigFile as e:
@@ -280,10 +336,14 @@ def _collect() -> list[Check]:
             )
         )
     checks.append(_check_daemon())
+    checks.append(_check_identity())
+    checks.append(_check_journal())
     checks.append(_check_run_dir())
-    checks.append(_check_disk())
+    checks.append(_check_disk(production=production))
     checks += _check_tools()
     checks += _check_pipelines()
+    if production:
+        checks.append(_check_service())
     return checks
 
 
@@ -318,15 +378,16 @@ def _print_text(checks: list[Check], failed: list[Check], warned: list[Check]) -
         console.print("[green]✓ All checks passed — ready for unattended use.[/green]")
 
 
-def run_doctor(as_json: bool = False) -> None:
+def run_doctor(as_json: bool = False, production: bool = False) -> None:
     """Run all checks, report, and exit non-zero if any check failed."""
-    checks = _collect()
+    checks = _collect(production=production)
     failed = [c for c in checks if c.status is Health.FAIL]
     warned = [c for c in checks if c.status is Health.WARN]
 
     if as_json:
         payload = {
             "healthy": not failed,
+            "profile": "production" if production else "standard",
             "summary": {
                 "ok": sum(c.status is Health.OK for c in checks),
                 "warn": len(warned),

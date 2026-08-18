@@ -49,7 +49,13 @@ class TestDoctorCommand:
         with patch("vardrrunner.commands.doctor.run_doctor") as mock:
             mock.side_effect = SystemExit(0)
             invoke("doctor", "--json")
-        mock.assert_called_once_with(as_json=True)
+        mock.assert_called_once_with(as_json=True, production=False)
+
+    def test_production_flag_passed(self):
+        with patch("vardrrunner.commands.doctor.run_doctor") as mock:
+            mock.side_effect = SystemExit(0)
+            invoke("doctor", "--production")
+        mock.assert_called_once_with(as_json=False, production=True)
 
 
 class TestHeartbeatCommand:
@@ -71,6 +77,41 @@ class TestWhoamiCommand:
         with patch("vardrrunner.commands.auth.whoami") as mock:
             invoke("whoami")
         mock.assert_called_once()
+
+
+class TestIdentityCommands:
+    def test_show(self):
+        with patch("vardrrunner.commands.identity.show") as mock:
+            invoke("identity", "show")
+        mock.assert_called_once()
+
+    def test_set_name(self):
+        with patch("vardrrunner.commands.identity.set_name") as mock:
+            invoke("identity", "set-name", "runner-a")
+        mock.assert_called_once_with("runner-a")
+
+
+class TestServiceCommands:
+    def test_install_options(self, tmp_path):
+        env_file = tmp_path / "runner.env"
+        with patch("vardrrunner.commands.service.install") as mock:
+            invoke(
+                "service",
+                "install",
+                "--env-file",
+                str(env_file),
+                "--no-start",
+                "--dry-run",
+            )
+        mock.assert_called_once_with(env_file=env_file, start=False, dry_run=True)
+
+    def test_status_and_uninstall(self):
+        with patch("vardrrunner.commands.service.show_status") as status:
+            invoke("service", "status")
+        status.assert_called_once()
+        with patch("vardrrunner.commands.service.uninstall") as uninstall:
+            invoke("service", "uninstall")
+        uninstall.assert_called_once()
 
 
 class TestAuditCommands:

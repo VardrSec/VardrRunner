@@ -126,6 +126,58 @@ def test_check_dataclass_shape():
     assert c.remediation == "" and c.status is Health.OK
 
 
+def test_production_profile_requires_secure_storage_and_service(tmp_path, monkeypatch):
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"api_url":"https://api.example.com","api_key":"vmap_plain"}')
+    monkeypatch.setattr("vardrrunner.config.CONFIG_FILE", config_file)
+    client = MagicMock()
+    client.whoami.return_value = {"username": "alice"}
+    with (
+        patch("vardrrunner.commands.doctor.api.VardrMapClient", return_value=client),
+        patch("vardrrunner.runner.tool_available", return_value=True),
+        patch(
+            "vardrrunner.commands.doctor.service.build_plan",
+            side_effect=doctor.service.ServiceError("not installed"),
+        ),
+    ):
+        checks = doctor._collect(production=True)
+    storage = next(check for check in checks if check.name == "credential storage")
+    background = next(check for check in checks if check.name == "background service")
+    assert storage.status is Health.FAIL
+    assert background.status is Health.FAIL
+
+
+def test_production_service_accepts_running_daemon():
+    with (
+        patch("vardrrunner.commands.doctor.daemon._read_pid", return_value=123),
+        patch("vardrrunner.commands.doctor.daemon._process_alive", return_value=True),
+    ):
+        check = doctor._check_service()
+    assert check.status is Health.OK
+
+
+def test_identity_and_journal_failures_are_fatal():
+    from vardrrunner import identity
+    from vardrrunner.journal import JournalError
+
+    with patch(
+        "vardrrunner.commands.doctor.identity.load_or_create",
+        side_effect=identity.IdentityError("broken"),
+    ):
+        assert doctor._check_identity().status is Health.FAIL
+    with patch("vardrrunner.commands.doctor.Journal", side_effect=JournalError("broken")):
+        assert doctor._check_journal().status is Health.FAIL
+
+
+def test_json_reports_standard_profile_by_default(capsys):
+    checks = [Check("all", Health.OK, "ready")]
+    with patch("vardrrunner.commands.doctor._collect", return_value=checks):
+        assert _run(as_json=True) == 0
+    import json
+
+    assert json.loads(capsys.readouterr().out)["profile"] == "standard"
+
+
 def test_auth_skipped_when_url_invalid(monkeypatch):
     """_check_auth returns WARN (not a network call) when the backend URL is bad."""
     monkeypatch.setenv("VARDRMAP_URL", "http://remote.example.com")  # non-local http → invalid

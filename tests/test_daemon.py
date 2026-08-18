@@ -6,6 +6,7 @@ Platform-dependent paths (Windows vs POSIX) are tested by monkeypatching the
 module-level _IS_WINDOWS flag rather than relying on the host OS.
 """
 
+import json
 import os
 import signal
 from unittest.mock import MagicMock, patch
@@ -307,7 +308,12 @@ class TestStart:
         log = tmp_path / "daemon.log"
         with patch("vardrrunner.commands.daemon._detach") as mock_detach:
             daemon_mod.start(detach=True, poll_interval=5, heartbeat_interval=60, log_file=log)
-        mock_detach.assert_called_once_with(poll_interval=5, heartbeat_interval=60, log_file=log)
+        mock_detach.assert_called_once_with(
+            poll_interval=5,
+            heartbeat_interval=60,
+            log_file=log,
+            log_format=daemon_mod.LogFormat.TEXT,
+        )
 
     def test_poll_error_does_not_crash_daemon(self, pid_file):
         """A transient API error is caught and the loop continues."""
@@ -376,6 +382,20 @@ class TestRotatingLogFile:
 
         content = log.read_text(encoding="utf-8")
         assert "part one part two" in content
+
+    def test_json_lines_are_structured_and_redacted(self, tmp_path):
+        log = tmp_path / "daemon.jsonl"
+        f = daemon_mod._RotatingLogFile(
+            log, log_format=daemon_mod.LogFormat.JSON, runner_id="runner-123"
+        )
+        f.write("request token=vmap_abcdefgh failed\n")
+        f.close()
+        payload = json.loads(log.read_text(encoding="utf-8"))
+        assert payload["log_schema_version"] == 1
+        assert payload["event"] == "console"
+        assert payload["runner_id"] == "runner-123"
+        assert payload["pid"] == os.getpid()
+        assert "vmap_abcdefgh" not in payload["message"]
 
     def test_returns_byte_count(self, tmp_path):
         log = tmp_path / "daemon.log"

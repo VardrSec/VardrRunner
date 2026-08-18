@@ -10,12 +10,13 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner.commands import audit, auth, engagements, imports, jobs, run
+from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run
 from vardrrunner.commands import credentials as credentials_cmd
 from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import doctor as doctor_cmd
 from vardrrunner.commands import heartbeat as heartbeat_cmd
 from vardrrunner.commands import pipeline as pipeline_cmd
+from vardrrunner.commands import service as service_cmd
 from vardrrunner.commands import status as status_cmd
 
 console = Console()
@@ -48,9 +49,14 @@ def status():
 @app.command()
 def doctor(
     as_json: bool = typer.Option(False, "--json", help="Emit a machine-readable JSON report"),
+    production: bool = typer.Option(
+        False,
+        "--production",
+        help="Require durable state, secure credentials, disk headroom, and a service",
+    ),
 ):
     """Deep preflight before unattended use — exits non-zero on actionable failures."""
-    doctor_cmd.run_doctor(as_json=as_json)
+    doctor_cmd.run_doctor(as_json=as_json, production=production)
 
 
 @app.command()
@@ -107,6 +113,54 @@ def audit_export(
 def whoami():
     """Show the identity tied to the configured API key."""
     auth.whoami()
+
+
+identity_app = typer.Typer(help="Inspect or label this runner installation.", no_args_is_help=True)
+app.add_typer(identity_app, name="identity")
+
+
+@identity_app.command("show")
+def identity_show():
+    """Show the stable runner ID, name, and hostname."""
+    identity.show()
+
+
+@identity_app.command("set-name")
+def identity_set_name(name: str = typer.Argument(..., help="Human label, up to 128 characters")):
+    """Persist a human-readable runner name."""
+    identity.set_name(name)
+
+
+service_app = typer.Typer(
+    help="Manage VardrRunner as a per-user background service.", no_args_is_help=True
+)
+app.add_typer(service_app, name="service")
+
+
+@service_app.command("install")
+def service_install(
+    env_file: Path | None = typer.Option(
+        None, "--env-file", help="systemd EnvironmentFile path (never copied or displayed)"
+    ),
+    start: bool = typer.Option(True, "--start/--no-start", help="Start after installation"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print the plan without changing host state"
+    ),
+):
+    """Install a systemd user unit, launchd agent, or Windows scheduled task."""
+    service_cmd.install(env_file=env_file, start=start, dry_run=dry_run)
+
+
+@service_app.command("uninstall")
+def service_uninstall():
+    """Stop and remove the installed background service."""
+    service_cmd.uninstall()
+
+
+@service_app.command("status")
+def service_status():
+    """Query the native service manager."""
+    service_cmd.show_status()
 
 
 # --------------------------------------------------------------------------- #
@@ -189,6 +243,11 @@ def daemon_start(
         60, "--heartbeat-interval", help="Seconds between heartbeats"
     ),
     log_file: Path | None = typer.Option(None, "--log-file", help="Append output to file"),
+    log_format: daemon_cmd.LogFormat = typer.Option(
+        daemon_cmd.LogFormat.TEXT,
+        "--log-format",
+        help="Log encoding: text or newline-delimited JSON",
+    ),
 ):
     """Start the daemon (foreground by default, use --detach for background)."""
     daemon_cmd.start(
@@ -196,6 +255,7 @@ def daemon_start(
         poll_interval=poll_interval,
         heartbeat_interval=heartbeat_interval,
         log_file=log_file,
+        log_format=log_format,
     )
 
 

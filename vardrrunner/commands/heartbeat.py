@@ -10,7 +10,7 @@ import socket
 
 from rich.console import Console
 
-from vardrrunner import __version__, api, config, redaction, runner
+from vardrrunner import __version__, api, config, identity, redaction, runner
 
 console = Console()
 
@@ -30,8 +30,22 @@ def send_heartbeat(quiet: bool = False) -> None:
         ver = runner.tool_version(name) if ok else None
         tools[name] = {"ok": ok, "version": ver}
 
+    try:
+        runner_identity = identity.load_or_create()
+    except identity.IdentityError as e:
+        if not quiet:
+            console.print(
+                f"[yellow]Heartbeat skipped — identity unavailable:[/yellow] "
+                f"{redaction.redact_rich_exception(e)}"
+            )
+        else:
+            logging.warning("Heartbeat identity unavailable: %s", redaction.redact_exception(e))
+        return
+
     payload = {
         "hostname": socket.gethostname(),
+        "runner_id": runner_identity.runner_id,
+        "name": runner_identity.name,
         "version": __version__,
         "os": f"{platform.system()} {platform.release()}",
         "tools": tools,

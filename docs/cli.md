@@ -84,6 +84,21 @@ vardrrunner whoami
 
 ---
 
+## `identity`
+
+Each installation has a stable UUID independent of hostname and a human-readable label:
+
+```bash
+vardrrunner identity show
+vardrrunner identity set-name chicago-runner-1
+```
+
+The first identity is created at `~/.vardrmap/runner-identity.json` with owner-only
+permissions. Corrupt state fails closed; it is never silently replaced with a new UUID.
+Set `VARDRUNNER_NAME` for a deployment-time label override without rewriting the file.
+
+---
+
 ## `engagements`
 List every engagement visible to the configured key.
 
@@ -122,6 +137,7 @@ non-zero on any actionable failure, and prints a remediation hint per problem.
 ```bash
 vardrrunner doctor && vardrrunner daemon start --detach   # gate provisioning on health
 vardrrunner doctor --json                                  # machine-readable report
+vardrrunner doctor --production                            # strict unattended profile
 ```
 
 Checks: credential source (env vs file), backend URL validity (HTTPS), config-file
@@ -129,6 +145,11 @@ permissions, API auth, daemon PID health (running / stale), run-dir writability,
 tool versions, and per-pipeline readiness. **Failures** (no creds, bad URL, auth failure,
 unwritable run dir, critically low disk, zero tools) set a non-zero exit; missing individual
 tools and low-ish disk are **warnings** that don't block.
+
+`--production` additionally treats plaintext credentials as a failure, raises disk
+thresholds to 1 GiB minimum / 5 GiB warning, verifies the execution journal and stable
+identity, and requires either a live daemon or active native service. JSON output includes
+`"profile": "standard" | "production"`.
 
 ---
 
@@ -337,6 +358,7 @@ Options for `daemon start`:
 | `--poll-interval N` | 5 | Seconds between job polls |
 | `--heartbeat-interval N` | 60 | Seconds between heartbeats |
 | `--log-file <path>` | none | Append output to a rotating log file |
+| `--log-format text|json` | `text` | Human text or redacted JSON Lines |
 
 - The PID file is `~/.vardrrunner.pid`. A double-start guard prevents two daemons from
   running at once, and `daemon status` cleans up a stale PID file.
@@ -352,6 +374,37 @@ Options for `daemon start`:
   duplicated automatically; it is retained as an `upload_failed` audit record.
 - Shutdown is cooperative: `stop` removes the PID file; the daemon notices and exits
   cleanly (graceful SIGTERM handling on Unix, ctypes liveness probe on Windows).
+
+JSON log records contain `log_schema_version`, UTC `timestamp`, `level`, `event`, stable
+`runner_id`, `pid`, and redacted `message`. Rotation remains 5 MiB × four files total.
+
+---
+
+## `service` — native unattended startup
+
+```bash
+vardrrunner service install [--no-start] [--dry-run]
+vardrrunner service status
+vardrrunner service uninstall
+```
+
+The command installs a systemd **user** unit on Linux, LaunchAgent on macOS, or per-user
+ONLOGON Scheduled Task on Windows. It runs the foreground daemon with rotating JSON logs;
+no separate worker implementation is introduced. `--dry-run` prints paths and manager
+commands without changing the host.
+
+Actual installation first verifies local authentication, the execution journal, and stable
+identity so a broken configuration does not enter a native supervisor restart loop.
+
+On Linux only, `--env-file <path>` adds a systemd `EnvironmentFile` reference. The file is
+never copied or displayed, and no secret is embedded in the unit. macOS and Windows should
+use the OS keychain or config-based credential resolution. Windows hosts that must start
+before user logon should use their existing enterprise supervisor rather than the per-user
+task.
+
+A systemd user unit starts at boot only when user lingering is enabled. The installer does
+not change that host policy; it prints the administrator command
+`loginctl enable-linger <user>` after installation.
 
 ---
 

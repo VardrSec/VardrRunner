@@ -14,8 +14,9 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
-  - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `imports`, `jobs`, `pipeline`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (648 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+  - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
+  - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `engagements`, `run`, `status`
+- `tests/` — pytest suite (686 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
 - `.github/workflows/` — CI (lint + tests on every push)
@@ -81,6 +82,8 @@ vardrrunner daemon start
 - `import nuclei|httpx` — import existing output file
 - `jobs list|run` — inspect and execute backend job queue (one-shot)
 - `audit list|show|export` — inspect/export sanitized local execution evidence
+- `identity show|set-name` — stable UUID and human runner label
+- `service install|status|uninstall` — native per-user background service
 - `daemon start|stop|status` — long-running background worker (poll + heartbeat)
 - `heartbeat` — send single heartbeat
 - `status` — local config, version, tool availability

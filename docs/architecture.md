@@ -52,6 +52,8 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/journal.py` | Transactional SQLite execution journal and explicit run state machine. WAL mode supports concurrent audit readers; a partial unique index permits only one unfinished attempt per backend job. |
 | `vardrrunner/recovery.py` | Startup reconciliation for interrupted jobs. Resumes known-safe artifact uploads, retries finalization, and refuses automatic replay when an upload outcome is ambiguous. |
 | `vardrrunner/manifests.py` | Streaming SHA-256 artifact hashes and atomic, permission-restricted JSON manifests/exports. |
+| `vardrrunner/identity.py` | Stable per-installation UUID + human label. Uses exclusive first creation, fails closed on corruption, and supports a `VARDRRUNNER_NAME` deployment override. |
+| `vardrrunner/service.py` | Pure service-plan generation plus argv-only native manager execution for systemd, launchd, and Windows Scheduled Tasks. Definitions never contain credentials. |
 | `vardrrunner/policy.py` | All parsing and presentation of the backend's advisory `warnings` array. Isolated so a backend shape change touches one file; parsing is total and never raises. |
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
@@ -62,6 +64,8 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
+| `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
+| `vardrrunner/commands/service.py` | `service install|status|uninstall` — preview and manage native per-user supervision. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
 | `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — continuous worker (poll + heartbeat) with PID file and graceful shutdown. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
@@ -92,7 +96,9 @@ Events are posted via `POST /jobs/{id}/events` so the backend Terminal can rende
 
 ## Heartbeat
 On daemon start and every 60 s thereafter, the runner sends `POST /runner/heartbeat` with
-hostname, runner version, OS, and per-tool availability + versions. The backend marks a
+stable runner UUID/name, hostname, runner version, OS, and per-tool availability + versions.
+Identity fields are additive; older backends may ignore them and retain hostname identity.
+The backend marks a
 runner **online** if `last_seen` is within 5 minutes. Heartbeats are upserted per
 `(owner, hostname)`, so multiple machines show up independently in the backend's Bridge.
 
@@ -102,6 +108,15 @@ heartbeats (60 s). `--detach` spawns a `DETACHED_PROCESS` and writes a PID file;
 removes the PID file as a cooperative shutdown signal and the daemon exits gracefully.
 Windows liveness is checked via a ctypes probe (plain `os.kill` on Windows is
 `TerminateProcess` and would kill the daemon it was meant to check).
+
+Daemon logs rotate at 5 MiB with three backups. Text remains the interactive default;
+`--log-format json` emits one redacted JSON object per line with schema version, UTC
+timestamp, level, event, runner ID, process ID, and message.
+
+For unattended startup, `service.py` generates a per-user systemd unit (Linux), LaunchAgent
+(macOS), or Scheduled Task (Windows). The generated command is the same foreground daemon,
+so there is one lifecycle implementation. Service files contain executable/log paths only,
+never credentials, and native manager commands are executed as argv lists without a shell.
 
 Before each poll, reconciliation inspects unfinished records for the configured backend:
 
@@ -119,6 +134,8 @@ Local state lives under `~/.vardrmap/`:
   `api_key` in the no-keychain fallback)
 - `runs/` — timestamped tool output directories, pruned after 7 days
 - `runner-journal.sqlite3` — sanitized execution state and recovery metadata (SQLite/WAL)
+- `runner-identity.json` — stable installation UUID, name, and original hostname
+- `daemon.jsonl` — default structured service log (rotated; service installs only)
 
 Completed job run directories also contain `manifest.json` with provenance, lifecycle
 timestamps, artifact SHA-256/size, warnings, and failure category. Manifests and audit

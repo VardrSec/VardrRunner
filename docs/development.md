@@ -26,7 +26,7 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **648 tests** at ~95% coverage (CI floor: 95%), all hermetic: no network, no real
+- **686 tests** at ~95% coverage (CI floor: 95%), all hermetic: no network, no real
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
@@ -59,6 +59,8 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_journal.py` | SQLite schema/state-machine invariants, concurrency, hashing, manifests, and job integration |
 | `tests/test_recovery.py` | interruption reconciliation, safe resume, ambiguous-upload refusal, backend isolation |
 | `tests/test_audit.py` | sanitized list/show/export behavior and atomic export failures |
+| `tests/test_identity.py` | stable UUID creation, concurrent first use, labels, corruption and IO failures |
+| `tests/test_service.py` | cross-platform service plans, command safety, install/status/uninstall behavior |
 | `tests/test_nmap.py` | nmap target normalization + profile + `run nmap` command |
 | `tests/test_status.py` | tool detection + status output |
 | `tests/test_doctor.py` | preflight checks, exit codes, and `--json` report |
@@ -121,5 +123,6 @@ Or skip the file entirely with environment variables (handy for tests/containers
 export VARDRMAP_URL=http://localhost:8000
 export VARDRMAP_API_KEY=vmap_devkey
 export VARDRRUNNER_TOOL_TIMEOUT=300        # optional: per-tool run ceiling, seconds
+export VARDRUNNER_NAME=chicago-runner-1   # optional: heartbeat/display label override
 ```
 Env values take precedence over the config file.

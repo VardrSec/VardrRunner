@@ -17,6 +17,7 @@ unconditionally kills the target. Never use os.kill(pid, 0) as a liveness
 probe on Windows.
 """
 
+import json
 import logging
 import logging.handlers
 import os
@@ -25,12 +26,14 @@ import signal
 import subprocess
 import sys
 import threading
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 import typer
 from rich.console import Console
 
-from vardrrunner import api, config, redaction
+from vardrrunner import api, config, identity, redaction
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.jobs import execute_pending_jobs
 from vardrrunner.journal import Journal
@@ -48,6 +51,31 @@ _LOG_MAX_BYTES = 5 * 1024 * 1024
 _LOG_BACKUP_COUNT = 3
 
 
+class LogFormat(str, Enum):
+    TEXT = "text"
+    JSON = "json"
+
+
+class _JsonLineFormatter(logging.Formatter):
+    """One redacted JSON object per daemon console line."""
+
+    def __init__(self, runner_id: str = "") -> None:
+        super().__init__()
+        self.runner_id = runner_id
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "log_schema_version": 1,
+            "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
+            "level": record.levelname.lower(),
+            "event": getattr(record, "event", "console"),
+            "runner_id": self.runner_id,
+            "pid": os.getpid(),
+            "message": redaction.redact_text(record.getMessage()),
+        }
+        return json.dumps(redaction.redact(payload), sort_keys=True)
+
+
 class _RotatingLogFile:
     """File-like object backed by a RotatingFileHandler so Rich Console can write to it.
 
@@ -56,16 +84,21 @@ class _RotatingLogFile:
     timestamp formatter runs once per logical line rather than per chunk.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self, path: Path, log_format: LogFormat = LogFormat.TEXT, runner_id: str = ""
+    ) -> None:
         handler = logging.handlers.RotatingFileHandler(
             path,
             maxBytes=_LOG_MAX_BYTES,
             backupCount=_LOG_BACKUP_COUNT,
             encoding="utf-8",
         )
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
-        )
+        if log_format is LogFormat.JSON:
+            handler.setFormatter(_JsonLineFormatter(runner_id))
+        else:
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
+            )
         self._logger = logging.getLogger(f"vardrrunner.daemon.{id(self)}")
         self._logger.addHandler(handler)
         self._logger.setLevel(logging.INFO)
@@ -153,6 +186,7 @@ def start(
         "--log-file",
         help="Append output to file (defaults to ~/.vardrrunner.log when --detach is used)",
     ),
+    log_format: LogFormat = LogFormat.TEXT,
 ) -> None:
     """Start the daemon: continuously poll for jobs and send heartbeats."""
     existing = _read_pid()
@@ -165,7 +199,10 @@ def start(
 
     if detach:
         _detach(
-            poll_interval=poll_interval, heartbeat_interval=heartbeat_interval, log_file=log_file
+            poll_interval=poll_interval,
+            heartbeat_interval=heartbeat_interval,
+            log_file=log_file,
+            log_format=log_format,
         )
         return
 
@@ -184,12 +221,21 @@ def start(
             f"[red]Execution journal unavailable:[/red] {redaction.redact_rich_exception(e)}"
         )
         raise typer.Exit(1) from e
+    try:
+        runner_identity = identity.load_or_create()
+    except identity.IdentityError as e:
+        console.print(
+            f"[red]Runner identity unavailable:[/red] {redaction.redact_rich_exception(e)}"
+        )
+        raise typer.Exit(1) from e
 
     out = console
     _log = None
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        _log = _RotatingLogFile(log_file)
+        _log = _RotatingLogFile(
+            log_file, log_format=log_format, runner_id=runner_identity.runner_id
+        )
         out = Console(file=_log, highlight=False)  # type: ignore[arg-type]
 
     pid = os.getpid()
@@ -309,7 +355,12 @@ def status() -> None:
         PID_FILE.unlink(missing_ok=True)
 
 
-def _detach(poll_interval: int, heartbeat_interval: int, log_file: Path | None) -> None:
+def _detach(
+    poll_interval: int,
+    heartbeat_interval: int,
+    log_file: Path | None,
+    log_format: LogFormat = LogFormat.TEXT,
+) -> None:
     """Re-launch self without --detach so the child runs as a foreground daemon."""
     exe = shutil.which("vardrrunner") or sys.argv[0]
     if log_file is None:
@@ -325,6 +376,8 @@ def _detach(poll_interval: int, heartbeat_interval: int, log_file: Path | None) 
         str(heartbeat_interval),
         "--log-file",
         str(log_file),
+        "--log-format",
+        log_format.value,
     ]
 
     log_file.parent.mkdir(parents=True, exist_ok=True)

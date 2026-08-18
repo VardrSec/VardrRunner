@@ -33,6 +33,8 @@ results, and heartbeats so the backend always knows which machines are online.
   reconciles interrupted work, hashes artifacts, and writes portable run manifests
 - **Sanitized audit evidence** — `audit list`, `audit show`, and atomic JSON exports without
   raw targets, credentials, request bodies, or headers
+- **Small-team operations** — stable runner UUID/name, rotating JSON logs, strict production
+  preflight, and native systemd/launchd/Windows Scheduled Task management
 - **Live job events** — emits `started → targets_resolved → running → uploaded → done/failed`
   so the backend Terminal shows real-time logs
 - **Preflight (`doctor`)** — one command validates the whole machine (creds, URL, perms,
@@ -105,6 +107,7 @@ vardrrunner login vardrmap     # prompts for backend URL + API key; key goes to 
 vardrrunner status             # show config, version, and which tools are detected
 vardrrunner heartbeat          # confirm the backend can see this machine
 vardrrunner daemon start       # run the continuous worker (poll jobs + heartbeat)
+vardrrunner service install    # optional: native per-user startup + JSON logs
 ```
 
 ### One-shot usage
@@ -114,6 +117,7 @@ vardrrunner scope <engagement-id>                             # show in/out-of-s
 vardrrunner jobs list                                         # show the backend queue
 vardrrunner jobs run                                          # claim + execute all pending jobs once
 vardrrunner audit list                                        # inspect durable local job evidence
+vardrrunner identity set-name chicago-runner-1                # durable human label
 vardrrunner run subfinder --engagement <engagement-id>        # run a single tool and upload results
 vardrrunner import nuclei --engagement <engagement-id> -f out.jsonl
 ```
@@ -140,6 +144,7 @@ file**:
 | `VARDRMAP_API_KEY` | Your `vmap_` API key |
 | `VARDRRUNNER_TOOL_TIMEOUT` | Per-tool run timeout in seconds (default 1800); a hung tool is killed and the job marked failed |
 | `VARDRRUNNER_ALLOW_INSECURE` | Set to `1` to permit a plain-HTTP backend URL (not recommended) |
+| `VARDRUNNER_NAME` | Optional display/heartbeat label; does not replace the stable UUID |
 
 The runner refuses to send your API key over plain HTTP to a non-local host, so a mistyped
 `http://` URL can't leak your key.
@@ -157,7 +162,7 @@ pip install -e ".[dev]"   # editable install + dev tools (pytest, ruff, mypy)
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
-pytest tests              # 648 tests; all subprocess + HTTP calls are mocked
+pytest tests              # 686 tests; all subprocess + HTTP calls are mocked
 ```
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
 95% coverage floor on Python 3.10/3.11/3.12 (Linux) plus a 3.12 smoke on Windows and

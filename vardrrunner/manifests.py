@@ -34,14 +34,19 @@ def artifact_digest(path: Path, chunk_size: int = 1024 * 1024) -> tuple[str, int
 
 def write_atomic_json(path: Path, payload: dict[str, Any]) -> Path:
     """Write JSON durably and atomically beside its final destination."""
-    path.parent.mkdir(parents=True, exist_ok=True)
     safe = redaction.redact(payload)
+    text = json.dumps(safe, indent=2, sort_keys=True) + "\n"
+    return write_atomic_text(path, text)
+
+
+def write_atomic_text(path: Path, content: str) -> Path:
+    """Write text durably and atomically with owner-only permissions."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     temp_path = Path(temporary)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(safe, fh, indent=2, sort_keys=True)
-            fh.write("\n")
+            fh.write(content)
             fh.flush()
             os.fsync(fh.fileno())
         try:
