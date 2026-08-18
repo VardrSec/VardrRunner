@@ -213,12 +213,16 @@ def start(
     hb_thread.start()
 
     _error_streak = 0
+    # Engagements whose stop-work switch refused a claim. Held for the life of
+    # the daemon so a halted engagement is not re-claimed and re-refused every
+    # poll_interval seconds; restarting the daemon re-checks it.
+    _stop_work_blocked: set[str] = set()
     try:
         while not _shutdown_requested():
             try:
                 url, key = config.require_auth()
                 client = api.VardrMapClient(url, key)
-                count = execute_pending_jobs(client, out)
+                count = execute_pending_jobs(client, out, blocked_engagements=_stop_work_blocked)
                 if count:
                     out.print(f"[dim]Cycle complete — {count} job(s) executed.[/dim]")
                 _error_streak = 0

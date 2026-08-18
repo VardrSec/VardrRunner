@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config, configs, handlers, runner
+from vardrrunner import api, config, configs, errors, handlers, policy, runner
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.run import _confirm, _make_run_dir
 
@@ -122,11 +122,36 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
     _confirm(targets, tool_type, yes)
 
     try:
-        client.claim_job(job_id)
-    except Exception as e:
-        # 409 = another runner won the race; just move on without failing the job.
-        con.print(f"[red]Could not claim job:[/red] {e}")
+        claimed = client.claim_job(job_id)
+    except errors.StopWorkError as e:
+        # The operator's own halt switch. Never presented as a claim failure,
+        # and never silently retried — see StopWork handling in the daemon.
+        con.print(f"[bold red]STOP-WORK — not running this job.[/bold red] {e}")
+        _emit(client, job_id, "blocked", f"stop-work engaged: {e}")
+        raise
+    except errors.ClaimRace as e:
+        # Expected and benign: the job belongs to whoever won. Leave it pending
+        # for them; marking it failed would destroy another runner's work.
+        con.print(f"[dim]Skipping — {e}[/dim]")
         return
+    except errors.RunnerError as e:
+        con.print(f"[red]Could not claim job ({e.category.value}):[/red] {e}")
+        return
+    except Exception as e:
+        # Daemon boundary: an unclassified claim failure must not kill the poll
+        # loop or wrongly mark another runner's job failed. Logged for triage.
+        logging.warning("Unclassified claim failure for job %s: %s", job_id, e)
+        con.print(f"[red]Could not claim job ({errors.FailureCategory.UNKNOWN.value}):[/red] {e}")
+        return
+
+    # Advisory findings from the backend's policy evaluation. Shown before any
+    # tool runs so the operator sees them while they can still intervene; they
+    # do not block, by design (ADR 0001 amendment).
+    warnings = policy.parse_warnings(claimed)
+    if warnings:
+        for line in policy.format_warnings(warnings):
+            con.print(line)
+        _emit(client, job_id, "policy_warning", policy.summarize(warnings))
 
     _emit(client, job_id, "started", f"claimed job · {len(targets)} target(s) from {target_src}")
     _emit(client, job_id, "targets_resolved", f"{len(targets)} target(s) from {target_src}")
@@ -154,15 +179,46 @@ def _execute_one(client: api.VardrMapClient, con: Console, job: dict, yes: bool)
         _fail_job(client, con, job_id, str(e))
 
 
-def execute_pending_jobs(client: api.VardrMapClient, con: Console, yes: bool = True) -> int:
-    """Claim and execute all pending jobs. Returns the number of jobs found (0 if empty)."""
+def execute_pending_jobs(
+    client: api.VardrMapClient,
+    con: Console,
+    yes: bool = True,
+    blocked_engagements: set[str] | None = None,
+) -> int:
+    """Claim and execute all pending jobs. Returns the number of jobs found.
+
+    ``blocked_engagements`` accumulates engagements whose stop-work switch is
+    engaged. Pass a set that outlives the call (the daemon does) and this runner
+    stops re-attempting those jobs every polling cycle: the refusal is reported
+    once, then their jobs are skipped quietly until the process restarts or
+    stop-work is lifted. Omit it and the suppression lasts for this batch only.
+    """
     jobs_list = client.pending_jobs()
     if not jobs_list:
         return 0
 
+    blocked = blocked_engagements if blocked_engagements is not None else set()
+
     con.print(f"Found [bold]{len(jobs_list)}[/bold] pending job(s).")
     for job in jobs_list:
-        _execute_one(client, con, job, yes)
+        engagement_id = str(job.get("engagement_id") or "")
+        if engagement_id and engagement_id in blocked:
+            con.print(
+                f"[dim]Skipping job {str(job.get('id', ''))[:8]}… — "
+                f"stop-work still engaged for engagement {engagement_id}.[/dim]"
+            )
+            continue
+        try:
+            _execute_one(client, con, job, yes)
+        except errors.StopWorkError:
+            # Reported already by _execute_one. Remember the engagement so the
+            # daemon does not re-claim and re-refuse it on every poll.
+            if engagement_id:
+                blocked.add(engagement_id)
+            con.print(
+                "[yellow]No further jobs will be claimed for this engagement "
+                "until stop-work is lifted.[/yellow]"
+            )
     return len(jobs_list)
 
 

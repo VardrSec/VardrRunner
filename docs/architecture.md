@@ -46,6 +46,8 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/config.py` | Resolve credentials (key: env > keychain > config file; URL: env > file); `validate_api_url()` enforces HTTPS; `credential_source()` for diagnostics; `require_auth()` guards commands. |
 | `vardrrunner/keychain.py` | OS keychain wrapper (`keyring`) for the API key. Degrades gracefully (returns None/False) when no backend is present, so servers fall back to env/file. |
 | `vardrrunner/configs.py` | Typed, validated tool configs (`HttpxConfig`, `NucleiConfig`, `NmapConfig`, `SubfinderConfig`, `VardrGateConfig`). Raw backend dicts are parsed into frozen dataclasses up front; invalid values raise `ConfigError` and fail the job fast. |
+| `vardrrunner/errors.py` | The failure taxonomy (`FailureCategory`) and `RunnerError` hierarchy, plus `classify_status()` — the single place an HTTP status becomes a domain meaning. Imports nothing from the package or outside stdlib, so it is the bottom of the dependency graph (see ADR 0008). |
+| `vardrrunner/policy.py` | All parsing and presentation of the backend's advisory `warnings` array. Isolated so a backend shape change touches one file; parsing is total and never raises. |
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
 | `vardrrunner/pipelines.py` | Named recon pipelines — ordered lists of `Stage(tool, source)`. Stages reference handlers; each stage writes its discovered targets to a local handoff file, which the next stage reads directly instead of querying the backend recon store. |
@@ -63,8 +65,11 @@ requires VardrMap ≥ v0.22.0.
 
 ## Job execution lifecycle
 1. **Poll** — `GET /jobs/pending` returns queued jobs for this operator.
-2. **Claim** — `POST /jobs/{id}/claim` atomically transitions `pending → running`; a `409`
-   means another runner won the race, so this runner skips it.
+2. **Claim** — `POST /jobs/{id}/claim` atomically transitions `pending → running`. The
+   response is classified (ADR 0008): `409` is a lost race and the runner skips the job
+   without marking it failed; `403` is **stop-work** and halts; `401`/`429`/`5xx` are
+   reported with their category. Advisory policy warnings on the response are printed
+   before any tool runs and emitted as a `policy_warning` event.
 3. **Resolve targets** — expand scope (e.g. wildcard → subfinder), normalize (e.g.
    `strip_url_to_host` for nmap). Emits `targets_resolved`.
 4. **Execute** — `runner.py` spawns the tool as an argv list (never `shell=True` with server
@@ -104,12 +109,38 @@ warning (servers should use the env var). The backend URL must be HTTPS (except 
 or with `VARDRRUNNER_ALLOW_INSECURE=1`) so the key is never sent in cleartext. The API key is
 the runner's only credential; it is never logged or printed.
 
+## Policy and trust boundaries
+
+The backend evaluates authorization, testing window and scope for every job.
+**Findings are advisory**: they ride back as a `warnings` array and the work
+still runs, because staying in scope is the operator's responsibility — the same
+as it is with any other tool in the kit. VardrRunner's job is to make findings
+impossible to miss, not to enforce them.
+
+**Stop-work is the one exception.** It arrives as HTTP `403` and halts
+execution. It is the operator's own emergency brake, not the platform
+second-guessing them, and it is never presented as a generic claim failure. The
+daemon remembers which engagements refused and stops re-claiming their jobs every
+cycle; a restart re-checks, so lifting stop-work needs no special command.
+
+`403` carries this single meaning because VardrMap answers cross-account access
+with `404` rather than `403`, so object existence is never disclosed. That
+assumption is recorded in ADR 0008 and is what would need revisiting if the
+backend contract changed.
+
+Everything in a policy payload is **untrusted remote data**. It is rendered as
+text and recorded; it never influences control flow beyond display, and it is
+never interpolated into a command line.
+
 ## Design invariants
 - **All HTTP goes through `api.py`.** No ad-hoc requests elsewhere.
 - **All backend data is untrusted.** Validate and normalize before it reaches a subprocess.
 - **Every tool run is time-bounded.** A hung tool is killed and the job marked failed — the
   daemon never blocks forever.
-- **Failures are loud.** A missing/failed tool fails the job; it is never skipped silently.
+- **Failures are loud, and classified.** A missing/failed tool fails the job; it is never
+  skipped silently. Every reported failure carries a `FailureCategory`.
+- **Advisory stays advisory.** Only stop-work and explicitly configured local deny rules
+  may block; scope and window findings warn.
 - **Blast radius is capped.** A run aborts before executing anything if the resolved target
   count exceeds 500 (`commands/run.py: MAX_TARGETS_DEFAULT`), including under `--yes`.
 - **No backend coupling.** The runner must build, test, and run without the backend present

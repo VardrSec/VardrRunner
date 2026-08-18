@@ -5,4 +5,4 @@ it via setuptools' dynamic-version mechanism, and the heartbeat reports it to th
 backend. Bump it here (and add a CHANGELOG entry) on every release.
 """
 
-__version__ = "0.28.1"
+__version__ = "0.29.0"
