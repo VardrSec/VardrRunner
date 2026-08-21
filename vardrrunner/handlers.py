@@ -118,6 +118,7 @@ def _resolve_standard(
         targets_file=None,
         status_code=getattr(config, "status_code", None),
         limit=config.limit,
+        apply_local_policy=False,
     )
 
 

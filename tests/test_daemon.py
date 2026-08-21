@@ -336,6 +336,7 @@ class TestStart:
     def test_calls_execute_pending_jobs(self, pid_file):
         execute, _ = _run_start(pid_file, stop_after=1)
         execute.assert_called_once()
+        assert callable(execute.call_args.kwargs["should_stop"])
 
     def test_compatibility_block_pauses_claims(self, pid_file, capsys):
         from vardrrunner import compatibility

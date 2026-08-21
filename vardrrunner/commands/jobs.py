@@ -206,12 +206,12 @@ def _execute_one(
         return
 
     try:
-        targets = handler.resolve_targets(client, engagement_id, target_src, tool_cfg)
+        resolved_targets = handler.resolve_targets(client, engagement_id, target_src, tool_cfg)
     except Exception as e:  # resolution failure must not crash the loop
         fail(errors.FailureCategory.TARGET_RESOLUTION, f"failed to resolve targets: {e}")
         return
     try:
-        targets = targets_module.validate_targets(targets)
+        targets = targets_module.validate_targets(resolved_targets)
     except targets_module.TargetValidationError as e:
         fail(errors.FailureCategory.TARGET_VALIDATION, str(e))
         return
@@ -222,11 +222,14 @@ def _execute_one(
         )
         return
 
+    stats = target_safety.summarize(resolved_targets, targets)
+    _emit(client, job_id, "target_stats", stats.summary())
+
     # Advisory classification (loopback / link-local / cloud metadata). Shown and
     # recorded, never blocking — the operator owns where they aim, exactly as
     # with the backend's scope findings.
     for finding in target_safety.assess(targets):
-        con.print(f"[yellow]⚠ {finding.describe()}[/yellow]")
+        con.print(f"[yellow]⚠ {redaction.redact_rich_text(finding.describe())}[/yellow]")
         _emit(client, job_id, "target_warning", finding.describe())
 
     # Local deny rules are the one thing that blocks, and only when the operator
@@ -242,7 +245,7 @@ def _execute_one(
             denied = ()
         elif denied:
             for finding in denied:
-                con.print(f"[red]blocked:[/red] {finding.describe()}")
+                con.print(f"[red]blocked:[/red] {redaction.redact_rich_text(finding.describe())}")
                 _emit(client, job_id, "target_blocked", finding.describe())
             if not allowed:
                 fail(
@@ -251,9 +254,6 @@ def _execute_one(
                 )
                 return
             targets = allowed
-
-    stats = target_safety.summarize(targets, targets)
-    _emit(client, job_id, "target_stats", stats.summary())
 
     if journal_store is not None and record is not None:
         record = journal_store.transition(
@@ -460,6 +460,7 @@ def execute_pending_jobs(
     backend_url: str | None = None,
     limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
     client_factory: Callable[[], api.VardrMapClient] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
@@ -484,6 +485,8 @@ def execute_pending_jobs(
 
     def execute_group(group: list[dict], worker_client: api.VardrMapClient) -> None:
         for job in group:
+            if should_stop is not None and should_stop():
+                return
             execute_job(job, worker_client)
 
     def execute_job(job: dict, worker_client: api.VardrMapClient) -> None:

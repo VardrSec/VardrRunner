@@ -244,8 +244,8 @@ vardrrunner run nmap      --engagement <id> [--top-ports N] [--timing 0-4] [opti
 vardrrunner run dnsx      --engagement <id> [options]
 vardrrunner run naabu     --engagement <id> [--top-ports N] [options]
 ```
-Executes the named tool, captures output into a timestamped run directory under
-`~/.vardrmap/runs`, and uploads parsed results to the backend.
+Executes the named tool, captures output into an atomically unique timestamp-prefixed run
+directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
 - `run nmap` — safe-profile service discovery (normalizes URLs to hosts, never uses
   `-A`/`-O`/`-p-`/`--script`/`-T5`) → services API.
 - `run dnsx` — DNS resolution; uploads the **resolvable** hosts as recon targets, so a later
@@ -318,7 +318,8 @@ vardrrunner run httpx --engagement <id> --scope --max-targets 0     # no cap
 ```
 
 Every tool run is bounded by a timeout (default 1800 s; set `VARDRRUNNER_TOOL_TIMEOUT`); a
-hung tool is killed rather than blocking.
+hung tool and its child-process tree are killed rather than blocking or continuing in the
+background.
 
 ---
 
@@ -461,8 +462,9 @@ workers; malformed or dead PID state is replaced as stale.
 - Every poll first reconciles interrupted runs. Complete artifacts can resume upload and a
   confirmed upload can resume finalization. An upload with an unknown outcome is never
   duplicated automatically; it is retained as an `upload_failed` audit record.
-- Shutdown is cooperative: `stop` removes the PID file; the daemon notices and exits
-  cleanly (graceful SIGTERM handling on Unix, ctypes liveness probe on Windows).
+- Shutdown is cooperative: `stop` removes the PID file; an active job may finish, then the
+  daemon claims no additional jobs and exits cleanly (graceful SIGTERM handling on Unix,
+  ctypes liveness probe on Windows).
 
 JSON log records contain `log_schema_version`, UTC `timestamp`, `level`, `event`, stable
 `runner_id`, `pid`, and redacted `message`. Rotation remains 5 MiB × four files total.

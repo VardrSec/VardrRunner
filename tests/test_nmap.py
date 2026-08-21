@@ -17,10 +17,11 @@ from vardrrunner.commands import jobs as jobs_cmd
 
 def test_run_nmap_uses_safe_arg_list(tmp_path):
     output = tmp_path / "nmap.xml"
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
+    process = MagicMock(pid=1234)
+    process.wait.return_value = 0
+    with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
         runner.run_nmap(["10.0.0.1", "10.0.0.2"], output, top_ports=50, timing=3)
-        args = mock_run.call_args[0][0]
+        args = mock_spawn.call_args[0][0]
 
     assert isinstance(args, list)
     assert args[0] == "nmap"
@@ -43,10 +44,11 @@ def test_run_nmap_uses_safe_arg_list(tmp_path):
 
 def test_run_nmap_clamps_timing(tmp_path):
     output = tmp_path / "nmap.xml"
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
+    process = MagicMock(pid=1234)
+    process.wait.return_value = 0
+    with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
         runner.run_nmap(["10.0.0.1"], output, timing=9)
-        args = mock_run.call_args[0][0]
+        args = mock_spawn.call_args[0][0]
     # timing clamped to 4
     assert "-T4" in args
     assert "-T9" not in args
@@ -54,8 +56,9 @@ def test_run_nmap_clamps_timing(tmp_path):
 
 def test_run_nmap_raises_on_nonzero_exit(tmp_path):
     output = tmp_path / "nmap.xml"
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=1)
+    process = MagicMock(pid=1234)
+    process.wait.return_value = 1
+    with patch("vardrrunner.runner._spawn_tool", return_value=process):
         with pytest.raises(runner.ToolError):
             runner.run_nmap(["10.0.0.1"], output)
 

@@ -19,7 +19,8 @@ results, and heartbeats so the backend always knows which machines are online.
 - **Daemon mode** — `daemon start` runs a continuous background worker (poll every 5 s,
   heartbeat every 60 s) with detached mode, PID file, and graceful shutdown
 - **Tool runners** — `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu` (more coming),
-  each capturing output into a timestamped run directory, every run bounded by a timeout
+  each capturing output into an atomically unique run directory, every run bounded by a
+  timeout that terminates the complete child-process tree
 - **Recon pipelines** — chain tools in one command: `recon` (subfinder → httpx → nuclei),
   `deep` (adds dnsx resolution), `ports` (subfinder → dnsx → naabu), `quick`
 - **VardrGate authorization tests** — `vardrgate_api_test` jobs drive the local `vardrgate`
@@ -45,7 +46,8 @@ results, and heartbeats so the backend always knows which machines are online.
   auth, daemon, disk, tools, pipelines) and exits non-zero on actionable failures, for
   scripting unattended/VPS provisioning
 - **Safe by default** — missing tools fail the job loudly, targets are normalized before
-  use, and the API key is stored locally with restrictive permissions
+  use, risky target classes can be denied locally, and the API key is stored locally with
+  restrictive permissions
 
 ## Requirements
 - Python **3.10+**
@@ -154,6 +156,8 @@ file**:
 | `VARDRUNNER_MAX_ARTIFACT_MB` | Artifact ceiling before upload (default 100 MiB; range 1–10240) |
 | `VARDRUNNER_MAX_CONCURRENT_JOBS` | Parallel engagement groups (default 1; range 1–8) |
 | `VARDRUNNER_MIN_FREE_DISK_MB` | Required free-space reserve (default 512 MiB; 0 disables) |
+| `VARDRRUNNER_DENY_TARGETS` | Comma-separated target classes, literal hosts, or CIDRs to block locally; nothing is denied by default |
+| `VARDRRUNNER_ALLOW_DENIED_TARGETS` | Set to `1` for an explicit, audited override of local deny rules |
 
 The runner refuses to send your API key over plain HTTP to a non-local host, so a mistyped
 `http://` URL can't leak your key.
@@ -168,6 +172,7 @@ existing supervisor. VardrRunner never creates, reads, or prints the env file's 
 - [docs/development.md](docs/development.md) — local setup, testing, and contribution workflow
 - [docs/cli.md](docs/cli.md) — complete command and flag reference
 - [docs/adr/](docs/adr/) — Architecture Decision Records
+- [SECURITY.md](SECURITY.md) — private vulnerability reporting and support policy
 - [CHANGELOG.md](CHANGELOG.md) — version history
 
 ## Development & testing
@@ -176,11 +181,11 @@ pip install -e ".[dev]"   # editable install + dev tools (pytest, ruff, mypy)
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
-pytest tests              # 794 tests; all subprocess + HTTP calls are mocked
+pytest tests              # 888 tests; all subprocess + HTTP calls are mocked
 ```
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
-95% coverage floor on Python 3.10/3.11/3.12 (Linux) plus a 3.12 smoke on Windows and
-macOS, and a `pip-audit` dependency audit — on every push and PR to `main`.
+95% coverage floor on Python 3.10–3.14 (Linux) plus Python 3.14 on Windows and macOS,
+and a `pip-audit` dependency audit — on every push and PR to `main`.
 Contributions follow the **Engineering Charter** in [CLAUDE.md](CLAUDE.md): clean code,
 tests in the same commit, docs updated, and the suite always green.
 

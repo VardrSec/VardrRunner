@@ -19,10 +19,11 @@ from vardrrunner.commands.run import run_subfinder
 
 def test_run_subfinder_uses_arg_list(tmp_path):
     output = tmp_path / "out.txt"
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
+    process = MagicMock(pid=1234)
+    process.wait.return_value = 0
+    with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
         runner.run_subfinder(["example.com", "target.io"], output)
-        args = mock_run.call_args[0][0]
+        args = mock_spawn.call_args[0][0]
         assert isinstance(args, list), "subprocess must be called with a list"
         assert args[0] == "subfinder"
         assert "-dL" in args
@@ -33,8 +34,9 @@ def test_run_subfinder_uses_arg_list(tmp_path):
 
 def test_run_subfinder_raises_on_nonzero_exit(tmp_path):
     output = tmp_path / "out.txt"
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=1)
+    process = MagicMock(pid=1234)
+    process.wait.return_value = 1
+    with patch("vardrrunner.runner._spawn_tool", return_value=process):
         with pytest.raises(runner.ToolError):
             runner.run_subfinder(["example.com"], output)
 
@@ -531,3 +533,34 @@ def test_run_jobs_generic_exception_marks_failed(tmp_path):
         jobs_cmd.run_jobs(yes=True)
 
     assert client.complete_job.call_args[0][1] == "failed"
+
+
+def test_stop_request_prevents_claiming_the_next_job(tmp_path):
+    jobs = [
+        {
+            "id": f"job-{index}",
+            "engagement_id": "prog-1",
+            "tool_type": "httpx",
+            "target_source": "scope",
+            "config": {},
+        }
+        for index in range(2)
+    ]
+    client = MagicMock()
+    client.pending_jobs.return_value = jobs
+    client.scope.return_value = {"in": [{"value": "app.example.com"}], "out": []}
+    client.claim_job.return_value = {}
+
+    with (
+        patch("vardrrunner.commands.jobs.runner.tool_available", return_value=True),
+        patch("vardrrunner.commands.jobs._make_run_dir", return_value=tmp_path),
+        patch("vardrrunner.commands.jobs.runner.run_httpx"),
+    ):
+        jobs_cmd.execute_pending_jobs(
+            client,
+            MagicMock(),
+            yes=True,
+            should_stop=lambda: client.claim_job.call_count >= 1,
+        )
+
+    client.claim_job.assert_called_once_with("job-0")

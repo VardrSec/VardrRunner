@@ -8,6 +8,8 @@ import logging
 import os
 import re
 import shutil
+import signal
+import stat
 import subprocess
 import tempfile
 import urllib.parse
@@ -34,6 +36,7 @@ ALLOWED_TOOLS = {
 # daemon forever — the run is killed and the job marked failed. Override per run
 # (job config `timeout`) or globally via the VARDRRUNNER_TOOL_TIMEOUT env var.
 DEFAULT_TOOL_TIMEOUT = 1800  # 30 minutes
+_SENSITIVE_TEMP_PREFIX = "vardrrunner-vardrgate-"
 
 
 class ToolTimeout(Exception):
@@ -83,7 +86,125 @@ def _resolve_timeout(override: int | None) -> int:
     return DEFAULT_TOOL_TIMEOUT
 
 
-def _run_tool(cmd: list[str], temp_file: str, tool: str, timeout: int | None) -> None:
+def _terminate_process_tree(process: subprocess.Popen) -> None:
+    """Terminate a tool and its descendants, then reap the parent process."""
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            process.kill()
+        else:
+            if result.returncode != 0:
+                process.kill()
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]
+        except ProcessLookupError:
+            pass
+        except OSError:
+            process.kill()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def _spawn_tool(cmd: list[str]) -> subprocess.Popen:
+    """Start a tool in a process group that can be terminated as one unit."""
+    if os.name == "nt":
+        return subprocess.Popen(
+            cmd,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
+        )
+    return subprocess.Popen(cmd, start_new_session=True)
+
+
+def _pid_alive(pid: int) -> bool:
+    """Best-effort liveness check used only to protect active private temp dirs."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        process_query_limited_information = 0x1000
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            return False
+        kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def cleanup_sensitive_temp_dirs() -> None:
+    """Remove abandoned private VardrGate job directories without touching active runs."""
+    try:
+        root = Path(tempfile.gettempdir()).resolve()
+        entries = tuple(root.iterdir())
+    except OSError:
+        return
+    for candidate in entries:
+        if not candidate.name.startswith(_SENSITIVE_TEMP_PREFIX):
+            continue
+        suffix = candidate.name.removeprefix(_SENSITIVE_TEMP_PREFIX)
+        pid_text, separator, nonce = suffix.partition("-")
+        if not separator or not nonce or not pid_text.isdigit():
+            continue
+        try:
+            is_junction = getattr(candidate, "is_junction", lambda: False)()
+            if candidate.is_symlink() or is_junction or not candidate.is_dir():
+                continue
+            resolved = candidate.resolve()
+            if resolved.parent != root or _pid_alive(int(pid_text)):
+                continue
+            shutil.rmtree(resolved)
+        except OSError:
+            logging.warning("Could not remove an abandoned sensitive VardrGate temp directory")
+
+
+def _remove_private_job(directory: Path, path: Path) -> None:
+    """Remove the one expected private job file and its now-empty directory."""
+    path.unlink(missing_ok=True)
+    directory.rmdir()
+
+
+def _write_private_job(payload: dict) -> tuple[Path, Path]:
+    """Write a VardrGate job into a user-private, crash-recoverable directory."""
+    cleanup_sensitive_temp_dirs()
+    directory = Path(tempfile.mkdtemp(prefix=f"{_SENSITIVE_TEMP_PREFIX}{os.getpid()}-")).resolve()
+    path = directory / "job.json"
+    try:
+        if os.name != "nt":
+            directory.chmod(stat.S_IRWXU)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat.S_IRUSR | stat.S_IWUSR)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        try:
+            _remove_private_job(directory, path)
+        except OSError as cleanup_error:
+            raise ToolError(
+                "could not remove incomplete sensitive VardrGate job data"
+            ) from cleanup_error
+        raise
+    return path, directory
+
+
+def _run_tool(cmd: list[str], temp_file: str | None, tool: str, timeout: int | None) -> None:
     """Run an allowlisted command with a timeout, always cleaning up the temp file.
 
     Raises ToolTimeout (after killing the process) if the run exceeds the limit.
@@ -92,29 +213,27 @@ def _run_tool(cmd: list[str], temp_file: str, tool: str, timeout: int | None) ->
     seconds = _resolve_timeout(timeout)
     observer = _PROCESS_OBSERVER.get()
     try:
-        if observer is None:
-            result = subprocess.run(cmd, check=False, timeout=seconds)
-        else:
-            process = subprocess.Popen(cmd)
+        process = _spawn_tool(cmd)
+        if observer is not None:
             try:
                 observer(process.pid)
             except Exception:
-                process.kill()
-                process.wait()
+                _terminate_process_tree(process)
                 raise
-            try:
-                returncode = process.wait(timeout=seconds)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-                raise
-            result = subprocess.CompletedProcess(cmd, returncode)
+        try:
+            returncode = process.wait(timeout=seconds)
+        except subprocess.TimeoutExpired:
+            _terminate_process_tree(process)
+            raise
     except subprocess.TimeoutExpired as e:
-        raise ToolTimeout(f"{tool} timed out after {seconds}s and was killed") from e
+        raise ToolTimeout(
+            f"{tool} timed out after {seconds}s and its process tree was killed"
+        ) from e
     finally:
-        Path(temp_file).unlink(missing_ok=True)
-    if result.returncode != 0:
-        raise ToolError(f"{tool} exited with code {result.returncode}")
+        if temp_file:
+            Path(temp_file).unlink(missing_ok=True)
+    if returncode != 0:
+        raise ToolError(f"{tool} exited with code {returncode}")
 
 
 def tool_available(name: str) -> bool:
@@ -376,22 +495,32 @@ def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> N
     """Run a VardrGate API authorization test job locally.
 
     ``job`` is the VardrGate job envelope (``{"config": {"test_case": ..., "execution": ...}}``).
-    It is written to a temp file and passed to ``vardrgate run``; the sanitized
-    result JSON is written to ``output_path``. The temp file is always removed.
+    It is written to a private temp file and passed to ``vardrgate run``; the sanitized
+    result JSON is written to ``output_path``. Cleanup is verified before success returns.
     """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
-        json.dump(job, tmp)
-        job_file = tmp.name
+    job_file, job_dir = _write_private_job(job)
 
     cmd = [
         ALLOWED_TOOLS["vardrgate_api_test"],
         "run",
         "--job",
-        job_file,
+        str(job_file),
         "--out",
         str(output_path),
     ]
-    return _run_tool(cmd, job_file, "vardrgate", timeout)
+    active_error: BaseException | None = None
+    try:
+        return _run_tool(cmd, None, "vardrgate", timeout)
+    except BaseException as exc:
+        active_error = exc
+        raise
+    finally:
+        try:
+            _remove_private_job(job_dir, job_file)
+        except OSError as cleanup_error:
+            if active_error is None:
+                raise ToolError("could not remove sensitive VardrGate job data") from cleanup_error
+            logging.error("Could not remove sensitive VardrGate job data after a failed run")
 
 
 def parse_naabu_json(json_path: Path) -> list[dict]:
