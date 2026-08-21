@@ -42,13 +42,20 @@ Installation paths, in order of preference:
 > deferred: it would mean a per-OS build matrix, unsigned-binary warnings on Windows, and a
 > weaker supply-chain story than the current wheel + SBOM + attestation.
 
+> **Amendment (2026-08-21, v0.36.1).** The workflow now verifies the source before build,
+> including an exact `vX.Y.Z` tag-to-`__version__` match, formatting, types, Bandit, the
+> coverage-gated suite, and `pip-audit`. Build, provenance attestation, GitHub Release, and
+> PyPI publishing are separate jobs; each receives only its required permissions. Every
+> third-party action is pinned to an immutable commit SHA. CI covers Linux on Python
+> 3.10–3.14 and the production runtime on Windows and macOS.
+
 ## Consequences
 - Every release has a verifiable provenance attestation and an SBOM, satisfying the
   supply-chain bar without manual steps.
 - PyPI publishing is decoupled: the maintainer enables it by configuring a trusted publisher
   and setting `PYPI_PUBLISH=true`; nothing breaks in the meantime.
-- A bad tag produces a bad release — the version bump + CHANGELOG roll remain a deliberate,
-  reviewed PR step before the tag is pushed.
+- A mismatched tag fails before build or publish. Version bump, changelog roll, and tagging
+  remain deliberate reviewed steps, while automation enforces their agreement.
 
 ## Alternatives considered
 - **Stored PyPI API token** — rejected; trusted publishing (OIDC) avoids a long-lived secret.

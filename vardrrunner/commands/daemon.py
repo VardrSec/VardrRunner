@@ -397,6 +397,7 @@ def start(
                     backend_url=url,
                     limits=limits,
                     client_factory=partial(api.VardrMapClient, url, key),
+                    should_stop=_shutdown_requested,
                 )
                 if count:
                     out.print(f"[dim]Cycle complete — {count} job(s) executed.[/dim]")

@@ -7,6 +7,40 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.36.1] — 2026-08-21
+
+Reliability and supply-chain hardening for concurrent and unattended runners. See
+[`changelog/v0.36.1.md`](changelog/v0.36.1.md).
+
+### Fixed
+
+- Concurrent runs now receive atomically unique directories even when they begin within
+  the same second.
+- Tool timeouts terminate the complete child-process tree on Windows, Linux, and macOS.
+- Cooperative daemon shutdown finishes active work but claims no additional jobs from an
+  already-fetched group.
+- Queue targets are validated, classified, warned, denied, and counted once; target
+  statistics now retain the original duplicate and blank-input accounting.
+- Target warning text is escaped before Rich renders it, preventing untrusted targets from
+  injecting terminal markup.
+- Resolved VardrGate jobs use a private temporary directory and file. Normal completion
+  removes them, and later CLI startup removes abandoned directories left by a hard crash.
+
+### Security
+
+- GitHub Actions are pinned to immutable commit SHAs, CI covers Python 3.13 and 3.14, and
+  release publishing is split into least-privilege verify/build/attest/publish jobs.
+- Release tags must exactly match the package version before artifacts can be built or
+  published.
+- Package metadata uses the SPDX `MIT` expression and explicit license-file declaration.
+- Added a private vulnerability-reporting policy in [`SECURITY.md`](SECURITY.md).
+
+### Tests
+
+- 888 hermetic tests pass at 95.29% coverage, including process-tree termination,
+  crash-residue cleanup, shutdown cancellation, concurrent run isolation, single-pass
+  target auditing, and hostile Rich markup.
+
 ## [0.36.0] — 2026-08-18
 
 Completes roadmap §16 (target safety), the one part of Phase 4 that shipped

@@ -62,7 +62,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
 | `vardrrunner/pipelines.py` | Named recon pipelines — ordered lists of `Stage(tool, source)`. Stages reference handlers; each stage writes its discovered targets to a local handoff file, which the next stage reads directly instead of querying the backend recon store. |
-| `vardrrunner/runner.py` | Subprocess execution, stdout/stderr capture, timestamped run directories under `~/.vardrmap/runs`. |
+| `vardrrunner/runner.py` | Allowlisted process-group execution, process-tree timeouts, stdout/stderr capture, private VardrGate job files, and atomically unique run directories under `~/.vardrmap/runs`. |
 | `vardrrunner/commands/auth.py` | `login` / `logout` / `whoami` — prompt for and persist backend URL + API key, remove stored credentials, and report the identity behind the key. |
 | `vardrrunner/commands/run.py` | `run httpx|subfinder|nuclei|nmap|dnsx|naabu` — execute one tool, upload results (shares the typed-config + handler path). |
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
@@ -84,17 +84,19 @@ requires VardrMap ≥ v0.22.0.
    runner opens a local run record before any claim; if durable state is unavailable it
    fails closed and claims nothing.
 2. **Validate and resolve targets** — validate the envelope/schema/config, verify the tool,
-   then expand scope/recon targets. Target shape and the local count ceiling are enforced;
-   only a count and sanitized command profile enter the journal. Target values and
-   credentials do not.
+   then expand scope/recon targets. The journal-aware lifecycle validates shape, records
+   input statistics, applies local findings/deny rules exactly once, and enforces the local
+   count ceiling. Only counts and a sanitized command profile enter the journal; target
+   values and credentials do not.
 3. **Claim** — `POST /jobs/{id}/claim` atomically transitions `pending → running`. The
    response is classified (ADR 0008): `409` is a lost race and the runner skips the job
    without marking it failed; `403` is **stop-work** and halts; `401`/`429`/`5xx` are
    reported with their category. Advisory policy warnings on the response are printed
    before any tool runs and emitted as a `policy_warning` event.
-4. **Execute** — after verifying the configured free-disk reserve, `runner.py` spawns the
-   tool as an argv list (never `shell=True` with server data), records its PID, and captures
-   output to a run directory. Emits `running`.
+4. **Execute** — after verifying the configured free-disk reserve, `runner.py` atomically
+   allocates a unique run directory and spawns the tool as an argv list in a dedicated
+   process group/session (never `shell=True` with server data). It records the PID and
+   captures output; a timeout terminates the complete process tree. Emits `running`.
 5. **Hash and upload** — enforce the local artifact-size ceiling, then stream a SHA-256
    digest and size into the journal before POSTing results. Emits `uploaded` after a
    confirmed response.
@@ -121,6 +123,10 @@ removes the PID file as a cooperative shutdown signal and the daemon exits grace
 Windows liveness is checked via a ctypes probe (plain `os.kill` on Windows is
 `TerminateProcess` and would kill the daemon it was meant to check).
 
+Shutdown does not interrupt an active tool. Once that job finishes, workers check the
+shutdown signal before every subsequent job and claim no more work from an already-fetched
+group.
+
 PID ownership is claimed with exclusive file creation and a durable write. Concurrent
 starts cannot both pass; malformed/non-positive/dead state is replaced once as stale.
 Poll and heartbeat ranges are checked in both CLI parsing and the daemon command boundary.
@@ -132,7 +138,8 @@ timestamp, level, event, runner ID, process ID, and message.
 Queue concurrency defaults to one and may be raised to eight. Pending work is grouped by
 engagement: groups may run in parallel, but jobs inside one group are sequential. Each
 worker receives an isolated API session; the backend's atomic claim remains the authority
-across multiple runner processes or hosts.
+across multiple runner processes or hosts. Atomic run-directory allocation prevents
+same-second workers from sharing an output path.
 
 For unattended startup, `service.py` generates a per-user systemd unit (Linux), LaunchAgent
 (macOS), or Scheduled Task (Windows). The generated command is the same foreground daemon,
@@ -156,7 +163,7 @@ Before each poll, reconciliation inspects unfinished records for the configured 
 Local state lives under `~/.vardrmap/`:
 - `config.json` — the backend `api_url` (normally **no secret**; only holds a plaintext
   `api_key` in the explicit no-keychain fallback); replacements are atomic
-- `runs/` — timestamped tool output directories, pruned after 7 days
+- `runs/` — atomically unique timestamp-prefixed tool output directories, pruned after 7 days
 - `runner-journal.sqlite3` — sanitized execution state and recovery metadata (SQLite/WAL)
 - `runner-identity.json` — stable installation UUID, name, and original hostname
 - `daemon.jsonl` — default structured service log (rotated; service installs only)
@@ -180,6 +187,12 @@ headless box with no keyring backend, login fails closed unless the operator exp
 passes `--allow-plaintext-credentials` (servers should use the env var). The backend URL must be HTTPS (except `localhost`,
 or with `VARDRRUNNER_ALLOW_INSECURE=1`) so the key is never sent in cleartext. The API key is
 the runner's only credential; it is never logged or printed.
+
+Resolved VardrGate identity secrets briefly exist in a private runner-owned temporary
+directory because the external CLI accepts a job file. On POSIX the directory is mode
+`0700` and the exclusively created file is `0600`; normal execution removes the directory.
+Every CLI startup also removes abandoned, correctly named directories whose owner PID is
+no longer alive, while refusing to traverse symlinks, junctions, or active directories.
 
 ## Policy and trust boundaries
 
@@ -223,8 +236,8 @@ in depth—in a successful response's warning array.
 ## Design invariants
 - **All HTTP goes through `api.py`.** No ad-hoc requests elsewhere.
 - **All backend data is untrusted.** Validate and normalize before it reaches a subprocess.
-- **Every tool run is time-bounded.** A hung tool is killed and the job marked failed — the
-  daemon never blocks forever.
+- **Every tool run is time-bounded.** A hung tool's complete process tree is killed and the
+  job marked failed — the daemon never blocks forever or leaves scanner children running.
 - **Failures are loud, and classified.** A missing/failed tool fails the job; it is never
   skipped silently. Every reported failure carries a `FailureCategory`.
 - **No unjournaled claims.** Queue work is not claimed unless local durable state is writable.
@@ -239,6 +252,8 @@ in depth—in a successful response's warning array.
   mismatches pause queue claims while heartbeat recovery remains available.
 - **Same-engagement work is serialized.** Optional concurrency applies only across groups;
   one runner process never executes two jobs from the same engagement simultaneously.
+- **Run outputs are isolated.** Directory allocation is atomic, so concurrent starts cannot
+  collide even when their wall-clock timestamp is identical.
 - **Installed means restartable.** Native service preflight rejects authentication that
   exists only in the launching shell unless a Linux environment file is attached.
 - **One local daemon owns the PID.** Exclusive creation closes the concurrent-start race;

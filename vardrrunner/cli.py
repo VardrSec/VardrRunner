@@ -10,6 +10,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from vardrrunner import runner as process_runner
 from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run
 from vardrrunner.commands import credentials as credentials_cmd
 from vardrrunner.commands import daemon as daemon_cmd
@@ -32,6 +33,12 @@ app = typer.Typer(
     help="Local runner for VardrMap. Runs tools locally, uploads results to your VardrMap instance.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def _startup_cleanup() -> None:
+    """Remove sensitive temp state left by a previously interrupted process."""
+    process_runner.cleanup_sensitive_temp_dirs()
 
 
 @app.command("init")

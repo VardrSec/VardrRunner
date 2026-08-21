@@ -29,6 +29,14 @@ engagement without introducing a distributed lock.
 Keep release discovery explicit and read-only: `update check` fetches public package
 metadata through `api.py`, writes a 24-hour atomic cache, and never installs software.
 
+> **Amendment (2026-08-21, v0.36.1).** Queue target resolution supplies raw collected
+> values to the lifecycle, which performs shape validation, statistics, classification,
+> warnings, and local deny evaluation exactly once. Statistics describe shape-valid input
+> before deny filtering; tool-specific normalization may then de-duplicate equivalent hosts.
+> Concurrent output directories are allocated atomically. Cooperative shutdown finishes
+> active work but checks the stop signal before every later job, preventing new claims from
+> an already-fetched group.
+
 ## Consequences
 
 - Old backends remain usable and can adopt compatibility constraints incrementally.

@@ -26,7 +26,7 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **794 tests** at ~95% coverage (CI floor: 95%), all hermetic: no network, no real
+- **888 tests** at 95.29% coverage (CI floor: 95%), all hermetic: no network, no real
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
@@ -55,7 +55,7 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_daemon.py` | daemon start/stop/status, PID file, liveness probe |
 | `tests/test_heartbeat.py` | heartbeat payload + posting |
 | `tests/test_job_events.py` | lifecycle event emission |
-| `tests/test_runner.py` | subprocess execution, timeouts, output capture, failures |
+| `tests/test_runner.py` | subprocess execution, process-tree timeouts, private temporary data, output capture, failures |
 | `tests/test_journal.py` | SQLite schema/state-machine invariants, concurrency, hashing, manifests, and job integration |
 | `tests/test_recovery.py` | interruption reconciliation, safe resume, ambiguous-upload refusal, backend isolation |
 | `tests/test_audit.py` | sanitized list/show/export behavior and atomic export failures |
@@ -65,6 +65,7 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_resources.py` | bounded environment policy, disk reserve, and artifact ceilings |
 | `tests/test_updates.py` | cached release checks and human/JSON command output |
 | `tests/test_phase4_safety.py` | target shape, queue ceilings, compatibility gate, and engagement-safe concurrency |
+| `tests/test_target_safety.py` | lexical target classification, local deny rules, single-pass queue auditing, and terminal escaping |
 | `tests/test_setup.py` | interactive/non-interactive onboarding, option forwarding, idempotent state, and doctor gating |
 | `tests/test_nmap.py` | nmap target normalization + profile + `run nmap` command |
 | `tests/test_status.py` | tool detection + status output |
@@ -88,7 +89,7 @@ Config lives in `pyproject.toml` (`[tool.ruff]`, `[tool.mypy]`).
 | Job | Contents |
 |-----|----------|
 | **Lint + types** | ruff check, ruff format --check, mypy, bandit — on Python 3.12 |
-| **Tests** | pytest with `--cov-fail-under=95` on Ubuntu 3.10/3.11/3.12, plus a 3.12 smoke on Windows and macOS (the daemon is OS-sensitive: Windows ctypes liveness, POSIX signals) |
+| **Tests** | pytest with `--cov-fail-under=95` on Ubuntu 3.10–3.14, plus Python 3.14 on Windows and macOS (the daemon is OS-sensitive: Windows ctypes liveness, POSIX signals) |
 | **Dependency audit** | `pip-audit` against the installed dependency set |
 
 Tests only run if the lint job passes (`needs: lint`).
@@ -102,8 +103,9 @@ Tests only run if the lint job passes (`needs: lint`).
 6. Open a PR; CI must pass before merge.
 
 ## Releasing
-Releases are **tag-driven** — pushing a `vX.Y.Z` tag runs `release.yml` (build → SBOM →
-provenance attestation → GitHub Release, with opt-in PyPI). See
+Releases are **tag-driven** — pushing a `vX.Y.Z` tag runs `release.yml` (verify tag and
+source → build + SBOM → provenance attestation → GitHub Release, with opt-in PyPI). The
+jobs are split by privilege and all third-party actions are pinned to commit SHAs. See
 [ADR 0003](adr/0003-distribution-and-release.md).
 
 1. In a PR: bump `__version__` in `vardrrunner/__init__.py` — the **single source of truth**
@@ -111,7 +113,8 @@ provenance attestation → GitHub Release, with opt-in PyPI). See
 2. Roll `Unreleased` into a dated `## [X.Y.Z]` section in `CHANGELOG.md`; add a
    `changelog/vX.Y.Z.md` rollup note.
 3. Merge the PR, then tag `main` and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-4. The release workflow publishes a GitHub Release with the wheel, sdist, and SBOM.
+4. The release workflow refuses a tag that does not exactly match `__version__`, then
+   publishes a GitHub Release with the wheel, sdist, and SBOM.
    **PyPI** is opt-in: configure a [trusted publisher](https://docs.pypi.org/trusted-publishers/)
    for this repo's `release.yml` and set the repo variable `PYPI_PUBLISH=true`.
 

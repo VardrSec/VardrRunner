@@ -279,6 +279,34 @@ class TestJobPathIntegration:
         events = [c.args[1] for c in client.post_event.call_args_list]
         return con.export_text(), events, client, reg.get.return_value
 
+    def _run_real_scope(self, tmp_path, resolved, env=None):
+        """Exercise the real handler/resolver boundary, not a mocked handler."""
+        from unittest.mock import MagicMock
+
+        from vardrrunner.commands import jobs as jobs_cmd
+
+        client = MagicMock()
+        client.pending_jobs.return_value = [dict(self.JOB)]
+        client.scope.return_value = {
+            "in": [{"value": target, "kind": "url"} for target in resolved],
+            "out": [],
+        }
+        client.claim_job.return_value = {}
+        con = Console(record=True, width=220)
+        env = env or {}
+        with patch.dict(os.environ, env, clear=False):
+            for var in (ts.ENV_DENY, ts.ENV_ALLOW_DENIED):
+                if var not in env:
+                    os.environ.pop(var, None)
+            with (
+                patch("vardrrunner.commands.jobs.runner.tool_available", return_value=True),
+                patch("vardrrunner.commands.jobs._make_run_dir", return_value=tmp_path),
+                patch("vardrrunner.runner.run_httpx") as run_httpx,
+            ):
+                jobs_cmd.execute_pending_jobs(client, con, yes=True)
+        events = [(call.args[1], call.args[2]) for call in client.post_event.call_args_list]
+        return con.export_text(), events, client, run_httpx
+
     def test_metadata_target_warns_but_still_runs(self, tmp_path):
         """A warning is not a veto — the tool must still execute."""
         out, events, client, handler = self._run(tmp_path, ["http://169.254.169.254/"])
@@ -321,3 +349,24 @@ class TestJobPathIntegration:
         _, events, _, handler = self._run(tmp_path, ["https://a.example.com"])
         assert "target_blocked" not in events and "deny_override" not in events
         handler.execute.assert_called_once()
+
+    def test_real_resolver_screens_warning_once_and_escapes_markup(self, tmp_path):
+        target = "http://169.254.169.254/[red]hidden[/red]"
+        output, events, _, run_httpx = self._run_real_scope(tmp_path, [target])
+        assert output.count("cloud instance-metadata endpoint") == 1
+        assert "[red]hidden[/red]" in output
+        assert [kind for kind, _ in events].count("target_warning") == 1
+        run_httpx.assert_called_once()
+
+    def test_real_resolver_preserves_block_and_input_statistics(self, tmp_path):
+        output, events, _, run_httpx = self._run_real_scope(
+            tmp_path,
+            ["http://169.254.169.254/", "https://a.example.com", "https://a.example.com", ""],
+            {ts.ENV_DENY: "cloud_metadata"},
+        )
+        event_map = {kind: text for kind, text in events}
+        assert "target_blocked" in event_map
+        assert "1 duplicate(s) removed" in event_map["target_stats"]
+        assert "1 blank line(s) skipped" in event_map["target_stats"]
+        assert "blocked" in output
+        assert run_httpx.call_args.args[0] == ["https://a.example.com"]

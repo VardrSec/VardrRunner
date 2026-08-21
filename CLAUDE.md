@@ -17,7 +17,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
   - `compatibility.py` / `resources.py` / `updates.py` — wire negotiation, bounded local policy, and cached release checks (ADR 0012)
   - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `updates`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (794 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite (888 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
 - `.github/workflows/` — CI (lint + tests on every push)

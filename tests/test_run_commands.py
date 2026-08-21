@@ -142,11 +142,13 @@ def test_run_httpx_disabled_cap_runs_all_targets():
 # ---------------------------------------------------------------------------
 
 
-def test_make_run_dir_creates_timestamped_dir(tmp_path):
+def test_make_run_dir_creates_unique_timestamped_dirs(tmp_path):
     with patch("vardrrunner.commands.run.config.runs_dir", return_value=tmp_path):
-        d = run_cmd._make_run_dir()
-    assert d.exists()
-    assert d.parent == tmp_path
+        first = run_cmd._make_run_dir()
+        second = run_cmd._make_run_dir()
+    assert first.exists() and second.exists()
+    assert first.parent == tmp_path and second.parent == tmp_path
+    assert first != second
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 import typer
 from rich.console import Console
 
-from vardrrunner import api, target_safety
+from vardrrunner import api, redaction, target_safety
 
 console = Console()
 
@@ -75,7 +75,7 @@ def screen_targets(targets: list[str]) -> list[str]:
     overrides that explicitly.
     """
     for finding in target_safety.assess(targets):
-        console.print(f"[yellow]⚠ {finding.describe()}[/yellow]")
+        console.print(f"[yellow]⚠ {redaction.redact_rich_text(finding.describe())}[/yellow]")
 
     rules = target_safety.load_deny_rules()
     allowed, denied = target_safety.apply_deny_rules(targets, rules)
@@ -85,13 +85,14 @@ def screen_targets(targets: list[str]) -> list[str]:
     if target_safety.override_enabled():
         for finding in denied:
             console.print(
-                f"[yellow]override:[/yellow] {finding.describe()} — permitted by "
+                f"[yellow]override:[/yellow] "
+                f"{redaction.redact_rich_text(finding.describe())} — permitted by "
                 f"{target_safety.ENV_ALLOW_DENIED}"
             )
         return list(targets)
 
     for finding in denied:
-        console.print(f"[red]blocked:[/red] {finding.describe()}")
+        console.print(f"[red]blocked:[/red] {redaction.redact_rich_text(finding.describe())}")
     if not allowed:
         console.print(
             f"[red]All targets blocked by local deny rules.[/red] Set "
@@ -123,10 +124,20 @@ def _resolve_targets(
     targets_file: Path | None,
     status_code: int | None,
     limit: int,
+    apply_local_policy: bool = True,
 ) -> list[str]:
-    """Collect the target list from the chosen source."""
+    """Collect targets, optionally applying the interactive local policy layer.
+
+    Direct commands and pipelines use the default so warnings and local deny
+    rules are presented immediately. The unattended queue passes ``False`` and
+    lets its journal-aware lifecycle validate, screen, and audit exactly once.
+    """
+
+    def finalize(values: list[str]) -> list[str]:
+        return _safe(values) if apply_local_policy else values
+
     if target:
-        return _safe([target])
+        return finalize([target])
 
     if targets_file:
         if not targets_file.exists():
@@ -141,7 +152,7 @@ def _resolve_targets(
         except (OSError, TargetValidationError) as exc:
             console.print(f"[red]Could not read target file:[/red] {exc}")
             raise typer.Exit(1) from exc
-        return _safe([line for line in lines if line.strip()])
+        return finalize(lines)
 
     if scope:
         raw = client.scope(engagement_id)
@@ -167,7 +178,7 @@ def _resolve_targets(
             )
             for s in skipped:
                 console.print(f"  [dim]skip:[/dim] {s}")
-        return _safe(resolved)
+        return finalize(resolved)
 
     if from_recon:
         items = client.recon(engagement_id, limit=limit, status_code=status_code)
@@ -178,9 +189,9 @@ def _resolve_targets(
             if not isinstance(item, dict):
                 _malformed_source("recon")
             val = item.get("url") or item.get("host")
-            if isinstance(val, str) and val:
+            if isinstance(val, str):
                 targets.append(val)
-        return _safe(targets)
+        return finalize(targets)
 
     console.print(
         "[red]No target source specified.[/red] Use --scope, --from-recon, --target, or --targets."

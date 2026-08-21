@@ -10,6 +10,7 @@ execute + upload. So `run nmap --timing 9` is rejected exactly like a job would 
 
 import datetime
 import shutil
+import tempfile
 from pathlib import Path
 
 import typer
@@ -70,9 +71,9 @@ def _check_target_cap(targets: list[str], max_targets: int) -> None:
 def _make_run_dir() -> Path:
     _prune_run_dirs()
     ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
-    run_dir = config.runs_dir() / ts
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
+    runs = config.runs_dir()
+    runs.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix=f"{ts}-", dir=runs))
 
 
 def _execute(run_callable):
