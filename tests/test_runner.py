@@ -600,7 +600,7 @@ def test_run_vardrgate_fails_closed_when_sensitive_cleanup_fails(tmp_path):
     with (
         patch("vardrrunner.runner._write_private_job", return_value=(job_file, directory)),
         patch("vardrrunner.runner._run_tool"),
-        patch("vardrrunner.runner.shutil.rmtree", side_effect=OSError("locked")),
+        patch("vardrrunner.runner._remove_private_job", side_effect=OSError("locked")),
     ):
         with pytest.raises(runner.ToolError, match="could not remove sensitive"):
             runner.run_vardrgate({}, tmp_path / "result.json")

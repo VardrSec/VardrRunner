@@ -37,7 +37,7 @@ Reliability and supply-chain hardening for concurrent and unattended runners. Se
 
 ### Tests
 
-- 888 hermetic tests pass at 95.29% coverage, including process-tree termination,
+- 888 hermetic tests pass at 95.24% coverage, including process-tree termination,
   crash-residue cleanup, shutdown cancellation, concurrent run isolation, single-pass
   target auditing, and hostile Rich markup.
 

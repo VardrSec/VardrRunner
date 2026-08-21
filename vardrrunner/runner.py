@@ -174,6 +174,12 @@ def cleanup_sensitive_temp_dirs() -> None:
             logging.warning("Could not remove an abandoned sensitive VardrGate temp directory")
 
 
+def _remove_private_job(directory: Path, path: Path) -> None:
+    """Remove the one expected private job file and its now-empty directory."""
+    path.unlink(missing_ok=True)
+    directory.rmdir()
+
+
 def _write_private_job(payload: dict) -> tuple[Path, Path]:
     """Write a VardrGate job into a user-private, crash-recoverable directory."""
     cleanup_sensitive_temp_dirs()
@@ -187,8 +193,13 @@ def _write_private_job(payload: dict) -> tuple[Path, Path]:
             json.dump(payload, handle)
             handle.flush()
             os.fsync(handle.fileno())
-    except Exception:
-        shutil.rmtree(directory, ignore_errors=True)
+    except BaseException:
+        try:
+            _remove_private_job(directory, path)
+        except OSError as cleanup_error:
+            raise ToolError(
+                "could not remove incomplete sensitive VardrGate job data"
+            ) from cleanup_error
         raise
     return path, directory
 
@@ -505,7 +516,7 @@ def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> N
         raise
     finally:
         try:
-            shutil.rmtree(job_dir)
+            _remove_private_job(job_dir, job_file)
         except OSError as cleanup_error:
             if active_error is None:
                 raise ToolError("could not remove sensitive VardrGate job data") from cleanup_error
