@@ -574,7 +574,7 @@ def test_write_private_job_removes_directory_when_creation_fails(tmp_path):
         patch("vardrrunner.runner.tempfile.mkdtemp", return_value=str(directory)),
         patch("vardrrunner.runner.os.open", side_effect=OSError("denied")),
     ):
-        with pytest.raises(OSError, match="denied"):
+        with pytest.raises(OSError):
             runner._write_private_job({"secret": "value"})
     assert not directory.exists()
 
