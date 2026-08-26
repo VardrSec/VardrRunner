@@ -40,6 +40,7 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_job_policy.py` | stop-work, claim race, auth/backend failures, advisory display |
 | `tests/test_config.py` | credential resolution, HTTPS validation, auth |
 | `tests/test_credentials.py` | keychain resolution (env > keychain > file), login/logout, fallback |
+| `tests/test_credentials_posture.py` | fail-closed login, the plaintext opt-in, and credential posture reporting |
 | `tests/test_keychain.py` | the `keyring` wrapper itself, incl. graceful degradation |
 | `tests/test_auth_commands.py` | `login_vardrmap`, `logout`, `whoami` |
 | `tests/test_configs.py` | typed tool configs + `JobEnvelope` validation |
