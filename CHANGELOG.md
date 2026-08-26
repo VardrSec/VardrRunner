@@ -7,6 +7,24 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Documentation
+
+- **ADR index completed.** ADRs 0010–0013 (execution journal, runner identity and service
+  management, compatibility and safety controls, guided setup) were written across v0.32.0–
+  v0.35.0 but never added to [`docs/adr/README.md`](docs/adr/README.md), so four accepted
+  decisions were unreachable from the index.
+- **`tests/test_credentials_posture.py` added to the test table** in
+  [`docs/development.md`](docs/development.md) — it was the only test file missing.
+- **`CLAUDE.md` module map completed.** `target_safety.py`, `errors.py`, `policy.py`,
+  `credentials.py` and `redaction.py` were all missing from the orientation list.
+- **Corrected the credential summary in `CLAUDE.md`**, which still described a "plaintext
+  config fallback". Since v0.31.0 that path is opt-in via `--allow-plaintext-credentials`,
+  not a silent fallback — the stale wording described exactly the behaviour ADR 0009
+  removed.
+
+Documentation only; no behaviour change, so no release is cut for it.
+
+
 ## [0.36.1] — 2026-08-21
 
 Reliability and supply-chain hardening for concurrent and unattended runners. See

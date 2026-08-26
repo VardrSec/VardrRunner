@@ -10,6 +10,11 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `keychain.py` — OS keychain wrapper (`keyring`); degrades gracefully
   - `configs.py` — typed, validated tool configs + `JobEnvelope`; bad payload → `ConfigError`
   - `targets.py` — target resolution (scope/recon/inline/file)
+  - `target_safety.py` — classifies resolved targets (loopback / link-local / cloud metadata) and evaluates local deny rules; warnings never block (§16, v0.36.0)
+  - `errors.py` — `FailureCategory` + `RunnerError` hierarchy; the one place a status becomes a domain meaning (ADR 0008)
+  - `policy.py` — parses the backend's advisory `warnings` array; total, never raises
+  - `credentials.py` — credential posture (source, encryption at rest, permissions); never returns the key (ADR 0009)
+  - `redaction.py` — the single sanitization layer in front of every trust boundary (ADR 0008)
   - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
@@ -35,7 +40,10 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
 - Never build shell strings from unsanitized server data — always pass argv lists
 
 ## Security
-- API key: OS keychain by default (env `VARDRMAP_API_KEY` > keychain > plaintext config fallback). Never echo it.
+- API key: OS keychain by default (env `VARDRMAP_API_KEY` > keychain > config file). Never echo it.
+- **`login` fails closed:** with no keychain it refuses to store the key unless
+  `--allow-plaintext-credentials` is passed. The plaintext path is opt-in, not a silent
+  fallback (ADR 0009, v0.31.0 — breaking).
 - Backend URL must be HTTPS (except localhost); `config.validate_api_url` enforces this on login and every authenticated call
 - Treat all backend data as untrusted: validate job payloads, normalize targets before passing to subprocess
 - Never use `shell=True` with interpolated server data

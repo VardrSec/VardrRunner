@@ -21,3 +21,7 @@ the way it does.
 | [0007](0007-local-secret-resolution.md) | Local secret resolution for VardrGate identities | Accepted |
 | [0008](0008-error-classification-and-policy-handling.md) | Error classification and advisory policy handling | Accepted |
 | [0009](0009-fail-closed-credential-storage.md) | Fail closed on plaintext credential storage | Accepted |
+| [0010](0010-durable-execution-journal.md) | Durable execution journal and conservative reconciliation | Accepted |
+| [0011](0011-runner-identity-and-service-management.md) | Stable runner identity and native user-service management | Accepted |
+| [0012](0012-compatibility-and-local-safety-controls.md) | Compatibility negotiation and local execution safety controls | Accepted |
+| [0013](0013-guided-setup-and-host-lifecycle.md) | Guided setup and verified host lifecycle | Accepted |
