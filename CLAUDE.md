@@ -94,7 +94,7 @@ vardrrunner daemon start
 - `engagements` — list engagements (`programs` kept as a hidden alias)
 - `scope <engagement-id>` — show in/out-of-scope items
 - `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau` — run tool locally, upload results
-- `pipeline list|run <name>` — chain tools (`recon`, `quick`, `deep`, `ports`)
+- `pipeline list|run <name>` — chain tools (`recon`, `quick`, `deep`, `ports`, `content`)
 - `import nuclei|httpx` — import existing output file
 - `jobs list|run` — inspect and execute backend job queue (one-shot)
 - `audit list|show|export` — inspect/export sanitized local execution evidence

@@ -410,6 +410,7 @@ Built-in pipelines:
 | `quick` | subfinder → httpx |
 | `deep` | subfinder → **dnsx** (keep only resolvable) → httpx → nuclei |
 | `ports` | subfinder → dnsx → **naabu** (fast port scan → services) |
+| `content` | subfinder → httpx → **katana** (crawl live hosts) → **gau** (archived URLs for scope) |
 
 Options for `pipeline run`:
 - `--severity high,critical` — nuclei severity filter for the scan stage

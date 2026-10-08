@@ -31,6 +31,18 @@ def test_pipeline_definitions():
         "nuclei",
     ]
     assert [s.tool for s in pipelines.PIPELINES["ports"]] == ["subfinder", "dnsx", "naabu"]
+    # content crawls live hosts (katana) and pulls archived URLs (gau).
+    content = pipelines.PIPELINES["content"]
+    assert [s.tool for s in content] == ["subfinder", "httpx", "katana", "gau"]
+    assert content[2].source == "recon" and content[3].source == "scope"
+
+
+def test_every_pipeline_stage_is_a_registered_tool():
+    from vardrrunner import handlers
+
+    for name, stages in pipelines.PIPELINES.items():
+        for stage in stages:
+            assert stage.tool in handlers.REGISTRY, f"{name}: {stage.tool}"
 
 
 def test_list_pipelines_runs(capsys):

@@ -32,6 +32,7 @@ other tool is unaffected.
 - **Per-tool version flag** in the manifest (`version_args`), validated as bare options.
 - **`init` offers to install the pinned tools** (default yes interactively; off under `--non-interactive` unless `--install-tools` is passed). A tool that fails to install does not abort setup — the final `doctor` reports it.
 - **A managed nuclei keeps its templates under `~/.vardrmap/data/nuclei-templates`** (`-update-template-dir`), so `tools purge` removes them too. A `PATH` nuclei is left with its existing template directory.
+- **`content` pipeline** (subfinder → httpx → katana → gau) for `pipeline run` and the composer's "Content Discovery".
 - **Chunked uploads for katana and gau.** VardrMap refuses imports over 2 MiB by default,
   and gau on a large domain easily exceeds that. Results are now sent in line-aligned
   pieces of at most 1.5 MB; a result that fits is sent as one file, as before. The backend
