@@ -9,7 +9,7 @@ import requests
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config, redaction, runner
+from vardrrunner import api, config, redaction, runner, toolchain
 
 console = Console()
 
@@ -100,9 +100,15 @@ def run_status() -> None:
     # ------------------------------------------------------------------
     tools_table = Table(show_header=False, box=None, padding=(0, 1))
     # Iterate the allowlist directly so status never drifts from what the runner supports.
-    for tool in runner.ALLOWED_TOOLS:
-        found = runner.tool_available(tool)
-        _row(tools_table, found, f"{tool} {'found' if found else 'not found on PATH'}")
+    for tool, binary in runner.ALLOWED_TOOLS.items():
+        st = toolchain.status(tool, binary)
+        found = st.source in ("managed", "path") or (st.source == "system" and bool(st.path))
+        described = {
+            "managed": f"managed {st.installed_version}, verified",
+            "tampered": "FAILED VERIFICATION, will not run",
+            "path": "found on PATH (unverified)",
+        }.get(st.source, "found" if found else "not installed")
+        _row(tools_table, found, f"{tool} {described}")
 
     console.print()
     console.print("[bold]Tools[/bold]")

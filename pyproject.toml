@@ -60,6 +60,10 @@ version = { attr = "vardrrunner.__version__" }
 where = ["."]
 include = ["vardrrunner*"]
 
+# The pinned tool manifest is the installer's trust anchor; it must ship in the wheel.
+[tool.setuptools.package-data]
+vardrrunner = ["tool_manifest.json"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

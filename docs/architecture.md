@@ -42,7 +42,7 @@ requires VardrMap ≥ v0.22.0.
 | Path | Responsibility |
 |------|----------------|
 | `vardrrunner/cli.py` | Typer application; defines command groups and wires them together. Thin — delegates to `commands/`. |
-| `vardrrunner/api.py` | The **only** module that performs HTTP. A `requests.Session` wrapper exposing typed methods; raises `requests.HTTPError` on non-2xx. Retries transient failures (connection errors, 429/5xx) with exponential backoff on idempotent methods only (never POST/PATCH); sends a `User-Agent: vardrrunner/<version>` header. |
+| `vardrrunner/api.py` | The **only** module that performs HTTP. A `requests.Session` wrapper exposing typed methods; raises `requests.HTTPError` on non-2xx. Retries transient failures (connection errors, 429/5xx) with exponential backoff on idempotent methods only (never POST/PATCH); sends a `User-Agent: vardrrunner/<version>` header. Also performs the two public, unauthenticated fetches: release metadata for `update check`, and pinned tool archives for `tools install` (HTTPS-only, size-capped; integrity is checked by `toolchain.py`). |
 | `vardrrunner/config.py` | Resolve credentials (key: env > keychain > config file; URL: env > file); atomically persist config; identify whether auth survives a fresh service process; enforce HTTPS. |
 | `vardrrunner/keychain.py` | OS keychain wrapper (`keyring`) for the API key. Degrades gracefully (returns None/False) when no backend is present, so servers fall back to env/file. |
 | `vardrrunner/configs.py` | Typed, validated tool configs (`HttpxConfig`, `NucleiConfig`, `NmapConfig`, `SubfinderConfig`, `VardrGateConfig`). Raw backend dicts are parsed into frozen dataclasses up front; invalid values raise `ConfigError` and fail the job fast. |
@@ -62,7 +62,8 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
 | `vardrrunner/pipelines.py` | Named recon pipelines — ordered lists of `Stage(tool, source)`. Stages reference handlers; each stage writes its discovered targets to a local handoff file, which the next stage reads directly instead of querying the backend recon store. |
-| `vardrrunner/runner.py` | Allowlisted process-group execution, process-tree timeouts, stdout/stderr capture, private VardrGate job files, and atomically unique run directories under `~/.vardrmap/runs`. |
+| `vardrrunner/runner.py` | Allowlisted process-group execution, process-tree timeouts, stdout/stderr capture, private VardrGate job files, and atomically unique run directories under `~/.vardrmap/runs`. Every command's program comes from `program()`, which asks `toolchain.py` for a verified managed path before falling back to `PATH`. |
+| `vardrrunner/toolchain.py` | Pinned, verified tool installs (ADR 0014). Loads `tool_manifest.json` (shipped in the package: version, per-platform archive URL, SHA-256), installs into `~/.vardrmap/tools` fail-closed (hash → single-member extract → version check → one rename → receipt), and re-hashes managed binaries before first use; a mismatch is never executed. |
 | `vardrrunner/commands/auth.py` | `login` / `logout` / `whoami` — prompt for and persist backend URL + API key, remove stored credentials, and report the identity behind the key. |
 | `vardrrunner/commands/run.py` | `run httpx|subfinder|nuclei|nmap|dnsx|naabu` — execute one tool, upload results (shares the typed-config + handler path). |
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
@@ -75,7 +76,8 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
 | `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — continuous worker (poll + heartbeat) with PID file and graceful shutdown. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
-| `vardrrunner/commands/status.py` | `status` — local config, version, detected tool availability (quick glance). |
+| `vardrrunner/commands/status.py` | `status` — local config, version, and each tool's source (managed / PATH / missing) (quick glance). |
+| `vardrrunner/commands/tools.py` | `tools install|list|verify|remove|purge` — manage pinned tool installs; also naabu's capture-library check shared with `doctor`. |
 | `vardrrunner/commands/doctor.py` | `doctor` — deep preflight; runs health checks and exits non-zero on actionable failures (`--json` report). Reuses `daemon` PID helpers and `config` validation. |
 | `vardrrunner/commands/engagements.py` | `engagements` (list) and `scope` (show in/out-of-scope items) — renamed from `commands/programs.py` in v0.27.0. |
 
@@ -94,7 +96,7 @@ requires VardrMap ≥ v0.22.0.
    reported with their category. Advisory policy warnings on the response are printed
    before any tool runs and emitted as a `policy_warning` event.
 4. **Execute** — after verifying the configured free-disk reserve, `runner.py` atomically
-   allocates a unique run directory and spawns the tool as an argv list in a dedicated
+   allocates a unique run directory, resolves the tool (a managed install must pass hash verification or the job fails; otherwise `PATH`), and spawns it as an argv list in a dedicated
    process group/session (never `shell=True` with server data). It records the PID and
    captures output; a timeout terminates the complete process tree. Emits `running`.
 5. **Hash and upload** — enforce the local artifact-size ceiling, then stream a SHA-256
@@ -240,6 +242,9 @@ in depth—in a successful response's warning array.
   job marked failed — the daemon never blocks forever or leaves scanner children running.
 - **Failures are loud, and classified.** A missing/failed tool fails the job; it is never
   skipped silently. Every reported failure carries a `FailureCategory`.
+- **A managed tool runs only if it still matches its receipt.** A binary in
+  `~/.vardrmap/tools` that fails hash verification fails the job and never falls back to a
+  `PATH` copy. Pins come from the package, never from the download site (ADR 0014).
 - **No unjournaled claims.** Queue work is not claimed unless local durable state is writable.
 - **Ambiguous uploads are not replayed.** Recovery favors duplicate prevention when the
   backend cannot prove idempotency; artifacts remain available for operator review.

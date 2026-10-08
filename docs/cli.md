@@ -151,9 +151,9 @@ vardrrunner scope <engagement-id>
 ---
 
 ## `status`
-Show local configuration, runner version, and which external tools are detected on `PATH`
-(with versions where available). Does not require auth for the local parts. This is the
-quick human glance — *"show me where I stand."*
+Show local configuration, runner version, and each external tool's source: a verified
+managed install, an unverified copy on `PATH`, or missing. Does not require auth for the
+local parts. This is the quick human glance — *"show me where I stand."*
 
 ```bash
 vardrrunner status
@@ -174,10 +174,11 @@ vardrrunner doctor --production                            # strict unattended p
 
 Checks: credential source (env vs file), backend URL validity (HTTPS), config-file
 permissions, API auth, daemon PID health (running / stale), run-dir writability, free disk,
-effective resource policy, tool versions, and per-pipeline readiness. **Failures** (no
-creds, bad URL, auth failure,
-unwritable run dir, critically low disk, zero tools) set a non-zero exit; missing individual
-tools and low-ish disk are **warnings** that don't block.
+effective resource policy, tool versions and sources, and per-pipeline readiness.
+**Failures** (no creds, bad URL, auth failure, unwritable run dir, critically low disk, zero
+tools, or a managed tool that **fails hash verification**) set a non-zero exit; missing
+individual tools, unverified `PATH` copies of tools VardrRunner can manage, a missing
+naabu capture library, and low-ish disk are **warnings** that don't block.
 
 `--production` additionally treats plaintext credentials as a failure, raises disk
 thresholds to 1 GiB minimum / 5 GiB warning, verifies the execution journal and stable
@@ -232,6 +233,44 @@ credentials, request bodies, and headers.
 
 Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
 journal remains the recovery source of truth; manifests are portable run evidence.
+
+---
+
+## `tools` — pinned, verified tool installs
+
+```bash
+vardrrunner tools install --all            # every tool VardrRunner pins
+vardrrunner tools install httpx nuclei     # or name them
+vardrrunner tools install httpx --force    # reinstall even if already verified
+vardrrunner tools list                     # source, version, location of every tool
+vardrrunner tools verify                   # re-hash managed tools; exit 1 on a mismatch
+vardrrunner tools remove httpx
+vardrrunner tools purge [--yes]            # delete every managed tool and tool data
+```
+
+Installs go to `~/.vardrmap/tools`, with a receipt in `~/.vardrmap/tools/tools.lock.json`.
+Each tool is pinned in the package to an exact version and, per platform, a release archive
+and its SHA-256. `install` downloads the archive over HTTPS, refuses it unless the hash
+matches the pin, extracts only the expected binary, requires it to report the pinned
+version, and moves it into place in one step. Anything that fails installs nothing.
+
+| Tool | Managed | Notes |
+|---|---|---|
+| httpx, nuclei, subfinder, dnsx | yes | |
+| naabu | yes | port scans also need libpcap (Linux/macOS) or [Npcap](https://npcap.com) (Windows) |
+| nmap | no | install with your OS installer or package manager |
+| vardrgate | no | install from the VardrGate repository |
+
+**Resolution.** The runner uses a managed install when one exists and otherwise falls back
+to `PATH`, which `tools list`, `status`, and `doctor` report as *unverified*. A managed
+binary is re-hashed before its first use in each process and whenever it changes on disk;
+one that no longer matches its receipt is **never executed** — the job fails with the
+reason, and it does not fall back to a `PATH` copy.
+
+**Antivirus.** Penetration-testing tools are often flagged by antivirus, which may block a
+tool on launch and quarantine it. `install` detects a binary that disappears during its
+version check and says so; `verify` reports a quarantined tool as missing. If you trust the
+tools, an exclusion for `~/.vardrmap/tools` covers all of them.
 
 ---
 

@@ -21,6 +21,10 @@ results, and heartbeats so the backend always knows which machines are online.
 - **Tool runners** — `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu` (more coming),
   each capturing output into an atomically unique run directory, every run bounded by a
   timeout that terminates the complete child-process tree
+- **Pinned, verified tool installs** — `tools install --all` downloads exact versions of
+  httpx, subfinder, nuclei, dnsx, and naabu into one folder, `~/.vardrmap/tools`, after
+  checking each against a SHA-256 pinned in this package. The runner re-checks every
+  managed binary before use and refuses to run one that has changed
 - **Recon pipelines** — chain tools in one command: `recon` (subfinder → httpx → nuclei),
   `deep` (adds dnsx resolution), `ports` (subfinder → dnsx → naabu), `quick`
 - **VardrGate authorization tests** — `vardrgate_api_test` jobs drive the local `vardrgate`
@@ -51,7 +55,7 @@ results, and heartbeats so the backend always knows which machines are online.
 
 ## Requirements
 - Python **3.10+**
-- The external tools you intend to run, on your `PATH` (e.g. `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu`) — plus `vardrgate` if you run `vardrgate_api_test` jobs
+- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, and `naabu`; `nmap` comes from your OS installer or package manager, and `vardrgate` (for `vardrgate_api_test` jobs) from its repository. Tools already on your `PATH` still work and are reported as unverified
 - A VardrSec backend URL and an API key (`vmap_…` for VardrMap)
 - VardrMap **≥ v0.22.0** as the backend — the runner calls `/engagements/*` (see [CHANGELOG](CHANGELOG.md) v0.27.0)
 
@@ -110,6 +114,7 @@ above does. Inside a venv you'll need it activated; `pipx`/`uv` avoid that entir
 ## Quick start
 ```bash
 vardrrunner init               # guided auth, runner name, optional service, and health gate
+vardrrunner tools install --all   # pinned, verified tools into ~/.vardrmap/tools
 ```
 
 For an unattended host, use `vardrrunner init --production --install-service`. Existing

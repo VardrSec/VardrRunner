@@ -19,6 +19,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
+from vardrrunner import toolchain
+
 # Allowlist maps subcommand names to their executable names.
 # Add new tools here only — never allow arbitrary executables.
 ALLOWED_TOOLS = {
@@ -45,6 +47,19 @@ class ToolTimeout(Exception):
 
 class ToolError(Exception):
     """Raised when a tool subprocess exits with a non-zero return code."""
+
+
+def program(name: str) -> str:
+    """The executable to run for an allowlisted tool.
+
+    A verified managed install from ``~/.vardrmap/tools`` when there is one,
+    otherwise the bare binary name so the OS resolves it on PATH, as before.
+    A managed binary that fails verification raises ToolError and is never run.
+    """
+    try:
+        return toolchain.resolve(name, ALLOWED_TOOLS[name])
+    except toolchain.ToolchainError as exc:
+        raise ToolError(str(exc)) from exc
 
 
 _PROCESS_OBSERVER: ContextVar[Callable[[int], None] | None] = ContextVar(
@@ -236,9 +251,20 @@ def _run_tool(cmd: list[str], temp_file: str | None, tool: str, timeout: int | N
         raise ToolError(f"{tool} exited with code {returncode}")
 
 
+def _executable(name: str) -> str | None:
+    """Resolved executable for ``name``, or None if it is missing or fails verification."""
+    binary = ALLOWED_TOOLS.get(name, "")
+    if not binary:
+        return None
+    try:
+        return shutil.which(toolchain.resolve(name, binary))
+    except toolchain.ToolchainError:
+        return None
+
+
 def tool_available(name: str) -> bool:
-    """Return True if the tool binary exists on PATH."""
-    return shutil.which(ALLOWED_TOOLS.get(name, "")) is not None
+    """Return True if the tool is installed (verified managed copy, or on PATH)."""
+    return _executable(name) is not None
 
 
 # ProjectDiscovery tools use -version; nmap uses --version.
@@ -254,8 +280,8 @@ _VERSION_ARGS: dict[str, list[str]] = {
 
 def tool_version(name: str) -> str | None:
     """Return the version string for an installed tool, or None."""
-    binary = ALLOWED_TOOLS.get(name, "")
-    if not binary or not shutil.which(binary):
+    binary = _executable(name)
+    if binary is None:
         return None
     args = _VERSION_ARGS.get(name, ["-version"])
     try:
@@ -277,10 +303,12 @@ def check_tool(name: str) -> None:
     if not tool_available(name):
         import typer
 
-        raise typer.BadParameter(
-            f"'{name}' not found on PATH. Install it and make sure it is executable.",
-            param_hint=name,
+        hint = (
+            f"Run `vardrrunner tools install {name}`."
+            if toolchain.manageable(name)
+            else "Install it and make sure it is executable."
         )
+        raise typer.BadParameter(f"'{name}' is not installed. {hint}", param_hint=name)
 
 
 def strip_url_to_host(url: str) -> str:
@@ -309,7 +337,7 @@ def run_httpx(targets: list[str], output_path: Path, timeout: int | None = None)
         targets_file = tmp.name
 
     cmd = [
-        ALLOWED_TOOLS["httpx"],
+        program("httpx"),
         "-l",
         targets_file,
         "-json",
@@ -333,7 +361,7 @@ def run_nuclei(
         targets_file = tmp.name
 
     cmd = [
-        ALLOWED_TOOLS["nuclei"],
+        program("nuclei"),
         "-l",
         targets_file,
         "-json-export",
@@ -366,7 +394,7 @@ def run_nmap(
 
     safe_timing = max(0, min(4, timing))  # clamp 0-4; never allow T5
     cmd = [
-        ALLOWED_TOOLS["nmap"],
+        program("nmap"),
         "-iL",
         targets_file,
         "--top-ports",
@@ -442,7 +470,7 @@ def run_subfinder(domains: list[str], output_path: Path, timeout: int | None = N
         domains_file = tmp.name
 
     cmd = [
-        ALLOWED_TOOLS["subfinder"],
+        program("subfinder"),
         "-dL",
         domains_file,
         "-o",
@@ -459,7 +487,7 @@ def run_dnsx(hosts: list[str], output_path: Path, timeout: int | None = None) ->
         hosts_file = tmp.name
 
     cmd = [
-        ALLOWED_TOOLS["dnsx"],
+        program("dnsx"),
         "-l",
         hosts_file,
         "-o",
@@ -478,7 +506,7 @@ def run_naabu(
         hosts_file = tmp.name
 
     cmd = [
-        ALLOWED_TOOLS["naabu"],
+        program("naabu"),
         "-list",
         hosts_file,
         "-top-ports",
@@ -501,7 +529,7 @@ def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> N
     job_file, job_dir = _write_private_job(job)
 
     cmd = [
-        ALLOWED_TOOLS["vardrgate_api_test"],
+        program("vardrgate_api_test"),
         "run",
         "--job",
         str(job_file),

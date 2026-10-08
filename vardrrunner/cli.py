@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 
 from vardrrunner import runner as process_runner
-from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run
+from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run, tools
 from vardrrunner.commands import credentials as credentials_cmd
 from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import doctor as doctor_cmd
@@ -181,6 +181,47 @@ def identity_show():
 def identity_set_name(name: str = typer.Argument(..., help="Human label, up to 128 characters")):
     """Persist a human-readable runner name."""
     identity.set_name(name)
+
+
+tools_app = typer.Typer(
+    help="Install and verify the pinned tools VardrRunner runs (~/.vardrmap/tools).",
+    no_args_is_help=True,
+)
+app.add_typer(tools_app, name="tools")
+
+
+@tools_app.command("install")
+def tools_install(
+    names: list[str] = typer.Argument(None, help="Tools to install, e.g. httpx nuclei"),
+    all_tools: bool = typer.Option(False, "--all", help="Install every tool VardrRunner pins"),
+    force: bool = typer.Option(False, "--force", help="Reinstall even if already verified"),
+):
+    """Download, verify, and install pinned tool builds."""
+    tools.install(names or [], all_tools=all_tools, force=force)
+
+
+@tools_app.command("list")
+def tools_list():
+    """Show every tool, where it comes from, and whether it is verified."""
+    tools.list_tools()
+
+
+@tools_app.command("verify")
+def tools_verify():
+    """Re-hash managed tools against their install receipt."""
+    tools.verify()
+
+
+@tools_app.command("remove")
+def tools_remove(name: str = typer.Argument(..., help="Tool to remove")):
+    """Delete one managed tool."""
+    tools.remove(name)
+
+
+@tools_app.command("purge")
+def tools_purge(yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation")):
+    """Delete every managed tool and managed tool data."""
+    tools.purge(yes=yes)
 
 
 service_app = typer.Typer(
