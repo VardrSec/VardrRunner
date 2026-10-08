@@ -7,6 +7,35 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.39.0] — 2026-10-08
+
+Operability polish on top of katana/gau, plus a pipeline that uses them. See
+[`changelog/v0.39.0.md`](changelog/v0.39.0.md).
+
+### Added
+
+- **`content` pipeline** (subfinder → httpx → katana → gau): enumerate, keep the live hosts,
+  crawl them for endpoints, and add archived URLs for the scope domains. Available to
+  `vardrrunner pipeline run content` and mirrored in VardrMap's "Content Discovery" composer
+  chain.
+- **`init` offers to install the pinned tools** (default yes interactively; off under
+  `--non-interactive` unless `--install-tools` is passed), so a fresh setup ends able to
+  scan. A tool that fails to install is reported by the closing `doctor`, not fatal.
+
+### Changed
+
+- **A managed nuclei keeps its templates under `~/.vardrmap/data/nuclei-templates`**
+  (`-update-template-dir`), so `tools purge` removes them too. A `PATH` nuclei is left with
+  its existing template directory, not forced into a fresh download.
+
+### Fixed
+
+- **`doctor` crashed when its output was redirected on Windows.** The report used Unicode
+  status symbols the legacy code page (used for piped or redirected output) can't encode, so
+  `vardrrunner doctor > report.txt` aborted mid-report. Output now falls back to plain ASCII
+  (`OK`/`WARN`/`FAIL`) when a stream can't encode the symbols, and the CLI reconfigures such
+  streams to replace unencodable characters rather than raise.
+
 ## [0.38.0] — 2026-10-08
 
 Two new recon tools, katana and gau, plus a fix for tools hanging on an inherited stdin.

@@ -5,6 +5,7 @@ Runs security tooling on the operator's machine and syncs results to a VardrSec
 backend (today: VardrMap) over HTTP. See https://github.com/VardrSec/VardrRunner.
 """
 
+import sys
 from pathlib import Path
 
 import typer
@@ -21,6 +22,35 @@ from vardrrunner.commands import service as service_cmd
 from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
 from vardrrunner.commands import updates as updates_cmd
+
+# Characters the CLI's output uses that legacy code pages (Windows cp1252 when
+# output is piped or redirected) cannot encode.
+_OUTPUT_PROBE = "✓✗→—…·"
+
+
+def _harden_output_streams() -> None:
+    """Never crash because a character can't be encoded on stdout/stderr.
+
+    On Windows, output that goes to a pipe or file uses the legacy code page, so
+    printing "✓" raised UnicodeEncodeError and aborted the command mid-way. For
+    any stream that can't encode the characters we print, unencodable characters
+    are replaced instead. Real consoles and UTF-8 streams are left untouched.
+    Runs at import, before Typer renders `--help`.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        encoding = getattr(stream, "encoding", None)
+        if reconfigure is None or not encoding:
+            continue
+        try:
+            _OUTPUT_PROBE.encode(encoding)
+        except UnicodeEncodeError:
+            reconfigure(errors="replace")
+        except LookupError:
+            continue
+
+
+_harden_output_streams()
 
 console = Console()
 
@@ -68,6 +98,11 @@ def initialize(
     non_interactive: bool = typer.Option(
         False, "--non-interactive", help="Never prompt; fail if required input is missing"
     ),
+    install_tools: bool | None = typer.Option(
+        None,
+        "--install-tools/--no-install-tools",
+        help="Install pinned, verified tools (asked interactively; off when unattended)",
+    ),
 ):
     """Guided auth, identity, service, and health setup for a new runner."""
     setup_cmd.initialize(
@@ -80,6 +115,7 @@ def initialize(
         env_file=env_file,
         allow_plaintext=allow_plaintext,
         non_interactive=non_interactive,
+        install_tools=install_tools,
     )
 
 

@@ -413,28 +413,49 @@ _GLYPH = {
     Health.WARN: "[yellow]![/yellow]",
     Health.FAIL: "[red]✗[/red]",
 }
+# Same report in plain ASCII, for output that can't show the symbols (Windows
+# output piped or redirected to a file uses a legacy code page).
+_ASCII_GLYPH = {
+    Health.OK: "[green]OK  [/green]",
+    Health.WARN: "[yellow]WARN[/yellow]",
+    Health.FAIL: "[red]FAIL[/red]",
+}
+
+
+def _symbols_supported() -> bool:
+    try:
+        "✓✗→—".encode(console.encoding or "utf-8")
+    except (UnicodeEncodeError, LookupError):
+        return False
+    return True
 
 
 def _print_text(checks: list[Check], failed: list[Check], warned: list[Check]) -> None:
+    fancy = _symbols_supported()
+    glyph = _GLYPH if fancy else _ASCII_GLYPH
+    arrow, dash = ("→", "—") if fancy else ("->", "-")
     console.print("\n[bold]VardrRunner Doctor[/bold]")
     for c in checks:
         name = redaction.redact_rich_text(c.name)
         detail = redaction.redact_rich_text(c.detail)
-        console.print(f"  {_GLYPH[c.status]} {name}: {detail}")
+        console.print(f"  {glyph[c.status]} {name}: {detail}")
         if c.remediation and c.status is not Health.OK:
-            console.print(f"      [dim]→ {redaction.redact_rich_text(c.remediation)}[/dim]")
+            console.print(f"      [dim]{arrow} {redaction.redact_rich_text(c.remediation)}[/dim]")
     console.print()
     if failed:
         console.print(
-            f"[red]✗ {len(failed)} failure(s)[/red], [yellow]{len(warned)} warning(s)[/yellow] "
-            "— not ready for unattended use."
+            f"[red]{'✗' if fancy else 'FAIL'} {len(failed)} failure(s)[/red], "
+            f"[yellow]{len(warned)} warning(s)[/yellow] {dash} not ready for unattended use."
         )
     elif warned:
         console.print(
-            f"[yellow]! {len(warned)} warning(s)[/yellow] — usable, but review the items above."
+            f"[yellow]{'!' if fancy else 'WARN'} {len(warned)} warning(s)[/yellow] {dash} "
+            "usable, but review the items above."
         )
     else:
-        console.print("[green]✓ All checks passed — ready for unattended use.[/green]")
+        console.print(
+            f"[green]{'✓' if fancy else 'OK'} All checks passed {dash} ready for unattended use.[/green]"
+        )
 
 
 def run_doctor(as_json: bool = False, production: bool = False) -> None:

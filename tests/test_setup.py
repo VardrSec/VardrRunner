@@ -114,12 +114,14 @@ def test_production_interactive_defaults_to_service_install(monkeypatch):
             "vardrrunner.commands.setup.typer.prompt", side_effect=lambda *_a, **kw: kw["default"]
         ),
         patch("vardrrunner.commands.setup.typer.confirm", return_value=True) as confirm,
+        patch("vardrrunner.commands.setup.tools_command.install") as tools_install,
         patch("vardrrunner.commands.setup.service_command.install") as install,
         patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
     ):
         setup.initialize(production=True)
-    confirm.assert_called_once_with("Install the native per-user background service?", default=True)
+    confirm.assert_any_call("Install the native per-user background service?", default=True)
     install.assert_called_once()
+    tools_install.assert_called_once_with([], all_tools=True, force=False)
 
 
 def test_failed_health_check_keeps_setup_incomplete(monkeypatch, capsys):
@@ -149,3 +151,60 @@ def test_identity_and_journal_failures_are_clean(monkeypatch):
         pytest.raises(typer.Exit),
     ):
         setup.initialize(non_interactive=True)
+
+
+def _with_auth(monkeypatch):
+    monkeypatch.setenv(config.ENV_API_URL, "https://api.example.com")
+    monkeypatch.setenv(config.ENV_API_KEY, "vmap_secret")
+
+
+def test_interactive_setup_offers_tools_defaulting_to_yes(monkeypatch):
+    _with_auth(monkeypatch)
+    answers = {"Install pinned, verified scan tools now?": True}
+    with (
+        patch(
+            "vardrrunner.commands.setup.typer.prompt", side_effect=lambda *_a, **kw: kw["default"]
+        ),
+        patch(
+            "vardrrunner.commands.setup.typer.confirm",
+            side_effect=lambda text, default: answers.get(text, False),
+        ) as confirm,
+        patch("vardrrunner.commands.setup.tools_command.install") as tools_install,
+        patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
+    ):
+        setup.initialize()
+    confirm.assert_any_call("Install pinned, verified scan tools now?", default=True)
+    tools_install.assert_called_once_with([], all_tools=True, force=False)
+
+
+def test_unattended_setup_never_downloads_tools_unasked(monkeypatch):
+    _with_auth(monkeypatch)
+    with (
+        patch("vardrrunner.commands.setup.typer.confirm") as confirm,
+        patch("vardrrunner.commands.setup.tools_command.install") as tools_install,
+        patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
+    ):
+        setup.initialize(non_interactive=True)
+    confirm.assert_not_called()
+    tools_install.assert_not_called()
+
+
+def test_unattended_setup_installs_tools_when_asked(monkeypatch):
+    _with_auth(monkeypatch)
+    with (
+        patch("vardrrunner.commands.setup.tools_command.install") as tools_install,
+        patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
+    ):
+        setup.initialize(non_interactive=True, install_tools=True)
+    tools_install.assert_called_once_with([], all_tools=True, force=False)
+
+
+def test_failed_tool_install_does_not_abort_setup(monkeypatch, capsys):
+    _with_auth(monkeypatch)
+    with (
+        patch("vardrrunner.commands.setup.tools_command.install", side_effect=typer.Exit(1)),
+        patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
+    ):
+        setup.initialize(non_interactive=True, install_tools=True)
+    out = capsys.readouterr().out
+    assert "could not be installed" in out and "setup complete" in out.lower()
