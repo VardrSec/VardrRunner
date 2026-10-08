@@ -68,7 +68,18 @@ class TestInitCommand:
             env_file=env_file,
             allow_plaintext=True,
             non_interactive=True,
+            install_tools=None,
         )
+
+    @pytest.mark.parametrize(
+        "flags, expected",
+        [((), None), (("--install-tools",), True), (("--no-install-tools",), False)],
+    )
+    def test_init_install_tools_flag(self, flags, expected):
+        with patch("vardrrunner.commands.setup.initialize") as mock:
+            invoke("init", "--non-interactive", *flags)
+        _, kwargs = mock.call_args
+        assert kwargs["install_tools"] is expected
 
     @pytest.mark.parametrize(
         "args",
@@ -550,3 +561,34 @@ class TestPipelineCommands:
             invoke("pipeline", "run", "quick", "--engagement", "p1", "--yes")
         _, kwargs = mock.call_args
         assert kwargs.get("max_targets") == run_cmd.MAX_TARGETS_DEFAULT
+
+
+class TestOutputStreamHardening:
+    """Windows piped/redirected output uses a legacy code page; printing must not crash."""
+
+    class _Stream:
+        def __init__(self, encoding, reconfigurable=True):
+            self.encoding = encoding
+            self.calls = []
+            if reconfigurable:
+                self.reconfigure = lambda **kw: self.calls.append(kw)
+
+    @pytest.mark.parametrize(
+        "encoding, expected",
+        [("cp1252", [{"errors": "replace"}]), ("utf-8", []), ("not-a-codec", []), (None, [])],
+    )
+    def test_replaces_only_when_symbols_cannot_be_encoded(self, monkeypatch, encoding, expected):
+        from vardrrunner import cli
+
+        out, err = self._Stream(encoding), self._Stream(encoding)
+        monkeypatch.setattr(cli.sys, "stdout", out)
+        monkeypatch.setattr(cli.sys, "stderr", err)
+        cli._harden_output_streams()
+        assert out.calls == expected and err.calls == expected
+
+    def test_streams_without_reconfigure_are_left_alone(self, monkeypatch):
+        from vardrrunner import cli
+
+        monkeypatch.setattr(cli.sys, "stdout", self._Stream("cp1252", reconfigurable=False))
+        monkeypatch.setattr(cli.sys, "stderr", self._Stream("cp1252", reconfigurable=False))
+        cli._harden_output_streams()  # must not raise

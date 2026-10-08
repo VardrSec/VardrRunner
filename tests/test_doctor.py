@@ -223,3 +223,33 @@ def test_corrupt_config_still_runs_tool_checks(tmp_path, monkeypatch):
     # Config-file check present, and tool checks still ran.
     assert "config file" in names
     assert any(n.startswith("tool:") for n in names)
+
+
+def test_text_report_falls_back_to_ascii_when_symbols_cannot_be_shown(monkeypatch, capsys):
+    checks = [
+        Check("credentials", Health.FAIL, "no API key", "Run login."),
+        Check("disk", Health.OK, "fine"),
+        Check("tool: httpx", Health.WARN, "unverified", "Install it."),
+    ]
+    failed, warned = [checks[0]], [checks[2]]
+    monkeypatch.setattr(doctor, "_symbols_supported", lambda: False)
+    doctor._print_text(checks, failed, warned)
+    out = capsys.readouterr().out
+    assert "FAIL credentials" in out and "OK   disk" in out and "WARN tool: httpx" in out
+    assert "-> Run login." in out and "FAIL 1 failure(s)" in out
+    assert not any(ch in out for ch in "✓✗→—")
+
+
+def test_text_report_uses_symbols_when_supported(monkeypatch, capsys):
+    monkeypatch.setattr(doctor, "_symbols_supported", lambda: True)
+    doctor._print_text([Check("disk", Health.OK, "fine")], [], [])
+    out = capsys.readouterr().out
+    assert "✓ disk" in out and "All checks passed — ready" in out
+
+
+@pytest.mark.parametrize(
+    "encoding, supported", [("utf-8", True), ("cp1252", False), ("bogus", False)]
+)
+def test_symbols_supported_follows_console_encoding(monkeypatch, encoding, supported):
+    monkeypatch.setattr(doctor, "console", MagicMock(encoding=encoding))
+    assert doctor._symbols_supported() is supported
