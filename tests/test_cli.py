@@ -592,3 +592,25 @@ class TestOutputStreamHardening:
         monkeypatch.setattr(cli.sys, "stdout", self._Stream("cp1252", reconfigurable=False))
         monkeypatch.setattr(cli.sys, "stderr", self._Stream("cp1252", reconfigurable=False))
         cli._harden_output_streams()  # must not raise
+
+
+class TestMcpCommand:
+    def test_mcp_runs_the_server_when_installed(self):
+        import sys
+        from unittest.mock import MagicMock
+
+        fake_mod = MagicMock()
+        with patch.dict(sys.modules, {"vardrrunner.mcp_server": fake_mod}):
+            result = invoke("mcp")
+        fake_mod.run.assert_called_once_with()
+        assert result.exit_code == 0
+
+    def test_mcp_without_the_extra_prints_install_hint(self):
+        import sys
+
+        # sys.modules[name] = None makes `from vardrrunner import mcp_server` raise
+        # ImportError, simulating a runner installed without the [mcp] extra.
+        with patch.dict(sys.modules, {"vardrrunner.mcp_server": None}):
+            result = invoke("mcp")
+        assert result.exit_code == 1
+        assert "vardrrunner[mcp]" in result.stdout

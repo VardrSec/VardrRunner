@@ -215,6 +215,50 @@ This command never installs or upgrades software. Use `pipx upgrade vardrrunner`
 
 ---
 
+## `mcp` — serve the engagement to an AI agent
+
+```bash
+pip install 'vardrrunner[mcp]'   # one-time: the MCP server is an optional extra
+vardrrunner mcp                  # serve over stdio (clients launch this for you)
+```
+
+Runs a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio so an MCP
+client — Claude Code, Claude Desktop — can drive a VardrMap engagement with the same `vmap_`
+key this runner already uses. The agent's model is supplied by the client; this command only
+adapts VardrMap's API to MCP tools. See [ADR 0015](adr/0015-mcp-server.md).
+
+Register it once with your client:
+
+```bash
+claude mcp add vardr -- vardrrunner mcp        # Claude Code
+```
+
+For Claude Desktop, add to its MCP config:
+
+```json
+{ "mcpServers": { "vardr": { "command": "vardrrunner", "args": ["mcp"] } } }
+```
+
+**Tools exposed**
+
+| Kind | Tools |
+|------|-------|
+| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_findings`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `preview_job` |
+| Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding` |
+
+**Not exposed, by design:** editing scope or authorization, stop-work, any delete, and
+member/API-key/settings management — do those in the UI. Withholding a scope-editing tool is
+the main guard against prompt injection: the agent reads target-controlled text (response
+bodies, scanner output) and must not be able to act on a planted "add this to scope"
+instruction. Read tools cap their output to a sample plus the true total, so large recon or
+asset tables never flood the agent. A queued job that falls outside scope still returns
+warnings and still runs — staying in scope is the operator's call, exactly as elsewhere.
+
+Requires a configured key (as for any authenticated command). The command exits with an
+install hint if the `mcp` extra is missing.
+
+---
+
 ## `audit` — local execution evidence
 
 Queue-driven jobs are recorded in `~/.vardrmap/runner-journal.sqlite3`. Audit commands are
