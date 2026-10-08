@@ -96,6 +96,57 @@ def _wildcard_domains(client: api.VardrMapClient, engagement_id: str) -> list[st
     return domains
 
 
+# VardrMap refuses imports over 2 MiB by default (MAX_UPLOAD_BYTES). Large crawl and
+# archive results are sent in pieces under that, leaving room for multipart overhead.
+# The backend de-duplicates URL recon per engagement and source, within and across
+# uploads, so splitting a result changes nothing about what ends up stored.
+UPLOAD_CHUNK_BYTES = 1_500_000
+
+
+def _upload_jsonl_in_chunks(
+    client: api.VardrMapClient,
+    engagement_id: str,
+    tool: str,
+    output: Path,
+    max_bytes: int | None = None,
+) -> int:
+    """Upload a JSONL file in line-aligned pieces of at most ``max_bytes``; return the total.
+
+    ``max_bytes`` defaults to ``UPLOAD_CHUNK_BYTES``, read at call time. A file that
+    already fits is uploaded as-is. Piece files are always removed.
+    """
+    max_bytes = max_bytes or UPLOAD_CHUNK_BYTES
+
+    def _count(result: dict) -> int:
+        count = result.get("import_record", {}).get("imported_count", 0)
+        return count if isinstance(count, int) else 0
+
+    if output.stat().st_size <= max_bytes:
+        return _count(client.import_file(engagement_id, tool, str(output)))
+
+    total = 0
+    pieces: list[Path] = []
+    try:
+        chunk: list[bytes] = []
+        size = 0
+        with output.open("rb") as fh:
+            lines = [line if line.endswith(b"\n") else line + b"\n" for line in fh if line.strip()]
+        for line in lines + [b""]:
+            if chunk and (not line or size + len(line) > max_bytes):
+                piece = output.with_name(f"{output.stem}.part{len(pieces) + 1}.jsonl")
+                piece.write_bytes(b"".join(chunk))
+                pieces.append(piece)
+                total += _count(client.import_file(engagement_id, tool, str(piece)))
+                chunk, size = [], 0
+            if line:
+                chunk.append(line)
+                size += len(line)
+    finally:
+        for piece in pieces:
+            piece.unlink(missing_ok=True)
+    return total
+
+
 def _katana_record(obj: dict[str, Any]) -> dict[str, Any] | None:
     """Reduce one katana result to the fields VardrMap imports.
 
@@ -542,8 +593,7 @@ class KatanaHandler(ToolHandler[configs.KatanaConfig]):
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        result = client.import_file(engagement_id, "katana", str(output))
-        count = result.get("import_record", {}).get("imported_count", "?")
+        count = _upload_jsonl_in_chunks(client, engagement_id, "katana", output)
         return f"imported {count} endpoint(s)"
 
     def extract_handoff_targets(self, output: Path) -> list[str]:
@@ -594,8 +644,7 @@ class GauHandler(ToolHandler[configs.GauConfig]):
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        result = client.import_file(engagement_id, "gau", str(output))
-        count = result.get("import_record", {}).get("imported_count", "?")
+        count = _upload_jsonl_in_chunks(client, engagement_id, "gau", output)
         return f"imported {count} URL(s)"
 
     def extract_handoff_targets(self, output: Path) -> list[str]:

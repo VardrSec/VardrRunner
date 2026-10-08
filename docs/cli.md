@@ -299,6 +299,7 @@ directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
 - `run gau` — passive: asks public archives (Wayback Machine, Common Crawl, AlienVault
   OTX, urlscan) for URLs they have recorded under each wildcard scope domain, and
   uploads them as recon. Nothing is sent to the target itself.
+- katana and gau upload large results in pieces under VardrMap's 2 MiB import limit.
 
 ### Choosing targets
 Every `run` command except `subfinder` and `gau` takes one target source (`subfinder` and

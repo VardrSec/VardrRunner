@@ -30,6 +30,10 @@ other tool is unaffected.
   guarantees as zip: only the one expected file is read, and only if it is a regular file;
   links, hardlinks, directories, and devices are refused.
 - **Per-tool version flag** in the manifest (`version_args`), validated as bare options.
+- **Chunked uploads for katana and gau.** VardrMap refuses imports over 2 MiB by default,
+  and gau on a large domain easily exceeds that. Results are now sent in line-aligned
+  pieces of at most 1.5 MB; a result that fits is sent as one file, as before. The backend
+  de-duplicates per source within and across uploads, so splitting changes nothing stored.
 
 ### Fixed
 

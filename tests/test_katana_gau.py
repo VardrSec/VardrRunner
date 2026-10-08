@@ -386,3 +386,72 @@ def test_manifest_rejects_bad_version_args_and_archive_types(mutate, message):
     mutate(entry)
     with pytest.raises(toolchain.ToolchainError, match=message):
         toolchain.validate_manifest({"schema_version": 1, "tools": {"t": entry}})
+
+
+# ── chunked uploads (VardrMap caps imports at 2 MiB) ────────────────────────
+
+
+def _recording_client(fail_on_call: int | None = None):
+    sent: list[bytes] = []
+
+    def import_file(engagement_id, tool, path):
+        sent.append(Path(path).read_bytes())  # read now: piece files are deleted after
+        if fail_on_call is not None and len(sent) == fail_on_call:
+            raise RuntimeError("upload failed")
+        return {"import_record": {"imported_count": 2}}
+
+    client = MagicMock()
+    client.import_file.side_effect = import_file
+    return client, sent
+
+
+def test_small_result_uploads_the_file_itself(tmp_path):
+    out = tmp_path / "gau_import.jsonl"
+    out.write_text('{"url": "https://a.test/1"}\n')
+    client, sent = _recording_client()
+    assert handlers._upload_jsonl_in_chunks(client, "eng", "gau", out, max_bytes=1000) == 2
+    client.import_file.assert_called_once_with("eng", "gau", str(out))
+
+
+def test_large_result_is_split_on_line_boundaries(tmp_path):
+    lines = [json.dumps({"url": f"https://a.test/{i:04d}"}) + "\n" for i in range(50)]
+    out = tmp_path / "gau_import.jsonl"
+    out.write_bytes("".join(lines).encode())  # bytes: write_text would add \r on Windows
+    client, sent = _recording_client()
+    total = handlers._upload_jsonl_in_chunks(client, "eng", "gau", out, max_bytes=200)
+    assert len(sent) > 1
+    assert total == 2 * len(sent)
+    assert all(len(piece) <= 200 for piece in sent)
+    assert b"".join(sent).decode() == "".join(lines)  # every line once, in order
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["gau_import.jsonl"]
+
+
+def test_pieces_are_removed_when_an_upload_fails(tmp_path):
+    out = tmp_path / "katana_import.jsonl"
+    out.write_text("".join(json.dumps({"url": f"https://a.test/{i}"}) + "\n" for i in range(40)))
+    client, _ = _recording_client(fail_on_call=2)
+    with pytest.raises(RuntimeError, match="upload failed"):
+        handlers._upload_jsonl_in_chunks(client, "eng", "katana", out, max_bytes=150)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["katana_import.jsonl"]
+
+
+def test_chunking_tolerates_blank_lines_missing_newline_and_odd_counts(tmp_path):
+    out = tmp_path / "gau_import.jsonl"
+    out.write_bytes(b'{"url": "https://a.test/1"}\n\n{"url": "https://a.test/2"}')
+    client = MagicMock()
+    client.import_file.return_value = {"import_record": {"imported_count": "?"}}
+    assert handlers._upload_jsonl_in_chunks(client, "eng", "gau", out, max_bytes=40) == 0
+    assert client.import_file.call_count == 2
+
+
+def test_handlers_upload_large_results_in_chunks(tmp_path, monkeypatch):
+    monkeypatch.setattr(handlers, "UPLOAD_CHUNK_BYTES", 120)
+    out = tmp_path / "gau_import.jsonl"
+    out.write_text("".join(json.dumps({"url": f"https://a.test/{i}"}) + "\n" for i in range(20)))
+    for handler, noun in (
+        (handlers.GauHandler(), "URL(s)"),
+        (handlers.KatanaHandler(), "endpoint(s)"),
+    ):
+        client, sent = _recording_client()
+        summary = handler.upload(client, "eng", out)
+        assert len(sent) > 1 and summary == f"imported {2 * len(sent)} {noun}"
