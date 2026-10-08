@@ -58,6 +58,74 @@ def _write_host_import_jsonl(hosts: list[str], source: str, path: Path) -> None:
             fh.write(json.dumps({"host": host, "source": source}) + "\n")
 
 
+def _read_jsonl_objects(path: Path) -> list[dict[str, Any]]:
+    """Every JSON object in a JSONL file; blank, malformed, and non-object lines are skipped."""
+    if not path.exists():
+        return []
+    objects = []
+    with path.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(obj, dict):
+                objects.append(obj)
+    return objects
+
+
+def _write_jsonl(records: list[dict[str, Any]], path: Path) -> None:
+    with path.open("w", encoding="utf-8") as fh:
+        for record in records:
+            fh.write(json.dumps(record) + "\n")
+
+
+def _wildcard_domains(client: api.VardrMapClient, engagement_id: str) -> list[str]:
+    """Base domains of the engagement's wildcard scope entries (*.example.com → example.com)."""
+    raw = client.scope(engagement_id)
+    domains = []
+    for item in raw.get("in", []):
+        val = item.get("value", "")
+        if _is_wildcard(val):
+            stripped = val.lstrip("*").lstrip(".")
+            if stripped:
+                domains.append(stripped)
+    return domains
+
+
+def _katana_record(obj: dict[str, Any]) -> dict[str, Any] | None:
+    """Reduce one katana result to the fields VardrMap imports.
+
+    katana writes the full raw request and response, bodies included, on every
+    line. Uploading that would be large and would carry page content the operator
+    never asked to store, so only the endpoint and response metadata are kept.
+    """
+    raw_request, raw_response = obj.get("request"), obj.get("response")
+    request: dict[str, Any] = raw_request if isinstance(raw_request, dict) else {}
+    response: dict[str, Any] = raw_response if isinstance(raw_response, dict) else {}
+    url = request.get("endpoint")
+    if not isinstance(url, str) or not url:
+        return None
+    raw_headers = response.get("headers")
+    headers: dict[str, Any] = raw_headers if isinstance(raw_headers, dict) else {}
+    content_type = next(
+        (v for k, v in headers.items() if isinstance(k, str) and k.lower() == "content-type"), None
+    )
+    status = response.get("status_code")
+    length = response.get("content_length")
+    return {
+        "url": url,
+        "method": str(request.get("method") or "GET"),
+        "status_code": status if isinstance(status, int) else None,
+        "content_length": length if isinstance(length, int) else None,
+        "content_type": content_type if isinstance(content_type, str) else None,
+        "source": "katana",
+    }
+
+
 C = TypeVar("C")
 
 
@@ -256,15 +324,7 @@ class SubfinderHandler(ToolHandler[configs.SubfinderConfig]):
     ) -> list[str]:
         # subfinder enumerates wildcard scope entries (*.example.com → example.com),
         # regardless of target_source.
-        raw = client.scope(engagement_id)
-        domains = []
-        for item in raw.get("in", []):
-            val = item.get("value", "")
-            if _is_wildcard(val):
-                stripped = val.lstrip("*").lstrip(".")
-                if stripped:
-                    domains.append(stripped)
-        return domains
+        return _wildcard_domains(client, engagement_id)
 
     def running_label(self, targets: list[str], config: configs.SubfinderConfig) -> str:
         return f"subfinder on {len(targets)} domain(s)"
@@ -433,6 +493,115 @@ def _resolve_one_credential(cred: dict, identity_id: str) -> None:
     # Otherwise: a literal value or an anonymous credential — left untouched.
 
 
+class KatanaHandler(ToolHandler[configs.KatanaConfig]):
+    tool = "katana"
+
+    def parse_config(self, cfg: dict) -> configs.KatanaConfig:
+        return configs.KatanaConfig.from_dict(cfg)
+
+    def resolve_targets(
+        self,
+        client: api.VardrMapClient,
+        engagement_id: str,
+        target_source: str,
+        config: configs.KatanaConfig,
+    ) -> list[str]:
+        return _resolve_standard(client, engagement_id, target_source, config)
+
+    def running_label(self, targets: list[str], config: configs.KatanaConfig) -> str:
+        js = ", JavaScript parsing" if config.js_crawl else ""
+        return f"katana crawl (depth {config.depth}{js}) of {len(targets)} target(s)"
+
+    def execute(
+        self, targets: list[str], run_dir: Path, config: configs.KatanaConfig
+    ) -> Path | None:
+        raw_output = run_dir / "katana.jsonl"
+        runner.run_katana(
+            targets,
+            raw_output,
+            depth=config.depth,
+            js_crawl=config.js_crawl,
+            timeout=config.timeout,
+        )
+        seen: set[tuple[str, str]] = set()
+        records = []
+        for obj in _read_jsonl_objects(raw_output):
+            record = _katana_record(obj)
+            if record is None:
+                continue
+            key = (record["method"], record["url"])
+            if key not in seen:
+                seen.add(key)
+                records.append(record)
+        if not records:
+            return None
+        import_path = run_dir / "katana_import.jsonl"
+        _write_jsonl(records, import_path)
+        return import_path
+
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = client.import_file(engagement_id, "katana", str(output))
+        count = result.get("import_record", {}).get("imported_count", "?")
+        return f"imported {count} endpoint(s)"
+
+    def extract_handoff_targets(self, output: Path) -> list[str]:
+        return list(dict.fromkeys(_extract_jsonl_field(output, "url")))
+
+
+class GauHandler(ToolHandler[configs.GauConfig]):
+    tool = "gau"
+
+    def parse_config(self, cfg: dict) -> configs.GauConfig:
+        return configs.GauConfig.from_dict(cfg)
+
+    def resolve_targets(
+        self,
+        client: api.VardrMapClient,
+        engagement_id: str,
+        target_source: str,
+        config: configs.GauConfig,
+    ) -> list[str]:
+        # Like subfinder, gau works on domains: the wildcard scope entries.
+        return _wildcard_domains(client, engagement_id)
+
+    def running_label(self, targets: list[str], config: configs.GauConfig) -> str:
+        providers = ", ".join(config.providers) if config.providers else "all providers"
+        return f"gau archive lookup ({providers}) for {len(targets)} domain(s)"
+
+    def execute(self, targets: list[str], run_dir: Path, config: configs.GauConfig) -> Path | None:
+        raw_output = run_dir / "gau.jsonl"
+        runner.run_gau(
+            targets,
+            raw_output,
+            subs=config.subs,
+            providers=config.providers,
+            timeout=config.timeout,
+        )
+        urls = []
+        for obj in _read_jsonl_objects(raw_output):
+            url = obj.get("url")
+            if isinstance(url, str) and url:
+                urls.append(url)
+        urls = list(dict.fromkeys(urls))
+        if not urls:
+            return None
+        import_path = run_dir / "gau_import.jsonl"
+        _write_jsonl([{"url": url, "source": "gau"} for url in urls], import_path)
+        return import_path
+
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = client.import_file(engagement_id, "gau", str(output))
+        count = result.get("import_record", {}).get("imported_count", "?")
+        return f"imported {count} URL(s)"
+
+    def extract_handoff_targets(self, output: Path) -> list[str]:
+        return _extract_jsonl_field(output, "url")
+
+
 class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
     """Run a VardrGate API authorization test job and upload its result.
 
@@ -498,6 +667,8 @@ REGISTRY: dict[str, ToolHandler[Any]] = {
         SubfinderHandler(),
         DnsxHandler(),
         NaabuHandler(),
+        KatanaHandler(),
+        GauHandler(),
         VardrGateHandler(),
     )
 }

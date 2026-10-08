@@ -28,13 +28,14 @@ import re
 import shutil
 import stat
 import subprocess
+import tarfile
 import tempfile
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from vardrrunner import api, config, manifests
 
@@ -48,6 +49,9 @@ MAX_BINARY_BYTES = 400 * 1024 * 1024
 _VERSION_TIMEOUT = 15
 
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
+# A version flag is a bare option, never a value: `-version`, `--version`.
+_FLAG = re.compile(r"^-{1,2}[a-z][a-z-]*$")
+_ARCHIVE_SUFFIXES = (".zip", ".tar.gz")
 
 
 class ToolchainError(RuntimeError):
@@ -102,6 +106,13 @@ def validate_manifest(data: Any) -> dict[str, Any]:
             r"[a-z0-9_-]+", entry["binary"]
         ):
             raise ToolchainError(f"tool manifest entry for {name} has an invalid binary name")
+        version_args = entry.get("version_args", ["-version"])
+        if (
+            not isinstance(version_args, list)
+            or not version_args
+            or not all(isinstance(a, str) and _FLAG.match(a) for a in version_args)
+        ):
+            raise ToolchainError(f"tool manifest entry for {name} has invalid version_args")
         platforms = entry.get("platforms")
         if not isinstance(platforms, dict) or not platforms:
             raise ToolchainError(f"tool manifest entry for {name} lists no platforms")
@@ -111,6 +122,8 @@ def validate_manifest(data: Any) -> dict[str, Any]:
             url, digest = asset.get("url"), asset.get("sha256")
             if not isinstance(url, str) or not url.startswith("https://"):
                 raise ToolchainError(f"{name} {key}: asset URL must be HTTPS")
+            if not url.endswith(_ARCHIVE_SUFFIXES):
+                raise ToolchainError(f"{name} {key}: asset must be a .zip or .tar.gz archive")
             if not isinstance(digest, str) or not _HEX64.match(digest):
                 raise ToolchainError(f"{name} {key}: asset sha256 is not a SHA-256 hex digest")
     return data
@@ -221,7 +234,7 @@ def install(name: str, *, force: bool = False) -> InstallResult:
     config.tools_dir().mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=config.tools_dir()))
     try:
-        archive = staging / "asset.zip"
+        archive = staging / ("asset.tar.gz" if asset["url"].endswith(".tar.gz") else "asset.zip")
         try:
             api.download_asset(asset["url"], archive, max_bytes=MAX_ARCHIVE_BYTES)
         except api.AssetDownloadError as exc:
@@ -237,7 +250,7 @@ def install(name: str, *, force: bool = False) -> InstallResult:
         staged = staging / member
         _extract_member(archive, member, staged)
         _make_executable(staged)
-        _check_version(staged, name, version)
+        _check_version(staged, name, version, entry.get("version_args", ["-version"]))
         binary_sha = _sha256(staged)
 
         try:
@@ -263,7 +276,19 @@ def install(name: str, *, force: bool = False) -> InstallResult:
 
 
 def _extract_member(archive: Path, member: str, dest: Path) -> None:
-    """Copy exactly one named file out of the verified archive, bounded in size."""
+    """Copy exactly one named file out of the verified archive, bounded in size.
+
+    Nothing is ever extracted by the archive's own paths: the one expected member is
+    read and written to ``dest``, a path VardrRunner chose. Every other entry is
+    ignored, so traversal names, links, and devices in the archive have no effect.
+    """
+    if archive.name.endswith(".tar.gz"):
+        _extract_tar_member(archive, member, dest)
+    else:
+        _extract_zip_member(archive, member, dest)
+
+
+def _extract_zip_member(archive: Path, member: str, dest: Path) -> None:
     try:
         with zipfile.ZipFile(archive) as zf:
             try:
@@ -272,15 +297,46 @@ def _extract_member(archive: Path, member: str, dest: Path) -> None:
                 raise ToolchainError(f"{member} is missing from the pinned archive") from exc
             if info.is_dir() or info.file_size > MAX_BINARY_BYTES:
                 raise ToolchainError(f"{member} in the pinned archive is not a usable binary")
-            written = 0
-            with zf.open(info) as src, dest.open("wb") as out:
-                while chunk := src.read(1024 * 1024):
-                    written += len(chunk)
-                    if written > MAX_BINARY_BYTES:
-                        raise ToolchainError(f"{member} exceeded the extraction size limit")
-                    out.write(chunk)
+            with zf.open(info) as src:
+                _copy_bounded(src, dest, member)
     except zipfile.BadZipFile as exc:
         raise ToolchainError("the pinned archive is not a valid zip file") from exc
+
+
+def _extract_tar_member(archive: Path, member: str, dest: Path) -> None:
+    try:
+        with tarfile.open(archive, "r:gz") as tf:
+            info = None
+            for candidate in (member, f"./{member}"):
+                try:
+                    info = tf.getmember(candidate)
+                    break
+                except KeyError:
+                    continue
+            if info is None:
+                raise ToolchainError(f"{member} is missing from the pinned archive")
+            # Regular files only: a symlink, hardlink, or device entry is refused.
+            if not info.isreg() or info.size > MAX_BINARY_BYTES:
+                raise ToolchainError(f"{member} in the pinned archive is not a usable binary")
+            src = tf.extractfile(info)
+            if src is None:
+                raise ToolchainError(f"{member} in the pinned archive is not a usable binary")
+            with src:
+                _copy_bounded(src, dest, member)
+    # gzip.BadGzipFile is an OSError; a truncated stream raises EOFError.
+    except (tarfile.TarError, EOFError, OSError) as exc:
+        raise ToolchainError("the pinned archive is not a valid tar.gz file") from exc
+
+
+def _copy_bounded(src: IO[bytes], dest: Path, member: str) -> None:
+    """Stream ``src`` to ``dest``, enforcing the size cap on bytes actually read."""
+    written = 0
+    with dest.open("wb") as out:
+        while chunk := src.read(1024 * 1024):
+            written += len(chunk)
+            if written > MAX_BINARY_BYTES:
+                raise ToolchainError(f"{member} exceeded the extraction size limit")
+            out.write(chunk)
 
 
 def _make_executable(path: Path) -> None:
@@ -289,11 +345,12 @@ def _make_executable(path: Path) -> None:
     path.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
 
 
-def _check_version(binary: Path, name: str, version: str) -> None:
+def _check_version(binary: Path, name: str, version: str, version_args: list[str]) -> None:
     """Run the staged binary's version flag and require the pinned version."""
     try:
         result = subprocess.run(
-            [str(binary), "-version"],
+            [str(binary), *version_args],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=_VERSION_TIMEOUT,

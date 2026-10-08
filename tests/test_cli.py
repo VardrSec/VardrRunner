@@ -370,6 +370,67 @@ class TestRunCommands:
             invoke("run", "dnsx", "--engagement", "p1", "--target", "a.example.com", "--yes")
         mock.assert_called_once()
 
+    def test_run_katana_options(self):
+        with patch("vardrrunner.commands.run.run_katana") as mock:
+            invoke(
+                "run",
+                "katana",
+                "--engagement",
+                "p1",
+                "--from-recon",
+                "--limit",
+                "20",
+                "--depth",
+                "5",
+                "--js-crawl",
+                "--yes",
+            )
+        mock.assert_called_once_with(
+            engagement_id="p1",
+            scope=False,
+            from_recon=True,
+            target=None,
+            targets_file=None,
+            limit=20,
+            depth=5,
+            js_crawl=True,
+            yes=True,
+            max_targets=run_cmd.MAX_TARGETS_DEFAULT,
+        )
+
+    def test_run_gau_defaults(self):
+        with patch("vardrrunner.commands.run.run_gau") as mock:
+            invoke("run", "gau", "--engagement", "p1")
+        mock.assert_called_once_with(
+            engagement_id="p1",
+            subs=True,
+            providers=None,
+            yes=False,
+            max_targets=run_cmd.MAX_TARGETS_DEFAULT,
+        )
+
+    def test_run_gau_options(self):
+        with patch("vardrrunner.commands.run.run_gau") as mock:
+            invoke(
+                "run",
+                "gau",
+                "-p",
+                "p1",
+                "--no-subs",
+                "--providers",
+                "otx,wayback",
+                "--max-targets",
+                "3",
+                "-y",
+            )
+        mock.assert_called_once_with(
+            engagement_id="p1",
+            subs=False,
+            providers="otx,wayback",
+            yes=True,
+            max_targets=3,
+        )
+
     def test_run_naabu(self):
         with patch("vardrrunner.commands.run.run_naabu") as mock:
             invoke("run", "naabu", "--engagement", "p1", "--target", "10.0.0.1", "--yes")
@@ -386,6 +447,7 @@ class TestRunCommands:
             ("nmap", "10.0.0.1"),
             ("dnsx", "a.example.com"),
             ("naabu", "10.0.0.1"),
+            ("katana", "https://a.com"),
         ],
     )
     def test_run_max_targets_is_passed_through(self, tool, target):

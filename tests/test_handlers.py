@@ -16,6 +16,8 @@ def test_registry_covers_all_tools():
         "subfinder",
         "dnsx",
         "naabu",
+        "katana",
+        "gau",
         "vardrgate_api_test",
     }
     for name, handler in handlers.REGISTRY.items():

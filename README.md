@@ -18,11 +18,12 @@ results, and heartbeats so the backend always knows which machines are online.
 - **Job queue worker** — poll, atomically claim, execute, and report scan jobs
 - **Daemon mode** — `daemon start` runs a continuous background worker (poll every 5 s,
   heartbeat every 60 s) with detached mode, PID file, and graceful shutdown
-- **Tool runners** — `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu` (more coming),
+- **Tool runners** — `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu`, `katana`
+  (crawler), `gau` (archived URLs),
   each capturing output into an atomically unique run directory, every run bounded by a
   timeout that terminates the complete child-process tree
 - **Pinned, verified tool installs** — `tools install --all` downloads exact versions of
-  httpx, subfinder, nuclei, dnsx, and naabu into one folder, `~/.vardrmap/tools`, after
+  httpx, subfinder, nuclei, dnsx, naabu, katana, and gau into one folder, `~/.vardrmap/tools`, after
   checking each against a SHA-256 pinned in this package. The runner re-checks every
   managed binary before use and refuses to run one that has changed
 - **Recon pipelines** — chain tools in one command: `recon` (subfinder → httpx → nuclei),
@@ -55,7 +56,7 @@ results, and heartbeats so the backend always knows which machines are online.
 
 ## Requirements
 - Python **3.10+**
-- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, and `naabu`; `nmap` comes from your OS installer or package manager, and `vardrgate` (for `vardrgate_api_test` jobs) from its repository. Tools already on your `PATH` still work and are reported as unverified
+- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, and `gau`; `nmap` comes from your OS installer or package manager, and `vardrgate` (for `vardrgate_api_test` jobs) from its repository. Tools already on your `PATH` still work and are reported as unverified
 - A VardrSec backend URL and an API key (`vmap_…` for VardrMap)
 - VardrMap **≥ v0.22.0** as the backend — the runner calls `/engagements/*` (see [CHANGELOG](CHANGELOG.md) v0.27.0)
 

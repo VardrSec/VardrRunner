@@ -603,6 +603,68 @@ def run_naabu(
     )
 
 
+@run_app.command("katana")
+def run_katana(
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
+    scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
+    from_recon: bool = typer.Option(
+        False, "--from-recon", help="Use live recon items from VardrMap"
+    ),
+    target: str | None = typer.Option(None, "--target", help="Single inline target URL"),
+    targets_file: Path | None = typer.Option(None, "--targets", help="Path to a targets .txt file"),
+    limit: int = typer.Option(100, "--limit", help="Max recon items to use (--from-recon only)"),
+    depth: int = typer.Option(3, "--depth", help="Maximum crawl depth (1-10)"),
+    js_crawl: bool = typer.Option(
+        False, "--js-crawl", help="Also parse JavaScript files for endpoints"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
+    ),
+):
+    """Crawl URLs with katana locally and upload discovered endpoints to VardrMap."""
+    run.run_katana(
+        engagement_id=engagement_id,
+        scope=scope,
+        from_recon=from_recon,
+        target=target,
+        targets_file=targets_file,
+        limit=limit,
+        depth=depth,
+        js_crawl=js_crawl,
+        yes=yes,
+        max_targets=max_targets,
+    )
+
+
+@run_app.command("gau")
+def run_gau(
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
+    subs: bool = typer.Option(
+        True, "--subs/--no-subs", help="Include subdomains of each wildcard domain"
+    ),
+    providers: str | None = typer.Option(
+        None, "--providers", help="Comma list of wayback,commoncrawl,otx,urlscan (default: all)"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
+    ),
+):
+    """Fetch archived URLs for wildcard scope domains with gau and upload them to VardrMap."""
+    run.run_gau(
+        engagement_id=engagement_id,
+        subs=subs,
+        providers=providers,
+        yes=yes,
+        max_targets=max_targets,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Pipeline
 # --------------------------------------------------------------------------- #

@@ -413,23 +413,24 @@ def test_process_is_killed_if_observer_cannot_persist_pid(tmp_path):
     terminate.assert_called_once_with(process)
 
 
-def test_spawn_tool_starts_a_new_posix_session():
+def test_spawn_tool_starts_a_new_posix_session_with_empty_stdin():
     with (
         patch.object(runner.os, "name", "posix"),
         patch("vardrrunner.runner.subprocess.Popen") as popen,
     ):
         runner._spawn_tool(["httpx"])
-    popen.assert_called_once_with(["httpx"], start_new_session=True)
+    # Empty stdin: ProjectDiscovery tools block reading an inherited pipe that never closes.
+    popen.assert_called_once_with(["httpx"], stdin=subprocess.DEVNULL, start_new_session=True)
 
 
-def test_spawn_tool_starts_a_new_windows_process_group():
+def test_spawn_tool_starts_a_new_windows_process_group_with_empty_stdin():
     with (
         patch.object(runner.os, "name", "nt"),
         patch.object(runner.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, create=True),
         patch("vardrrunner.runner.subprocess.Popen") as popen,
     ):
         runner._spawn_tool(["httpx"])
-    popen.assert_called_once_with(["httpx"], creationflags=512)
+    popen.assert_called_once_with(["httpx"], stdin=subprocess.DEVNULL, creationflags=512)
 
 
 def test_terminate_process_tree_kills_posix_group():

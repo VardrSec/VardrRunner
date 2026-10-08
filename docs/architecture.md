@@ -13,7 +13,7 @@ either direction.
 │   (backend + DB + UI)    │ <──── events / upload ──  │  (this repo, local CLI)  │
 │                          │ <──── heartbeat ────────  │  runs httpx/subfinder/   │
 │                          │                           │  nuclei/nmap/dnsx/naabu/ │
-│                          │  ──── jobs / scope ─────> │  vardrgate locally       │
+│                          │  ──── jobs / scope ─────> │  katana/gau/vardrgate    │
 └──────────────────────────┘                           └──────────────────────────┘
 ```
 
@@ -25,7 +25,7 @@ calls, all through `api.py`:
 | `GET /me` | `whoami`, and the auth check in `doctor` |
 | `GET /engagements` · `GET /engagements/{id}` | engagement list and scope lookup |
 | `GET /engagements/{id}/recon` | `--from-recon` target resolution (paginated, 500/page) |
-| `POST /engagements/{id}/imports` | httpx/nuclei/subfinder/dnsx result upload |
+| `POST /engagements/{id}/imports` | httpx/nuclei/subfinder/dnsx/katana/gau result upload |
 | `POST /engagements/{id}/services` | nmap/naabu open-port upload |
 | `GET /jobs/pending` | poll the queue |
 | `POST /jobs/{id}/claim` | atomic claim |
@@ -45,7 +45,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/api.py` | The **only** module that performs HTTP. A `requests.Session` wrapper exposing typed methods; raises `requests.HTTPError` on non-2xx. Retries transient failures (connection errors, 429/5xx) with exponential backoff on idempotent methods only (never POST/PATCH); sends a `User-Agent: vardrrunner/<version>` header. Also performs the two public, unauthenticated fetches: release metadata for `update check`, and pinned tool archives for `tools install` (HTTPS-only, size-capped; integrity is checked by `toolchain.py`). |
 | `vardrrunner/config.py` | Resolve credentials (key: env > keychain > config file; URL: env > file); atomically persist config; identify whether auth survives a fresh service process; enforce HTTPS. |
 | `vardrrunner/keychain.py` | OS keychain wrapper (`keyring`) for the API key. Degrades gracefully (returns None/False) when no backend is present, so servers fall back to env/file. |
-| `vardrrunner/configs.py` | Typed, validated tool configs (`HttpxConfig`, `NucleiConfig`, `NmapConfig`, `SubfinderConfig`, `VardrGateConfig`). Raw backend dicts are parsed into frozen dataclasses up front; invalid values raise `ConfigError` and fail the job fast. |
+| `vardrrunner/configs.py` | Typed, validated tool configs (`HttpxConfig`, `NucleiConfig`, `NmapConfig`, `SubfinderConfig`, `DnsxConfig`, `NaabuConfig`, `KatanaConfig`, `GauConfig`, `VardrGateConfig`). Raw backend dicts are parsed into frozen dataclasses up front; invalid values raise `ConfigError` and fail the job fast. |
 | `vardrrunner/errors.py` | The failure taxonomy (`FailureCategory`) and `RunnerError` hierarchy, plus `classify_status()` — the single place an HTTP status becomes a domain meaning. Imports nothing from the package or outside stdlib, so it is the bottom of the dependency graph (see ADR 0008). |
 | `vardrrunner/credentials.py` | Describes credential posture — source, encryption at rest, keychain availability, cleartext state, file permissions — without ever returning the key. Shared by `doctor` and `credentials` so they cannot disagree about the same machine (ADR 0009). |
 | `vardrrunner/redaction.py` | The single sanitization layer. Everything the runner emits — job events, failure reasons, log lines, errors — passes through here first. Masks by key name and by value pattern; deterministic, idempotent, depth-bounded, and never raises. |
@@ -65,7 +65,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/runner.py` | Allowlisted process-group execution, process-tree timeouts, stdout/stderr capture, private VardrGate job files, and atomically unique run directories under `~/.vardrmap/runs`. Every command's program comes from `program()`, which asks `toolchain.py` for a verified managed path before falling back to `PATH`. |
 | `vardrrunner/toolchain.py` | Pinned, verified tool installs (ADR 0014). Loads `tool_manifest.json` (shipped in the package: version, per-platform archive URL, SHA-256), installs into `~/.vardrmap/tools` fail-closed (hash → single-member extract → version check → one rename → receipt), and re-hashes managed binaries before first use; a mismatch is never executed. |
 | `vardrrunner/commands/auth.py` | `login` / `logout` / `whoami` — prompt for and persist backend URL + API key, remove stored credentials, and report the identity behind the key. |
-| `vardrrunner/commands/run.py` | `run httpx|subfinder|nuclei|nmap|dnsx|naabu` — execute one tool, upload results (shares the typed-config + handler path). |
+| `vardrrunner/commands/run.py` | `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau` — execute one tool, upload results (shares the typed-config + handler path). |
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
@@ -96,7 +96,7 @@ requires VardrMap ≥ v0.22.0.
    reported with their category. Advisory policy warnings on the response are printed
    before any tool runs and emitted as a `policy_warning` event.
 4. **Execute** — after verifying the configured free-disk reserve, `runner.py` atomically
-   allocates a unique run directory, resolves the tool (a managed install must pass hash verification or the job fails; otherwise `PATH`), and spawns it as an argv list in a dedicated
+   allocates a unique run directory, resolves the tool (a managed install must pass hash verification or the job fails; otherwise `PATH`), and spawns it as an argv list with an empty stdin in a dedicated
    process group/session (never `shell=True` with server data). It records the PID and
    captures output; a timeout terminates the complete process tree. Emits `running`.
 5. **Hash and upload** — enforce the local artifact-size ceiling, then stream a SHA-256

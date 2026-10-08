@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 # Severities nuclei accepts — mirrors the backend's own validation.
 NUCLEI_SEVERITIES = frozenset({"info", "low", "medium", "high", "critical"})
+GAU_PROVIDERS = frozenset({"wayback", "commoncrawl", "otx", "urlscan"})
 SUPPORTED_JOB_SCHEMA_VERSIONS = frozenset({1})
 
 
@@ -94,6 +95,34 @@ def _parse_severity(raw) -> str | None:
     if invalid:
         raise ConfigError(f"invalid severity {invalid}; allowed: {sorted(NUCLEI_SEVERITIES)}")
     return ",".join(tokens) or None
+
+
+def _opt_bool(cfg: dict, key: str, default: bool) -> bool:
+    """Parse a boolean that may arrive as JSON or as a form string ("true"/"false")."""
+    raw = cfg.get(key)
+    if raw is None or raw == "":
+        return default
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str) and raw.strip().lower() in ("true", "false"):
+        return raw.strip().lower() == "true"
+    raise ConfigError(f"{key!r} must be true or false, got {raw!r}")
+
+
+def _parse_choices(raw, key: str, allowed: frozenset[str]) -> tuple[str, ...]:
+    """Normalize a comma string or list to a de-duplicated tuple drawn from ``allowed``."""
+    if raw is None or raw == "":
+        return ()
+    if isinstance(raw, str):
+        tokens = [t.strip() for t in raw.split(",") if t.strip()]
+    elif isinstance(raw, (list, tuple)):
+        tokens = [str(t).strip() for t in raw if str(t).strip()]
+    else:
+        raise ConfigError(f"{key!r} must be a string or list, got {type(raw).__name__}")
+    invalid = sorted(set(tokens) - allowed)
+    if invalid:
+        raise ConfigError(f"invalid {key} {invalid}; allowed: {sorted(allowed)}")
+    return tuple(dict.fromkeys(tokens))
 
 
 def _parse_templates(raw) -> str | None:
@@ -189,6 +218,42 @@ class NaabuConfig:
         return cls(
             top_ports=_req_int(cfg, "top_ports", 100, minimum=1, maximum=65535),
             limit=_req_int(cfg, "limit", 500, minimum=1),
+            timeout=_opt_int(cfg, "timeout", minimum=1),
+        )
+
+
+@dataclass(frozen=True)
+class KatanaConfig:
+    limit: int = 100
+    status_code: int | None = None
+    depth: int = 3
+    js_crawl: bool = False
+    timeout: int | None = None
+
+    @classmethod
+    def from_dict(cls, cfg: dict) -> "KatanaConfig":
+        return cls(
+            limit=_req_int(cfg, "limit", 100, minimum=1),
+            status_code=_opt_int(cfg, "status_code"),
+            depth=_req_int(cfg, "depth", 3, minimum=1, maximum=10),
+            js_crawl=_opt_bool(cfg, "js_crawl", False),
+            timeout=_opt_int(cfg, "timeout", minimum=1),
+        )
+
+
+@dataclass(frozen=True)
+class GauConfig:
+    # Wildcard scope entries are the targets, so subdomains are included by default.
+    subs: bool = True
+    # Empty means gau's own default: every provider.
+    providers: tuple[str, ...] = ()
+    timeout: int | None = None
+
+    @classmethod
+    def from_dict(cls, cfg: dict) -> "GauConfig":
+        return cls(
+            subs=_opt_bool(cfg, "subs", True),
+            providers=_parse_choices(cfg.get("providers"), "providers", GAU_PROVIDERS),
             timeout=_opt_int(cfg, "timeout", minimum=1),
         )
 
