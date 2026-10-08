@@ -595,22 +595,37 @@ class TestOutputStreamHardening:
 
 
 class TestMcpCommand:
-    def test_mcp_runs_the_server_when_installed(self):
+    """`vardrrunner mcp` imports mcp_server lazily, so these tests control what that
+    import finds. `from vardrrunner import mcp_server` looks at the *attribute* on the
+    package before sys.modules, so once any earlier test has imported the real module
+    the attribute shadows a sys.modules patch and the result depends on test order.
+    The fixture removes the attribute for the test and restores whatever was there."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_mcp_server_import(self, monkeypatch):
+        import sys
+
+        import vardrrunner
+
+        monkeypatch.delattr(vardrrunner, "mcp_server", raising=False)
+        monkeypatch.delitem(sys.modules, "vardrrunner.mcp_server", raising=False)
+
+    def test_mcp_runs_the_server_when_installed(self, monkeypatch):
         import sys
         from unittest.mock import MagicMock
 
         fake_mod = MagicMock()
-        with patch.dict(sys.modules, {"vardrrunner.mcp_server": fake_mod}):
-            result = invoke("mcp")
+        monkeypatch.setitem(sys.modules, "vardrrunner.mcp_server", fake_mod)
+        result = invoke("mcp")
         fake_mod.run.assert_called_once_with()
         assert result.exit_code == 0
 
-    def test_mcp_without_the_extra_prints_install_hint(self):
+    def test_mcp_without_the_extra_prints_install_hint(self, monkeypatch):
         import sys
 
         # sys.modules[name] = None makes `from vardrrunner import mcp_server` raise
         # ImportError, simulating a runner installed without the [mcp] extra.
-        with patch.dict(sys.modules, {"vardrrunner.mcp_server": None}):
-            result = invoke("mcp")
+        monkeypatch.setitem(sys.modules, "vardrrunner.mcp_server", None)
+        result = invoke("mcp")
         assert result.exit_code == 1
         assert "vardrrunner[mcp]" in result.stdout
