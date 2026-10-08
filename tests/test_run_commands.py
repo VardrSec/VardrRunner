@@ -293,6 +293,97 @@ def test_run_naabu_max_targets_exceeded():
             run_cmd.run_naabu("prog-1", target="x", yes=True, max_targets=500)
 
 
+@pytest.mark.parametrize("depth", [0, 11])
+def test_run_katana_rejects_out_of_range_depth(depth):
+    p = _common_patches(["https://a.example.com"])
+    with p[0], p[1], p[2], p[3], patch("vardrrunner.runner.run_katana") as mock_katana:
+        with pytest.raises(typer.Exit) as exc:
+            run_cmd.run_katana("prog-1", target="https://a.example.com", depth=depth, yes=True)
+    assert exc.value.exit_code == 1
+    mock_katana.assert_not_called()
+
+
+def test_run_katana_no_targets_exits():
+    p = _common_patches([])
+    with p[0], p[1], p[2], p[3]:
+        with pytest.raises(typer.Exit) as exc:
+            run_cmd.run_katana("prog-1", yes=True)
+    assert exc.value.exit_code == 0
+
+
+def test_run_katana_happy_path_dedupes_urls(tmp_path):
+    p = _common_patches(["https://a.example.com", "https://a.example.com ", " "])
+    with (
+        p[0],
+        p[1],
+        p[2],
+        p[3],
+        patch("vardrrunner.commands.run._finish") as mock_finish,
+        patch("vardrrunner.commands.run._make_run_dir", return_value=tmp_path),
+    ):
+        run_cmd.run_katana("prog-1", target="https://a.example.com", js_crawl=True, yes=True)
+    tool, _client, _eng, urls, cfg, _ = mock_finish.call_args.args
+    assert tool == "katana" and urls == ["https://a.example.com"] and cfg.js_crawl is True
+
+
+def _gau_patches(scope_in):
+    client = MagicMock()
+    client.scope.return_value = {"in": scope_in}
+    return (
+        patch("vardrrunner.commands.run.runner.check_tool"),
+        patch("vardrrunner.commands.run.config.require_auth", return_value=("https://a", "k")),
+        patch("vardrrunner.commands.run.api.VardrMapClient", return_value=client),
+    )
+
+
+def test_run_gau_rejects_unknown_provider():
+    p = _gau_patches([{"value": "*.example.com"}])
+    with p[0], p[1], p[2], patch("vardrrunner.runner.run_gau") as mock_gau:
+        with pytest.raises(typer.Exit) as exc:
+            run_cmd.run_gau("prog-1", providers="otx,notaprovider", yes=True)
+    assert exc.value.exit_code == 1
+    mock_gau.assert_not_called()
+
+
+def test_run_gau_without_wildcards_exits():
+    p = _gau_patches([{"value": "example.com"}])
+    with p[0], p[1], p[2]:
+        with pytest.raises(typer.Exit) as exc:
+            run_cmd.run_gau("prog-1", yes=True)
+    assert exc.value.exit_code == 0
+
+
+def test_run_gau_refuses_option_shaped_scope():
+    p = _gau_patches([{"value": "*.-evil"}])
+    with p[0], p[1], p[2], patch("vardrrunner.runner.run_gau") as mock_gau:
+        with pytest.raises(typer.Exit) as exc:
+            run_cmd.run_gau("prog-1", yes=True)
+    assert exc.value.exit_code == 1
+    mock_gau.assert_not_called()
+
+
+def test_run_gau_happy_path(tmp_path):
+    p = _gau_patches([{"value": "*.example.com"}])
+    with (
+        p[0],
+        p[1],
+        p[2],
+        patch("vardrrunner.commands.run._finish") as mock_finish,
+        patch("vardrrunner.commands.run._make_run_dir", return_value=tmp_path),
+    ):
+        run_cmd.run_gau("prog-1", subs=False, providers="otx", yes=True)
+    tool, _client, _eng, domains, cfg, _ = mock_finish.call_args.args
+    assert tool == "gau" and domains == ["example.com"]
+    assert cfg.subs is False and cfg.providers == ("otx",)
+
+
+def test_run_gau_max_targets_exceeded():
+    p = _gau_patches([{"value": f"*.d{i}.example.com"} for i in range(5)])
+    with p[0], p[1], p[2]:
+        with pytest.raises(typer.Exit):
+            run_cmd.run_gau("prog-1", yes=True, max_targets=3)
+
+
 # ---------------------------------------------------------------------------
 # _finish helper — no output and upload failure paths
 # ---------------------------------------------------------------------------

@@ -20,8 +20,10 @@ import json
 import os
 import re
 import sys
+import tarfile
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -34,22 +36,44 @@ from vardrrunner import api, manifests, toolchain  # noqa: E402
 
 MANIFEST = ROOT / "vardrrunner" / toolchain.MANIFEST_RESOURCE
 
-# Tool → GitHub repository. Binary name is the tool name for every current entry.
-SOURCES: dict[str, str] = {
-    "httpx": "projectdiscovery/httpx",
-    "nuclei": "projectdiscovery/nuclei",
-    "subfinder": "projectdiscovery/subfinder",
-    "dnsx": "projectdiscovery/dnsx",
-    "naabu": "projectdiscovery/naabu",
+
+@dataclass(frozen=True)
+class Source:
+    """Where a tool is released and how its archives are named."""
+
+    repo: str
+    # Manifest platform key → (OS, arch, archive suffix) as spelled in asset names.
+    platforms: dict[str, tuple[str, str, str]]
+    # The binary's own version flag, when it is not ``-version``.
+    version_args: tuple[str, ...] = ()
+
+
+# ProjectDiscovery: `{tool}_{version}_{os}_{arch}.zip`, with macOS spelled "macOS".
+_PD = {
+    "windows-amd64": ("windows", "amd64", ".zip"),
+    "linux-amd64": ("linux", "amd64", ".zip"),
+    "linux-arm64": ("linux", "arm64", ".zip"),
+    "macos-amd64": ("macOS", "amd64", ".zip"),
+    "macos-arm64": ("macOS", "arm64", ".zip"),
+}
+# GoReleaser defaults (gau): "darwin", and tar.gz everywhere except Windows.
+_GORELEASER = {
+    "windows-amd64": ("windows", "amd64", ".zip"),
+    "linux-amd64": ("linux", "amd64", ".tar.gz"),
+    "linux-arm64": ("linux", "arm64", ".tar.gz"),
+    "macos-amd64": ("darwin", "amd64", ".tar.gz"),
+    "macos-arm64": ("darwin", "arm64", ".tar.gz"),
 }
 
-# Manifest platform key → (OS, arch) as spelled in ProjectDiscovery asset names.
-PLATFORMS: dict[str, tuple[str, str]] = {
-    "windows-amd64": ("windows", "amd64"),
-    "linux-amd64": ("linux", "amd64"),
-    "linux-arm64": ("linux", "arm64"),
-    "macos-amd64": ("macOS", "amd64"),
-    "macos-arm64": ("macOS", "arm64"),
+# Binary name is the tool name for every current entry.
+SOURCES: dict[str, Source] = {
+    "httpx": Source("projectdiscovery/httpx", _PD),
+    "nuclei": Source("projectdiscovery/nuclei", _PD),
+    "subfinder": Source("projectdiscovery/subfinder", _PD),
+    "dnsx": Source("projectdiscovery/dnsx", _PD),
+    "naabu": Source("projectdiscovery/naabu", _PD),
+    "katana": Source("projectdiscovery/katana", _PD),
+    "gau": Source("lc/gau", _GORELEASER, version_args=("--version",)),
 }
 
 
@@ -78,16 +102,25 @@ def _upstream_checksums(assets: list[dict[str, Any]], workdir: Path) -> dict[str
     return sums
 
 
+def _members(archive: Path) -> list[str]:
+    if archive.name.endswith(".tar.gz"):
+        with tarfile.open(archive, "r:gz") as tf:
+            return [m.name.removeprefix("./") for m in tf.getmembers() if m.isreg()]
+    with zipfile.ZipFile(archive) as zf:
+        return zf.namelist()
+
+
 def pin(tool: str, version: str) -> dict[str, Any]:
-    repo = SOURCES[tool]
+    source = SOURCES[tool]
+    repo = source.repo
     release = _github(f"/repos/{repo}/releases/tags/v{version}")
     assets = release["assets"]
     platforms: dict[str, dict[str, str]] = {}
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
         upstream = _upstream_checksums(assets, workdir)
-        for key, (os_name, arch) in PLATFORMS.items():
-            wanted = f"{tool}_{version}_{os_name}_{arch}.zip"
+        for key, (os_name, arch, suffix) in source.platforms.items():
+            wanted = f"{tool}_{version}_{os_name}_{arch}{suffix}"
             match = [a for a in assets if a["name"] == wanted]
             if not match:
                 print(f"  {tool} {version}: no {key} build ({wanted}); skipping")
@@ -100,17 +133,19 @@ def pin(tool: str, version: str) -> dict[str, Any]:
             if upstream.get(wanted) != digest:
                 raise SystemExit(f"{wanted}: local hash does not match the upstream checksums file")
             member = f"{tool}.exe" if key.startswith("windows-") else tool
-            with zipfile.ZipFile(archive) as zf:
-                if member not in zf.namelist():
-                    raise SystemExit(f"{wanted} does not contain {member}")
+            if member not in _members(archive):
+                raise SystemExit(f"{wanted} does not contain {member}")
             platforms[key] = {"url": match[0]["browser_download_url"], "sha256": digest}
             print(f"  {tool} {version} {key}: {digest}")
-    return {
+    entry: dict[str, Any] = {
         "version": version,
         "binary": tool,
         "source": f"https://github.com/{repo}/releases/tag/v{version}",
         "platforms": platforms,
     }
+    if source.version_args:
+        entry["version_args"] = list(source.version_args)
+    return entry
 
 
 def check(manifest: dict[str, Any]) -> int:

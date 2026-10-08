@@ -256,7 +256,8 @@ version, and moves it into place in one step. Anything that fails installs nothi
 
 | Tool | Managed | Notes |
 |---|---|---|
-| httpx, nuclei, subfinder, dnsx | yes | |
+| httpx, nuclei, subfinder, dnsx, katana | yes | |
+| gau | yes | `.tar.gz` on Linux/macOS, `.zip` on Windows; same single-file extraction |
 | naabu | yes | port scans also need libpcap (Linux/macOS) or [Npcap](https://npcap.com) (Windows) |
 | nmap | no | install with your OS installer or package manager |
 | vardrgate | no | install from the VardrGate repository |
@@ -282,6 +283,8 @@ vardrrunner run nuclei    --engagement <id> [options]
 vardrrunner run nmap      --engagement <id> [--top-ports N] [--timing 0-4] [options]
 vardrrunner run dnsx      --engagement <id> [options]
 vardrrunner run naabu     --engagement <id> [--top-ports N] [options]
+vardrrunner run katana    --engagement <id> [--depth N] [--js-crawl] [options]
+vardrrunner run gau       --engagement <id> [--no-subs] [--providers otx,wayback]
 ```
 Executes the named tool, captures output into an atomically unique timestamp-prefixed run
 directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
@@ -290,10 +293,17 @@ directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
 - `run dnsx` — DNS resolution; uploads the **resolvable** hosts as recon targets, so a later
   httpx/nuclei pass only probes hosts that exist.
 - `run naabu` — fast top-ports scan → open ports to the services API.
+- `run katana` — crawls each target URL (staying on its root domain) and uploads every
+  endpoint found as recon, with method, status, size, and content type. Response bodies
+  are dropped before upload.
+- `run gau` — passive: asks public archives (Wayback Machine, Common Crawl, AlienVault
+  OTX, urlscan) for URLs they have recorded under each wildcard scope domain, and
+  uploads them as recon. Nothing is sent to the target itself.
+- katana and gau upload large results in pieces under VardrMap's 2 MiB import limit.
 
 ### Choosing targets
-Every `run` command except `subfinder` takes one target source (`subfinder` always reads
-wildcard entries from the engagement's scope):
+Every `run` command except `subfinder` and `gau` takes one target source (`subfinder` and
+`gau` always read wildcard entries from the engagement's scope):
 
 | Flag | Source |
 |------|--------|
@@ -303,7 +313,7 @@ wildcard entries from the engagement's scope):
 | `--targets <path>` | A targets `.txt` file, one per line |
 
 With `--from-recon`, `--limit` caps how many recon items are pulled (default 100 for
-httpx/nuclei, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
+httpx/nuclei/katana, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
 (httpx and nuclei only).
 
 All sources are treated as untrusted. Empty entries are removed and duplicates collapsed;
@@ -317,6 +327,8 @@ limited to 10 MiB. The same validation applies to backend data and pipeline hand
 | `run nuclei` | `--severity high,critical` · `--templates`/`-t <path-or-tag>` |
 | `run nmap` | `--top-ports N` (default 100) · `--timing 0-4` (default 3; 5 is never allowed) |
 | `run naabu` | `--top-ports N` (default 100) |
+| `run katana` | `--depth N` (1-10, default 3) · `--js-crawl` (also parse JavaScript for endpoints) |
+| `run gau` | `--subs/--no-subs` (default on) · `--providers` (any of `wayback,commoncrawl,otx,urlscan`; default all) |
 
 `--yes`/`-y` skips the confirmation prompt on any of them.
 
@@ -456,7 +468,7 @@ responsibility. They are also emitted as a `policy_warning` job event so the bac
 Terminal records them. Stop-work is the only policy condition that halts.
 
 Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`, `nmap`,
-`dnsx`, `naabu`) plus `vardrgate_api_test`, which runs a VardrGate API authorization
+`dnsx`, `naabu`, `katana`, `gau`) plus `vardrgate_api_test`, which runs a VardrGate API authorization
 test via the local `vardrgate` binary and uploads the result to the job. See
 [ADR 0006](adr/0006-vardrgate-api-test-handler.md).
 

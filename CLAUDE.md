@@ -23,7 +23,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
   - `compatibility.py` / `resources.py` / `updates.py` — wire negotiation, bounded local policy, and cached release checks (ADR 0012)
   - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `tools`, `updates`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (973 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite (1026 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `scripts/pin_tools.py` — the only way tool pins change: downloads, hashes, cross-checks upstream checksums (`--check` for drift)
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
@@ -52,6 +52,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
 - **Never execute a managed tool that fails hash verification**, and never fall back to a
   `PATH` copy when one does. Tool hashes come from `tool_manifest.json` in the package,
   never from the download site; change them only via `scripts/pin_tools.py` (ADR 0014)
+- Every tool runs with an empty stdin (ProjectDiscovery tools block on an inherited pipe)
 - Every tool run bounded by a timeout; missing/failed/timed-out tool → job marked **failed** with reason — never silent skip, never hang
 
 ## Documentation rules
@@ -92,7 +93,7 @@ vardrrunner daemon start
 - `credentials` — credential source/posture; never shows the key
 - `engagements` — list engagements (`programs` kept as a hidden alias)
 - `scope <engagement-id>` — show in/out-of-scope items
-- `run httpx|subfinder|nuclei|nmap|dnsx|naabu` — run tool locally, upload results
+- `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau` — run tool locally, upload results
 - `pipeline list|run <name>` — chain tools (`recon`, `quick`, `deep`, `ports`)
 - `import nuclei|httpx` — import existing output file
 - `jobs list|run` — inspect and execute backend job queue (one-shot)

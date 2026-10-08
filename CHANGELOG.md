@@ -7,6 +7,41 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.38.0] — 2026-10-08
+
+Two new recon tools, katana and gau, plus a fix for tools hanging on an inherited stdin.
+See [`changelog/v0.38.0.md`](changelog/v0.38.0.md).
+
+**Requires VardrMap with `katana`/`gau` support** for those job types and uploads; every
+other tool is unaffected.
+
+### Added
+
+- **katana** (`run katana`, job type `katana`) — crawls target URLs on their root domain,
+  optionally parsing JavaScript (`--js-crawl`), and uploads each endpoint as recon with
+  method, status, size, and content type. katana's raw request/response bodies are dropped
+  before upload.
+- **gau** (`run gau`, job type `gau`) — passive: fetches URLs that public archives
+  (Wayback Machine, Common Crawl, AlienVault OTX, urlscan) have recorded for each wildcard
+  scope domain. `--no-subs` and `--providers` narrow it. Domains are passed after `--`, so
+  none can be read as an option.
+- **Pinned installs** for katana 1.8.0 and gau 2.2.4 on every supported platform.
+- **`.tar.gz` support in the installer** (gau ships tar.gz on Linux and macOS). Same
+  guarantees as zip: only the one expected file is read, and only if it is a regular file;
+  links, hardlinks, directories, and devices are refused.
+- **Per-tool version flag** in the manifest (`version_args`), validated as bare options.
+- **Chunked uploads for katana and gau.** VardrMap refuses imports over 2 MiB by default,
+  and gau on a large domain easily exceeds that. Results are now sent in line-aligned
+  pieces of at most 1.5 MB; a result that fits is sent as one file, as before. The backend
+  de-duplicates per source within and across uploads, so splitting changes nothing stored.
+
+### Fixed
+
+- **Tools could hang forever on an inherited stdin.** ProjectDiscovery tools read extra
+  targets from stdin whenever it isn't a terminal, so a runner started from a script,
+  supervisor, or CI with a pipe on stdin could block indefinitely. Every tool, and every
+  version check, now runs with an empty stdin. Found while testing katana.
+
 ## [0.37.0] — 2026-10-08
 
 Pinned, verified tool installs in one folder. See

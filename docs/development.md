@@ -4,7 +4,7 @@
 - Python **3.10+**
 - `git`
 - (Optional, for real runs) the external tools. `vardrrunner tools install --all` installs
-  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, and `naabu` into
+  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, and `gau` into
   `~/.vardrmap/tools`; `nmap` and `vardrgate` (only for `vardrgate_api_test` jobs) still
   come from your OS or `PATH`. None are needed to run the test suite — every subprocess
   call is mocked.
@@ -28,7 +28,7 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **973 tests** at 95.65% coverage (CI floor: 95%), all hermetic: no network, no real
+- **1026 tests** at 95.87% coverage (CI floor: 95%), all hermetic: no network, no real
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
@@ -74,6 +74,7 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_status.py` | tool detection + status output |
 | `tests/test_doctor.py` | preflight checks, exit codes, and `--json` report |
 | `tests/test_toolchain.py` | pinned installs: manifest validation, hash mismatch, single-member extraction, hostile archives, version checks, antivirus quarantine, receipts, tamper detection, PATH fallback |
+| `tests/test_katana_gau.py` | katana/gau configs, argv construction (incl. `--` before gau domains), katana body stripping, tar.gz installs refusing links and directories, and that every installable tool is runnable |
 | `tests/test_tools_commands.py` | `tools` commands, runner resolution of managed binaries, `doctor` tool checks, HTTPS-only size-capped asset download |
 
 ## Lint, format, and types

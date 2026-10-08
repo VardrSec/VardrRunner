@@ -330,3 +330,63 @@ def run_naabu(
     _confirm(targets, "naabu", yes)
     cfg = _build_config("naabu", {"top_ports": top_ports, "limit": limit})
     _finish("naabu", client, engagement_id, targets, cfg, _make_run_dir())
+
+
+def run_katana(
+    engagement_id: str,
+    scope: bool = False,
+    from_recon: bool = False,
+    target: str | None = None,
+    targets_file: Path | None = None,
+    limit: int = 100,
+    depth: int = 3,
+    js_crawl: bool = False,
+    yes: bool = False,
+    max_targets: int = MAX_TARGETS_DEFAULT,
+):
+    """Crawl URLs with katana and upload discovered endpoints as recon."""
+    runner.check_tool("katana")
+    url, key = config.require_auth()
+    client = api.VardrMapClient(url, key)
+
+    cfg = _build_config("katana", {"limit": limit, "depth": depth, "js_crawl": js_crawl})
+    raw = _resolve_targets(
+        client, engagement_id, scope, from_recon, target, targets_file, None, limit
+    )
+    urls = list(dict.fromkeys(t.strip() for t in raw if t.strip()))
+    if not urls:
+        console.print("[yellow]No targets found.[/yellow]")
+        raise typer.Exit(0)
+
+    _check_target_cap(urls, max_targets)
+    _confirm(urls, "katana", yes)
+    _finish("katana", client, engagement_id, urls, cfg, _make_run_dir())
+
+
+def run_gau(
+    engagement_id: str,
+    subs: bool = True,
+    providers: str | None = None,
+    yes: bool = False,
+    max_targets: int = MAX_TARGETS_DEFAULT,
+):
+    """Fetch archived URLs for wildcard scope domains with gau and upload them as recon."""
+    runner.check_tool("gau")
+    url, key = config.require_auth()
+    client = api.VardrMapClient(url, key)
+
+    cfg = _build_config("gau", {"subs": subs, "providers": providers})
+    try:
+        domains = targets.validate_targets(
+            handlers.REGISTRY["gau"].resolve_targets(client, engagement_id, "scope", cfg)
+        )
+    except targets.TargetValidationError as e:
+        console.print(f"[red]Invalid scope target:[/red] {redaction.redact_rich_exception(e)}")
+        raise typer.Exit(1) from e
+    if not domains:
+        console.print("[yellow]No wildcard scope entries found.[/yellow]")
+        raise typer.Exit(0)
+
+    _check_target_cap(domains, max_targets)
+    _confirm(domains, "gau", yes)
+    _finish("gau", client, engagement_id, domains, cfg, _make_run_dir())

@@ -30,6 +30,8 @@ ALLOWED_TOOLS = {
     "nmap": "nmap",
     "dnsx": "dnsx",
     "naabu": "naabu",
+    "katana": "katana",
+    "gau": "gau",
     # Job type "vardrgate_api_test" maps to the "vardrgate" binary on PATH.
     "vardrgate_api_test": "vardrgate",
 }
@@ -131,13 +133,20 @@ def _terminate_process_tree(process: subprocess.Popen) -> None:
 
 
 def _spawn_tool(cmd: list[str]) -> subprocess.Popen:
-    """Start a tool in a process group that can be terminated as one unit."""
+    """Start a tool in a process group that can be terminated as one unit.
+
+    stdin is always empty. ProjectDiscovery tools read extra targets from stdin
+    whenever it is not a terminal, so inheriting a pipe that never closes (a
+    supervisor, a script, CI) makes them wait forever. Targets always arrive in
+    files, so no tool needs stdin.
+    """
     if os.name == "nt":
         return subprocess.Popen(
             cmd,
+            stdin=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
         )
-    return subprocess.Popen(cmd, start_new_session=True)
+    return subprocess.Popen(cmd, stdin=subprocess.DEVNULL, start_new_session=True)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -274,6 +283,8 @@ _VERSION_ARGS: dict[str, list[str]] = {
     "subfinder": ["-version"],
     "dnsx": ["-version"],
     "naabu": ["-version"],
+    "katana": ["-version"],
+    "gau": ["--version"],
     "nmap": ["--version"],
 }
 
@@ -286,7 +297,12 @@ def tool_version(name: str) -> str | None:
     args = _VERSION_ARGS.get(name, ["-version"])
     try:
         result = subprocess.run(
-            [binary] + args, capture_output=True, text=True, timeout=5, check=False
+            [binary] + args,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
         )
         output = (result.stdout or "") + (result.stderr or "")
         # Try vX.Y.Z first (ProjectDiscovery), then bare X.Y.Z (nmap-style).
@@ -517,6 +533,63 @@ def run_naabu(
         "-silent",
     ]
     return _run_tool(cmd, hosts_file, "naabu", timeout)
+
+
+def run_katana(
+    targets: list[str],
+    output_path: Path,
+    depth: int = 3,
+    js_crawl: bool = False,
+    timeout: int | None = None,
+) -> None:
+    """Crawl a list of URLs with katana. Output is JSON lines.
+
+    katana's default field scope keeps the crawl on each target's root domain, so
+    a crawl does not wander onto third-party sites a page links to.
+    """
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
+        tmp.write("\n".join(targets))
+        targets_file = tmp.name
+
+    cmd = [
+        program("katana"),
+        "-list",
+        targets_file,
+        "-jsonl",
+        "-o",
+        str(output_path),
+        "-depth",
+        str(depth),
+        "-silent",
+        "-no-color",
+        "-disable-update-check",
+    ]
+    if js_crawl:
+        cmd.append("-js-crawl")
+    return _run_tool(cmd, targets_file, "katana", timeout)
+
+
+def run_gau(
+    domains: list[str],
+    output_path: Path,
+    subs: bool = True,
+    providers: tuple[str, ...] = (),
+    timeout: int | None = None,
+) -> None:
+    """Fetch known URLs for domains from public archives with gau. Output is JSON lines.
+
+    gau sends nothing to the target itself: it queries archive providers
+    (Wayback Machine, Common Crawl, AlienVault OTX, urlscan) about it. It takes
+    domains as arguments; target shape validation has already refused values
+    that could be read as options.
+    """
+    cmd = [program("gau"), "--json", "--o", str(output_path)]
+    if subs:
+        cmd.append("--subs")
+    if providers:
+        cmd += ["--providers", ",".join(providers)]
+    cmd += ["--", *domains]
+    return _run_tool(cmd, None, "gau", timeout)
 
 
 def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> None:

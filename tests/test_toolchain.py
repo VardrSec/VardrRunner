@@ -82,7 +82,7 @@ def test_shipped_manifest_is_valid_and_complete():
     """The real manifest pins every manageable tool for all five platforms."""
     toolchain._manifest_cache = None
     data = toolchain.load_manifest()
-    assert set(data["tools"]) == {"httpx", "nuclei", "subfinder", "dnsx", "naabu"}
+    assert set(data["tools"]) == {"httpx", "nuclei", "subfinder", "dnsx", "naabu", "katana", "gau"}
     for entry in data["tools"].values():
         assert set(entry["platforms"]) == {
             "windows-amd64",
