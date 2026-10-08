@@ -605,3 +605,32 @@ def test_run_vardrgate_fails_closed_when_sensitive_cleanup_fails(tmp_path):
     ):
         with pytest.raises(runner.ToolError, match="could not remove sensitive"):
             runner.run_vardrgate({}, tmp_path / "result.json")
+
+
+# ---------------------------------------------------------------------------
+# Managed nuclei keeps its templates under ~/.vardrmap/data
+# ---------------------------------------------------------------------------
+
+
+def test_nuclei_redirects_templates_only_for_a_managed_install(tmp_path, monkeypatch):
+    from vardrrunner import config
+
+    process = _mock_tool_process()
+    managed = str(config.tools_dir() / "nuclei.exe")
+    monkeypatch.setattr(runner, "program", lambda name: managed)
+    with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
+        runner.run_nuclei(["https://example.com"], tmp_path / "out.jsonl")
+    args = mock_spawn.call_args[0][0]
+    assert args[0] == managed
+    assert "-update-template-dir" in args
+    tdir = args[args.index("-update-template-dir") + 1]
+    assert tdir == str(config.data_dir() / "nuclei-templates")
+    assert (config.data_dir() / "nuclei-templates").is_dir()  # created ahead of the run
+
+
+def test_nuclei_on_path_is_left_with_its_own_templates(tmp_path, monkeypatch):
+    process = _mock_tool_process()
+    monkeypatch.setattr(runner, "program", lambda name: "nuclei")  # bare PATH name
+    with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
+        runner.run_nuclei(["https://example.com"], tmp_path / "out.jsonl")
+    assert "-update-template-dir" not in mock_spawn.call_args[0][0]

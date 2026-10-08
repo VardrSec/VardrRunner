@@ -11,6 +11,7 @@ from vardrrunner import config, identity, redaction
 from vardrrunner.commands import auth, doctor
 from vardrrunner.commands import identity as identity_command
 from vardrrunner.commands import service as service_command
+from vardrrunner.commands import tools as tools_command
 from vardrrunner.journal import Journal
 
 console = Console()
@@ -80,6 +81,30 @@ def _ensure_identity(name: str | None, non_interactive: bool) -> None:
     )
 
 
+def _ensure_tools(install_tools: bool | None, non_interactive: bool) -> None:
+    """Offer pinned, verified tool installs; never download unasked when unattended.
+
+    A failed tool (antivirus quarantine, an unsupported platform) does not abort
+    setup: the final health check reports it with its remediation.
+    """
+    if install_tools is None:
+        install_tools = (
+            False
+            if non_interactive
+            else typer.confirm("Install pinned, verified scan tools now?", default=True)
+        )
+    if not install_tools:
+        return
+    try:
+        tools_command.install([], all_tools=True, force=False)
+    except typer.Exit as exc:
+        if exc.exit_code != 0:
+            console.print(
+                "[yellow]Some tools could not be installed; the health check below "
+                "lists them.[/yellow]"
+            )
+
+
 def _ensure_journal() -> None:
     try:
         Journal(config.journal_file())
@@ -102,8 +127,9 @@ def initialize(
     env_file: Path | None = None,
     allow_plaintext: bool = False,
     non_interactive: bool = False,
+    install_tools: bool | None = None,
 ) -> None:
-    """Configure auth, identity, durable state, optional service, and health checks."""
+    """Configure auth, identity, durable state, tools, optional service, and health checks."""
     console.print("\n[bold]VardrRunner guided setup[/bold]")
     _ensure_auth(
         api_url=api_url,
@@ -113,6 +139,7 @@ def initialize(
     )
     _ensure_identity(name, non_interactive)
     _ensure_journal()
+    _ensure_tools(install_tools, non_interactive)
 
     should_install = install_service or env_file is not None
     if not non_interactive and not should_install:

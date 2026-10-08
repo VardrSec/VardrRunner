@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
-from vardrrunner import toolchain
+from vardrrunner import config, toolchain
 
 # Allowlist maps subcommand names to their executable names.
 # Add new tools here only — never allow arbitrary executables.
@@ -62,6 +62,17 @@ def program(name: str) -> str:
         return toolchain.resolve(name, ALLOWED_TOOLS[name])
     except toolchain.ToolchainError as exc:
         raise ToolError(str(exc)) from exc
+
+
+def _is_managed_program(prog: str) -> bool:
+    """True when ``prog`` is a managed install under ~/.vardrmap/tools, not a PATH name."""
+    parent = Path(prog).parent
+    if parent == Path("."):
+        return False
+    try:
+        return parent.resolve() == config.tools_dir().resolve()
+    except OSError:
+        return False
 
 
 _PROCESS_OBSERVER: ContextVar[Callable[[int], None] | None] = ContextVar(
@@ -376,14 +387,23 @@ def run_nuclei(
         tmp.write("\n".join(targets))
         targets_file = tmp.name
 
+    prog = program("nuclei")
     cmd = [
-        program("nuclei"),
+        prog,
         "-l",
         targets_file,
         "-json-export",
         str(output_path),
         "-silent",
     ]
+    # For a managed nuclei, keep its templates under ~/.vardrmap/data so the whole
+    # install lives in one place the operator can find and delete. A PATH nuclei is
+    # left alone: it already has templates wherever the operator installed them, and
+    # redirecting would force a fresh multi-hundred-MB download.
+    if _is_managed_program(prog):
+        template_dir = config.data_dir() / "nuclei-templates"
+        template_dir.mkdir(parents=True, exist_ok=True)
+        cmd += ["-update-template-dir", str(template_dir)]
     if severity:
         cmd += ["-severity", severity]
     if templates:

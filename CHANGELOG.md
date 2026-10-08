@@ -30,6 +30,8 @@ other tool is unaffected.
   guarantees as zip: only the one expected file is read, and only if it is a regular file;
   links, hardlinks, directories, and devices are refused.
 - **Per-tool version flag** in the manifest (`version_args`), validated as bare options.
+- **`init` offers to install the pinned tools** (default yes interactively; off under `--non-interactive` unless `--install-tools` is passed). A tool that fails to install does not abort setup — the final `doctor` reports it.
+- **A managed nuclei keeps its templates under `~/.vardrmap/data/nuclei-templates`** (`-update-template-dir`), so `tools purge` removes them too. A `PATH` nuclei is left with its existing template directory.
 - **Chunked uploads for katana and gau.** VardrMap refuses imports over 2 MiB by default,
   and gau on a large domain easily exceeds that. Results are now sent in line-aligned
   pieces of at most 1.5 MB; a result that fits is sent as one file, as before. The backend
@@ -37,6 +39,7 @@ other tool is unaffected.
 
 ### Fixed
 
+- **`doctor` crashed when its output was redirected on Windows.** The status report used `✓`/`✗`/`→`/`—`, which the legacy code page used for piped or redirected output can't encode, so `vardrrunner doctor > report.txt` aborted mid-report. Output now falls back to plain ASCII (`OK`/`WARN`/`FAIL`) when the stream can't encode the symbols, and the CLI reconfigures such streams to replace unencodable characters rather than raise.
 - **Tools could hang forever on an inherited stdin.** ProjectDiscovery tools read extra
   targets from stdin whenever it isn't a terminal, so a runner started from a script,
   supervisor, or CI with a pipe on stdin could block indefinitely. Every tool, and every

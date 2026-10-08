@@ -23,8 +23,8 @@ vardrrunner init --non-interactive --name runner-a --production --install-servic
 ```
 
 `init` composes the secure setup steps in their required order: configure or reuse auth,
-create the stable runner identity, initialize the durable journal, optionally install the
-native per-user service, then run `doctor`. Setup succeeds only when the final doctor
+create the stable runner identity, initialize the durable journal, offer to install the
+pinned scan tools, optionally install the native per-user service, then run `doctor`. Setup succeeds only when the final doctor
 profile succeeds. It is safe to rerun; completed local state is reused.
 
 | Option | Purpose |
@@ -32,6 +32,7 @@ profile succeeds. It is safe to rerun; completed local state is reused.
 | `--url` / `--key` | Supply VardrMap credentials; omit `--key` interactively for a hidden prompt |
 | `--name` | Set the durable human runner label |
 | `--production` | Require the strict unattended doctor profile |
+| `--install-tools` / `--no-install-tools` | Install pinned, verified scan tools. Asked interactively (default yes); off under `--non-interactive` unless `--install-tools` is passed |
 | `--install-service` | Install the native per-user background worker |
 | `--start-service` / `--no-start-service` | Start after installation (default: start) |
 | `--env-file <path>` | Attach an existing Linux systemd credential environment file; also enables service installation |
@@ -174,7 +175,7 @@ vardrrunner doctor --production                            # strict unattended p
 
 Checks: credential source (env vs file), backend URL validity (HTTPS), config-file
 permissions, API auth, daemon PID health (running / stale), run-dir writability, free disk,
-effective resource policy, tool versions and sources, and per-pipeline readiness.
+effective resource policy, tool versions and sources, and per-pipeline readiness. Output falls back to plain ASCII when the terminal or a redirect can't encode its status symbols (Windows piped output), so a redirected report never crashes.
 **Failures** (no creds, bad URL, auth failure, unwritable run dir, critically low disk, zero
 tools, or a managed tool that **fails hash verification**) set a non-zero exit; missing
 individual tools, unverified `PATH` copies of tools VardrRunner can manage, a missing
@@ -292,6 +293,9 @@ directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
   `-A`/`-O`/`-p-`/`--script`/`-T5`) → services API.
 - `run dnsx` — DNS resolution; uploads the **resolvable** hosts as recon targets, so a later
   httpx/nuclei pass only probes hosts that exist.
+- `run nuclei` — a managed nuclei keeps its templates under `~/.vardrmap/data/nuclei-templates`,
+  so the whole install lives in one place `tools purge` can remove. A nuclei on your `PATH` is
+  left with whatever template directory it already uses.
 - `run naabu` — fast top-ports scan → open ports to the services API.
 - `run katana` — crawls each target URL (staying on its root domain) and uploads every
   endpoint found as recon, with method, status, size, and content type. Response bodies
