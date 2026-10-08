@@ -13,6 +13,8 @@ dropped response can't cause a double-claim, double-import, or duplicate event.
 """
 
 import platform
+import urllib.parse
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -41,6 +43,38 @@ def fetch_release_metadata(timeout: int = 10) -> dict:
     if not isinstance(payload, dict):
         raise ReleaseMetadataError("package registry returned a non-object response")
     return payload
+
+
+class AssetDownloadError(RuntimeError):
+    """A pinned tool release asset could not be downloaded."""
+
+
+def download_asset(url: str, dest: Path, *, max_bytes: int, timeout: int = 60) -> None:
+    """Stream a public release asset to ``dest``, refusing anything over ``max_bytes``.
+
+    Integrity is not checked here: the caller verifies the file against the hash
+    pinned in the tool manifest before trusting a single byte of it. This only
+    guarantees HTTPS and a bounded download, so a hostile or broken mirror can't
+    fill the disk.
+    """
+    if urllib.parse.urlsplit(url).scheme != "https":
+        raise AssetDownloadError("tool assets must be downloaded over HTTPS")
+    received = 0
+    try:
+        with requests.get(url, stream=True, timeout=timeout) as response:
+            response.raise_for_status()
+            if urllib.parse.urlsplit(response.url).scheme != "https":
+                raise AssetDownloadError("tool asset download was redirected off HTTPS")
+            with dest.open("wb") as fh:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    received += len(chunk)
+                    if received > max_bytes:
+                        raise AssetDownloadError(
+                            f"tool asset exceeded the {max_bytes} byte download limit"
+                        )
+                    fh.write(chunk)
+    except requests.RequestException as exc:
+        raise AssetDownloadError("tool asset download failed") from exc
 
 
 class VardrMapClient:

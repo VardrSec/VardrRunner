@@ -3,9 +3,11 @@
 ## Prerequisites
 - Python **3.10+**
 - `git`
-- (Optional, for real runs) the external tools on your `PATH`: `httpx`, `subfinder`,
-  `nuclei`, `nmap`, `dnsx`, `naabu`, and `vardrgate` (only for `vardrgate_api_test`
-  jobs). They are **not** needed to run the test suite — every subprocess call is mocked.
+- (Optional, for real runs) the external tools. `vardrrunner tools install --all` installs
+  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, and `naabu` into
+  `~/.vardrmap/tools`; `nmap` and `vardrgate` (only for `vardrgate_api_test` jobs) still
+  come from your OS or `PATH`. None are needed to run the test suite — every subprocess
+  call is mocked.
 
 ## Setup
 ```bash
@@ -26,7 +28,7 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **888 tests** at 95.24% coverage (CI floor: 95%), all hermetic: no network, no real
+- **973 tests** at 95.65% coverage (CI floor: 95%), all hermetic: no network, no real
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
@@ -71,6 +73,8 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_nmap.py` | nmap target normalization + profile + `run nmap` command |
 | `tests/test_status.py` | tool detection + status output |
 | `tests/test_doctor.py` | preflight checks, exit codes, and `--json` report |
+| `tests/test_toolchain.py` | pinned installs: manifest validation, hash mismatch, single-member extraction, hostile archives, version checks, antivirus quarantine, receipts, tamper detection, PATH fallback |
+| `tests/test_tools_commands.py` | `tools` commands, runner resolution of managed binaries, `doctor` tool checks, HTTPS-only size-capped asset download |
 
 ## Lint, format, and types
 CI enforces all of these on every push and PR to `main`; run them locally before committing:
@@ -118,6 +122,23 @@ jobs are split by privilege and all third-party actions are pinned to commit SHA
    publishes a GitHub Release with the wheel, sdist, and SBOM.
    **PyPI** is opt-in: configure a [trusted publisher](https://docs.pypi.org/trusted-publishers/)
    for this repo's `release.yml` and set the repo variable `PYPI_PUBLISH=true`.
+
+## Updating tool pins
+Tool versions and hashes live in `vardrrunner/tool_manifest.json` and change **only**
+through `scripts/pin_tools.py` and review (ADR 0014). Never hand-edit a hash.
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)            # avoids GitHub API rate limits
+python scripts/pin_tools.py --set httpx=1.13.0   # move one tool; omit --set to re-pin all
+python scripts/pin_tools.py --check              # re-download every pin; exit 1 on drift
+```
+
+Pinning downloads every platform archive, hashes it locally, and only writes a pin when
+that hash matches the tool's own published checksums file and the archive contains the
+expected binary. The `Tool pin drift` workflow runs `--check` weekly and on any PR that
+touches the manifest; a drifted hash means an upstream release changed after pinning and
+must be investigated, not re-pinned. This is the only place the project downloads real
+tool archives — the test suite never does.
 
 ## Configuration during development
 The CLI reads/writes `~/.vardrmap/config.json`. To point at a local backend:

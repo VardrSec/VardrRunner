@@ -18,6 +18,11 @@ CONFIG_DIR = Path.home() / ".vardrmap"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 RUNS_DIR = CONFIG_DIR / "runs"
 JOURNAL_FILE = CONFIG_DIR / "runner-journal.sqlite3"
+# Managed tool binaries and their install receipt, and the data those tools need
+# (nuclei templates). Kept beside the rest of the runner's state so an operator
+# can find, audit, or delete every installed tool in one place.
+TOOLS_DIR = CONFIG_DIR / "tools"
+DATA_DIR = CONFIG_DIR / "data"
 
 # Environment overrides — useful for containers, CI, and headless VPS daemons,
 # where a config file is awkward. Env always takes precedence over the file.
@@ -42,6 +47,14 @@ def config_dir() -> Path:
 
 def runs_dir() -> Path:
     return RUNS_DIR
+
+
+def tools_dir() -> Path:
+    return TOOLS_DIR
+
+
+def data_dir() -> Path:
+    return DATA_DIR
 
 
 def journal_file() -> Path:

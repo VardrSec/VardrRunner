@@ -7,6 +7,48 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.37.0] — 2026-10-08
+
+Pinned, verified tool installs in one folder. See
+[`changelog/v0.37.0.md`](changelog/v0.37.0.md) and
+[ADR 0014](docs/adr/0014-pinned-verified-tool-installs.md).
+
+### Added
+
+- **`vardrrunner tools install|list|verify|remove|purge`.** Installs exact versions of
+  httpx, nuclei, subfinder, dnsx, and naabu into `~/.vardrmap/tools`, for Windows, Linux,
+  and macOS (amd64 and arm64).
+- **Pinned manifest** (`vardrrunner/tool_manifest.json`, shipped in the package): version,
+  per-platform archive URL, and SHA-256 for every managed tool. The hash comes from the
+  package, never from the download site.
+- **Fail-closed installs.** HTTPS-only, size-capped download → SHA-256 must match the pin →
+  only the expected binary is extracted, bounded in size → it must report the pinned
+  version → moved into place in one rename → receipt written to `tools.lock.json`. Any
+  failed step installs nothing.
+- **Tamper detection.** The runner re-hashes a managed binary before its first use in each
+  process and whenever it changes on disk. One that no longer matches its receipt is never
+  executed: the job fails with the reason, and there is no fallback to a `PATH` copy.
+- **Antivirus detection.** A binary that disappears during its version check is reported as
+  likely quarantined by antivirus, with the exclusion to add if the operator trusts it.
+- **`scripts/pin_tools.py`** — the only way pins change. It downloads every platform
+  archive, hashes it locally, and requires a match with the tool's own published checksums
+  file before writing a pin; `--check` re-downloads every pin and fails on drift.
+- **`Tool pin drift` workflow** — runs `pin_tools.py --check` weekly and on PRs that touch
+  the manifest.
+
+### Changed
+
+- **Tool resolution.** Every tool command gets its executable from `runner.program()`: a
+  verified managed install when one exists, otherwise the bare name on `PATH` as before.
+  Existing setups keep working.
+- **`doctor`** reports each tool's source. A managed tool that fails verification is a
+  **failure**; an unverified `PATH` copy of a manageable tool, and naabu without
+  libpcap/Npcap, are warnings. Remediation names `vardrrunner tools install <tool>`.
+- **`status`** shows whether each tool is managed and verified, on `PATH` (unverified), or
+  missing.
+- **Missing-tool errors** from `run` now name `vardrrunner tools install <tool>` for tools
+  VardrRunner can manage.
+
 ### Documentation
 
 - **ADR index completed.** ADRs 0010–0013 (execution journal, runner identity and service
@@ -22,7 +64,6 @@ Per-version detail notes live in [`changelog/`](changelog/).
   not a silent fallback — the stale wording described exactly the behaviour ADR 0009
   removed.
 
-Documentation only; no behaviour change, so no release is cut for it.
 
 
 ## [0.36.1] — 2026-08-21

@@ -139,6 +139,44 @@ class TestIdentityCommands:
         mock.assert_called_once_with("runner-a")
 
 
+class TestToolsCommands:
+    def test_install_named_tools(self):
+        with patch("vardrrunner.commands.tools.install") as mock:
+            invoke("tools", "install", "httpx", "nuclei")
+        mock.assert_called_once_with(["httpx", "nuclei"], all_tools=False, force=False)
+
+    def test_install_all_force(self):
+        with patch("vardrrunner.commands.tools.install") as mock:
+            invoke("tools", "install", "--all", "--force")
+        mock.assert_called_once_with([], all_tools=True, force=True)
+
+    def test_list_verify(self):
+        with (
+            patch("vardrrunner.commands.tools.list_tools") as list_mock,
+            patch("vardrrunner.commands.tools.verify") as verify_mock,
+        ):
+            invoke("tools", "list")
+            invoke("tools", "verify")
+        list_mock.assert_called_once_with()
+        verify_mock.assert_called_once_with()
+
+    def test_remove(self):
+        with patch("vardrrunner.commands.tools.remove") as mock:
+            invoke("tools", "remove", "httpx")
+        mock.assert_called_once_with("httpx")
+
+    def test_purge_confirms_by_default(self):
+        with patch("vardrrunner.commands.tools.purge") as mock:
+            invoke("tools", "purge")
+        mock.assert_called_once_with(yes=False)
+
+    @pytest.mark.parametrize("flag", ["--yes", "-y"])
+    def test_purge_yes(self, flag):
+        with patch("vardrrunner.commands.tools.purge") as mock:
+            invoke("tools", "purge", flag)
+        mock.assert_called_once_with(yes=True)
+
+
 class TestServiceCommands:
     def test_install_options(self, tmp_path):
         env_file = tmp_path / "runner.env"

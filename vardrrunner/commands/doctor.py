@@ -33,8 +33,10 @@ from vardrrunner import (
     resources,
     runner,
     service,
+    toolchain,
 )
 from vardrrunner.commands import daemon
+from vardrrunner.commands import tools as tools_cmd
 from vardrrunner.journal import Journal, JournalError
 
 console = Console()
@@ -301,20 +303,47 @@ def _check_resource_policy() -> Check:
 def _check_tools() -> list[Check]:
     checks: list[Check] = []
     available = 0
-    for tool in runner.ALLOWED_TOOLS:
-        if runner.tool_available(tool):
+    for tool, binary in runner.ALLOWED_TOOLS.items():
+        st = toolchain.status(tool, binary)
+        label = f"tool: {tool}"
+        if st.source == "managed":
             available += 1
-            checks.append(
-                Check(f"tool: {tool}", Health.OK, runner.tool_version(tool) or "installed")
-            )
-        else:
+            checks.append(Check(label, Health.OK, f"{st.installed_version} (managed, verified)"))
+        elif st.source == "tampered":
+            # Never counted as available: the runner refuses to execute it.
             checks.append(
                 Check(
-                    f"tool: {tool}",
-                    Health.WARN,
-                    "not found on PATH",
-                    f"Install {tool} and ensure it is on PATH.",
+                    label,
+                    Health.FAIL,
+                    redaction.redact_text(st.detail),
+                    f"Run `vardrrunner tools install {tool} --force`.",
                 )
+            )
+        elif runner.tool_available(tool):
+            # Same availability test the runner applies before executing anything.
+            available += 1
+            version = runner.tool_version(tool) or "installed"
+            if toolchain.manageable(tool):
+                checks.append(
+                    Check(
+                        label,
+                        Health.WARN,
+                        f"{version} on PATH (unverified)",
+                        f"Run `vardrrunner tools install {tool}` for a pinned, verified build.",
+                    )
+                )
+            else:
+                checks.append(Check(label, Health.OK, version))
+        else:
+            remediation = (
+                f"Run `vardrrunner tools install {tool}`."
+                if toolchain.manageable(tool)
+                else f"Install {tool} and ensure it is on PATH."
+            )
+            checks.append(Check(label, Health.WARN, "not installed", remediation))
+        if tool == "naabu" and st.source in ("managed", "path") and not tools_cmd.pcap_available():
+            checks.append(
+                Check("tool: naabu capture library", Health.WARN, "missing", tools_cmd.pcap_hint())
             )
     if available == 0:
         checks.append(

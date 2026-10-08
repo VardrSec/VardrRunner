@@ -25,3 +25,4 @@ the way it does.
 | [0011](0011-runner-identity-and-service-management.md) | Stable runner identity and native user-service management | Accepted |
 | [0012](0012-compatibility-and-local-safety-controls.md) | Compatibility negotiation and local execution safety controls | Accepted |
 | [0013](0013-guided-setup-and-host-lifecycle.md) | Guided setup and verified host lifecycle | Accepted |
+| [0014](0014-pinned-verified-tool-installs.md) | Pinned, verified tool installs in one managed directory | Accepted |

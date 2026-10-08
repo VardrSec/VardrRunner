@@ -17,15 +17,17 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `redaction.py` — the single sanitization layer in front of every trust boundary (ADR 0008)
   - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
-  - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management
+  - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
+  - `toolchain.py` — pinned, verified tool installs into `~/.vardrmap/tools` from `tool_manifest.json`; re-hashes managed binaries before use (ADR 0014)
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
   - `compatibility.py` / `resources.py` / `updates.py` — wire negotiation, bounded local policy, and cached release checks (ADR 0012)
-  - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `updates`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (888 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+  - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `tools`, `updates`, `engagements`, `run`, `status`
+- `tests/` — pytest suite (973 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
+- `scripts/pin_tools.py` — the only way tool pins change: downloads, hashes, cross-checks upstream checksums (`--check` for drift)
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
-- `.github/workflows/` — CI (lint + tests on every push)
+- `.github/workflows/` — CI (lint + tests on every push), release, and weekly tool-pin drift check
 - `scratch/` — gitignored; throwaway experiments only
 
 ## Hard rules
@@ -47,6 +49,9 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
 - Backend URL must be HTTPS (except localhost); `config.validate_api_url` enforces this on login and every authenticated call
 - Treat all backend data as untrusted: validate job payloads, normalize targets before passing to subprocess
 - Never use `shell=True` with interpolated server data
+- **Never execute a managed tool that fails hash verification**, and never fall back to a
+  `PATH` copy when one does. Tool hashes come from `tool_manifest.json` in the package,
+  never from the download site; change them only via `scripts/pin_tools.py` (ADR 0014)
 - Every tool run bounded by a timeout; missing/failed/timed-out tool → job marked **failed** with reason — never silent skip, never hang
 
 ## Documentation rules
@@ -96,7 +101,8 @@ vardrrunner daemon start
 - `service install|status|uninstall` — native per-user background service
 - `daemon start|stop|status` — long-running background worker (poll + heartbeat)
 - `heartbeat` — send single heartbeat
-- `status` — local config, version, tool availability
+- `tools install|list|verify|remove|purge` — pinned, verified tool installs in `~/.vardrmap/tools`
+- `status` — local config, version, tool availability and source
 - `doctor` — deep preflight for unattended use; exits non-zero on failures (`--json`)
 - `update check` — cached opt-in release discovery; never installs automatically
 
