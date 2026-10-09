@@ -4,10 +4,15 @@
 - Python **3.10+**
 - `git`
 - (Optional, for real runs) the external tools. `vardrrunner tools install --all` installs
-  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, and `gau` into
+  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `gau`
+  and `ffuf` into
   `~/.vardrmap/tools`; `nmap` and `vardrgate` (only for `vardrgate_api_test` jobs) still
   come from your OS or `PATH`. None are needed to run the test suite — every subprocess
   call is mocked.
+- (Optional, for real `ffuf` runs) at least one wordlist in `~/.vardrmap/wordlists`, named
+  without the extension — `common.txt` backs `--wordlist common`. A symlink to an existing
+  list (SecLists, dirb) is fine. None ship with VardrRunner, and a job names a wordlist
+  rather than giving a path, so the file has to exist on the machine running the scan.
 
 ## Setup
 ```bash

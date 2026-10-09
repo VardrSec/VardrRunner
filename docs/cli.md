@@ -333,7 +333,7 @@ version, and moves it into place in one step. Anything that fails installs nothi
 | Tool | Managed | Notes |
 |---|---|---|
 | httpx, nuclei, subfinder, dnsx, katana | yes | |
-| gau | yes | `.tar.gz` on Linux/macOS, `.zip` on Windows; same single-file extraction |
+| gau, ffuf | yes | `.tar.gz` on Linux/macOS, `.zip` on Windows; same single-file extraction. ffuf also needs a [wordlist](#wordlists), which is not installed for you |
 | naabu | yes | port scans also need libpcap (Linux/macOS) or [Npcap](https://npcap.com) (Windows) |
 | nmap | no | install with your OS installer or package manager |
 | vardrgate | no | install from the VardrGate repository |
@@ -361,6 +361,7 @@ vardrrunner run dnsx      --engagement <id> [options]
 vardrrunner run naabu     --engagement <id> [--top-ports N] [options]
 vardrrunner run katana    --engagement <id> [--depth N] [--js-crawl] [options]
 vardrrunner run gau       --engagement <id> [--no-subs] [--providers otx,wayback]
+vardrrunner run ffuf      --engagement <id> [--wordlist common] [--rate N] [options]
 ```
 Executes the named tool, captures output into an atomically unique timestamp-prefixed run
 directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
@@ -378,7 +379,31 @@ directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
 - `run gau` — passive: asks public archives (Wayback Machine, Common Crawl, AlienVault
   OTX, urlscan) for URLs they have recorded under each wildcard scope domain, and
   uploads them as recon. Nothing is sent to the target itself.
-- katana and gau upload large results in pieces under VardrMap's 2 MiB import limit.
+- `run ffuf` — active content discovery: fuzzes each target's **site root** for hidden paths
+  and uploads the hits as recon. Targets collapse to roots first, so a recon table with
+  twenty URLs on one host fuzzes that host once, not twenty times. See
+  [Wordlists](#wordlists) — ffuf needs one, and a job names it rather than giving a path.
+- katana, gau and ffuf upload large results in pieces under VardrMap's 2 MiB import limit.
+
+#### Wordlists
+
+ffuf reads wordlists from `~/.vardrmap/wordlists`, named without the extension:
+
+```bash
+mkdir -p ~/.vardrmap/wordlists
+cp /usr/share/seclists/Discovery/Web-Content/common.txt ~/.vardrmap/wordlists/common.txt
+ln -s /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt \
+      ~/.vardrmap/wordlists/api-paths.txt        # a symlink is fine
+vardrrunner run ffuf --engagement <id> --scope --wordlist api-paths
+```
+
+`--wordlist` and a queued job's `wordlist` take a **name** (lowercase letters, digits, `-`
+and `_`), never a path. The name is resolved against this one directory on the machine
+running the scan, so a job cannot name an arbitrary file for ffuf to read and replay at a
+target; a path, a traversal, or anything else path-shaped is refused at queue time and again
+before the subprocess starts. A missing or empty wordlist fails the job with a message naming
+the file it expected. No wordlists ship with VardrRunner — their licences and sizes are the
+operator's choice.
 
 ### Choosing targets
 Every `run` command except `subfinder` and `gau` takes one target source (`subfinder` and
@@ -392,7 +417,7 @@ Every `run` command except `subfinder` and `gau` takes one target source (`subfi
 | `--targets <path>` | A targets `.txt` file, one per line |
 
 With `--from-recon`, `--limit` caps how many recon items are pulled (default 100 for
-httpx/nuclei/katana, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
+httpx/nuclei/katana/ffuf, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
 (httpx and nuclei only).
 
 All sources are treated as untrusted. Empty entries are removed and duplicates collapsed;
@@ -408,8 +433,17 @@ limited to 10 MiB. The same validation applies to backend data and pipeline hand
 | `run naabu` | `--top-ports N` (default 100) |
 | `run katana` | `--depth N` (1-10, default 3) · `--js-crawl` (also parse JavaScript for endpoints) |
 | `run gau` | `--subs/--no-subs` (default on) · `--providers` (any of `wayback,commoncrawl,otx,urlscan`; default all) |
+| `run ffuf` | `--wordlist <name>` (default `common`) · `--extensions .php,.bak` · `--match-codes 200,301,403` (default: ffuf's own) · `--rate N` (1–1000, default 50) |
 
 `--yes`/`-y` skips the confirmation prompt on any of them.
+
+**ffuf's request rate is always capped.** It is the one tool here that puts sustained load on
+a client's host, so `--rate` has a modest default and a ceiling of 1000, and there is no value
+that disables it. The rate applies per target. ffuf also always runs with auto-calibration
+(`-ac`): a host that answers every path with `200` would otherwise import thousands of
+phantom endpoints into the shared recon store. A non-zero exit on any one target fails the
+whole job rather than skipping that host, because a silent skip would report coverage the
+engagement does not actually have.
 
 ### Target classification and local deny rules
 

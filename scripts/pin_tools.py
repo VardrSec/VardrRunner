@@ -64,6 +64,12 @@ _GORELEASER = {
     "macos-amd64": ("darwin", "amd64", ".tar.gz"),
     "macos-arm64": ("darwin", "arm64", ".tar.gz"),
 }
+# ffuf: GoReleaser archives, but macOS is spelled as ProjectDiscovery spells it.
+_FFUF = {
+    **_GORELEASER,
+    "macos-amd64": ("macOS", "amd64", ".tar.gz"),
+    "macos-arm64": ("macOS", "arm64", ".tar.gz"),
+}
 
 # Binary name is the tool name for every current entry.
 SOURCES: dict[str, Source] = {
@@ -74,6 +80,7 @@ SOURCES: dict[str, Source] = {
     "naabu": Source("projectdiscovery/naabu", _PD),
     "katana": Source("projectdiscovery/katana", _PD),
     "gau": Source("lc/gau", _GORELEASER, version_args=("--version",)),
+    "ffuf": Source("ffuf/ffuf", _FFUF, version_args=("-V",)),
 }
 
 

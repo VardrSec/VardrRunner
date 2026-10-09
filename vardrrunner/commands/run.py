@@ -363,6 +363,50 @@ def run_katana(
     _finish("katana", client, engagement_id, urls, cfg, _make_run_dir())
 
 
+def run_ffuf(
+    engagement_id: str,
+    scope: bool = False,
+    from_recon: bool = False,
+    target: str | None = None,
+    targets_file: Path | None = None,
+    limit: int = 100,
+    wordlist: str = "common",
+    extensions: str | None = None,
+    match_codes: str | None = None,
+    rate: int = configs.FFUF_DEFAULT_RATE,
+    yes: bool = False,
+    max_targets: int = MAX_TARGETS_DEFAULT,
+):
+    """Fuzz site roots for hidden content with ffuf and upload the hits as recon."""
+    runner.check_tool("ffuf")
+    url, key = config.require_auth()
+    client = api.VardrMapClient(url, key)
+
+    cfg = _build_config(
+        "ffuf",
+        {
+            "wordlist": wordlist,
+            "extensions": extensions,
+            "match_codes": match_codes,
+            "rate": rate,
+            "limit": limit,
+        },
+    )
+    raw = _resolve_targets(
+        client, engagement_id, scope, from_recon, target, targets_file, None, limit
+    )
+    # Collapse recon URLs to the site roots ffuf will actually fuzz, so the
+    # confirmation prompt and the target cap both count real work.
+    roots = handlers.REGISTRY["ffuf"].normalize_handoff_targets(raw)
+    if not roots:
+        console.print("[yellow]No targets found.[/yellow]")
+        raise typer.Exit(0)
+
+    _check_target_cap(roots, max_targets)
+    _confirm(roots, "ffuf", yes)
+    _finish("ffuf", client, engagement_id, roots, cfg, _make_run_dir())
+
+
 def run_gau(
     engagement_id: str,
     subs: bool = True,

@@ -7,6 +7,42 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.43.0] — 2026-10-09
+
+ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queueable. See
+[`changelog/v0.43.0.md`](changelog/v0.43.0.md).
+
+### Added
+
+- **`vardrrunner run ffuf`** and the `ffuf` job type. Fuzzes each target's site root for hidden
+  paths and uploads the hits as recon. Targets collapse to unique roots first, so twenty recon
+  URLs on one host fuzz it once. Options: `--wordlist <name>`, `--extensions`, `--match-codes`,
+  `--rate`.
+- **Wordlists live in `~/.vardrmap/wordlists` and are named, never pathed.** A job sends a name
+  (`common`), which the runner resolves on the machine doing the scanning; a path or traversal is
+  refused at parse time and again before the subprocess starts. Were a path accepted, the backend
+  could name any readable file for ffuf to read and replay at a target. A symlink inside the
+  directory is honoured. No wordlists ship with VardrRunner.
+- `ffuf` pinned at **2.3.0** for all five platforms via `scripts/pin_tools.py`, so
+  `tools install ffuf` gets a hash-verified binary.
+
+### Changed
+
+- **ffuf always runs rate-limited and auto-calibrated.** `-rate` has a default of 50/s, a ceiling
+  of 1000 and no way to disable it — this is the one tool here that puts sustained load on a
+  client's host. `-ac` is always on, so a host answering every path with `200` cannot import
+  thousands of phantom endpoints into shared recon. A non-zero exit on any one target fails the
+  job rather than skipping that host.
+- `toolchain` accepts an uppercase `version_args` flag (ffuf's is `-V`); the check still admits
+  nothing but a bare flag.
+
+### Fixed
+
+- **`runner.base_url` no longer turns a non-web recon entry into a target.** A `mailto:` or
+  `javascript:` entry parsed as userinfo plus a host once `https://` was prefixed, and a URL
+  carrying credentials would have had them replayed at the target. Both are dropped. ffuf is the
+  first caller, so nothing shipped affected.
+
 ## [0.41.0] — 2026-10-09
 
 Every upload names its job, authorization cases can be drafted for review, and the MCP reads page

@@ -8,7 +8,9 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `api.py` — thin HTTP client (`requests.Session`); **only** thing that talks to backend
   - `config.py` — resolves credentials (env > keychain > `~/.vardrmap/config.json`); enforces HTTPS
   - `keychain.py` — OS keychain wrapper (`keyring`); degrades gracefully
-  - `configs.py` — typed, validated tool configs + `JobEnvelope`; bad payload → `ConfigError`
+  - `configs.py` — typed, validated tool configs + `JobEnvelope`; bad payload → `ConfigError`.
+    A wordlist is a **name**, never a path: the backend must not be able to name a local file
+    for ffuf to read (`runner.resolve_wordlist` confines it to `~/.vardrmap/wordlists`)
   - `targets.py` — target resolution (scope/recon/inline/file)
   - `target_safety.py` — classifies resolved targets (loopback / link-local / cloud metadata) and evaluates local deny rules; warnings never block (§16, v0.36.0)
   - `errors.py` — `FailureCategory` + `RunnerError` hierarchy; the one place a status becomes a domain meaning (ADR 0008)
@@ -95,7 +97,7 @@ vardrrunner daemon start
 - `credentials` — credential source/posture; never shows the key
 - `engagements` — list engagements (`programs` kept as a hidden alias)
 - `scope <engagement-id>` — show in/out-of-scope items
-- `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau` — run tool locally, upload results
+- `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau|ffuf` — run tool locally, upload results
 - `pipeline list|run <name>` — chain tools (`recon`, `quick`, `deep`, `ports`, `content`)
 - `import nuclei|httpx` — import existing output file
 - `jobs list|run` — inspect and execute backend job queue (one-shot)
