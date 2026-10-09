@@ -18,6 +18,7 @@ def test_registry_covers_all_tools():
         "naabu",
         "katana",
         "gau",
+        "dalfox",
         "vardrgate_api_test",
     }
     for name, handler in handlers.REGISTRY.items():

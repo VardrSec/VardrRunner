@@ -15,7 +15,10 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `policy.py` — parses the backend's advisory `warnings` array; total, never raises
   - `credentials.py` — credential posture (source, encryption at rest, permissions); never returns the key (ADR 0009)
   - `redaction.py` — the single sanitization layer in front of every trust boundary (ADR 0008)
-  - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
+  - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002).
+    **A scanner's output is a candidate.** `dalfox` uploads its report as the tool wrote it —
+    nothing here re-grades a match, renames a tier or decides what is confirmed, so the tier,
+    detection method and confidence reach VardrMap intact. Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015). `mcp` imported lazily; optional extra
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
@@ -95,7 +98,7 @@ vardrrunner daemon start
 - `credentials` — credential source/posture; never shows the key
 - `engagements` — list engagements (`programs` kept as a hidden alias)
 - `scope <engagement-id>` — show in/out-of-scope items
-- `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau` — run tool locally, upload results
+- `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau|dalfox` — run tool locally, upload results
 - `pipeline list|run <name>` — chain tools (`recon`, `quick`, `deep`, `ports`, `content`)
 - `import nuclei|httpx` — import existing output file
 - `jobs list|run` — inspect and execute backend job queue (one-shot)

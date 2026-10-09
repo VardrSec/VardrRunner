@@ -259,6 +259,34 @@ class GauConfig:
 
 
 @dataclass(frozen=True)
+class DalfoxConfig:
+    """Config for an XSS scan with dalfox.
+
+    ``worker`` caps concurrency and ``delay`` spaces requests out: dalfox sends
+    payloads at every parameter it finds, so its load is bounded rather than
+    left to the tool's defaults. Neither can be set to "unlimited".
+    """
+
+    limit: int = 100
+    status_code: int | None = None
+    worker: int = 10
+    delay: int = 0
+    mining: bool = True
+    timeout: int | None = None
+
+    @classmethod
+    def from_dict(cls, cfg: dict) -> "DalfoxConfig":
+        return cls(
+            limit=_req_int(cfg, "limit", 100, minimum=1),
+            status_code=_opt_int(cfg, "status_code"),
+            worker=_req_int(cfg, "worker", 10, minimum=1, maximum=100),
+            delay=_req_int(cfg, "delay", 0, minimum=0, maximum=10_000),
+            mining=_opt_bool(cfg, "mining", True),
+            timeout=_opt_int(cfg, "timeout", minimum=1),
+        )
+
+
+@dataclass(frozen=True)
 class VardrGateConfig:
     """Config for a VardrGate API authorization test job.
 

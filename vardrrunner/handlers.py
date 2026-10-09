@@ -672,6 +672,91 @@ class GauHandler(ToolHandler[configs.GauConfig]):
         return _extract_jsonl_field(output, "url")
 
 
+class DalfoxHandler(ToolHandler[configs.DalfoxConfig]):
+    """XSS scanning with dalfox, uploading candidates for a human to verify.
+
+    The report is uploaded as dalfox wrote it, bar the one thing that must not
+    travel: nothing here re-grades a match, renames a tier or decides what is
+    confirmed. VardrMap's importer reads dalfox's own field names, and the
+    verification signal (tier, detection method, confidence) is preserved end to
+    end so the operator triages on what the scanner actually said.
+    """
+
+    tool = "dalfox"
+
+    def parse_config(self, cfg: dict) -> configs.DalfoxConfig:
+        return configs.DalfoxConfig.from_dict(cfg)
+
+    def resolve_targets(
+        self,
+        client: api.VardrMapClient,
+        engagement_id: str,
+        target_source: str,
+        config: configs.DalfoxConfig,
+    ) -> list[str]:
+        # dalfox needs URLs with parameters to fuzz, so recon URLs are the useful
+        # source; scope entries work when they are concrete URLs.
+        raw = _resolve_standard(client, engagement_id, target_source, config)
+        return list(dict.fromkeys(t.strip() for t in raw if t.strip()))
+
+    def running_label(self, targets: list[str], config: configs.DalfoxConfig) -> str:
+        mining = "" if config.mining else ", no mining"
+        return (
+            f"dalfox XSS scan ({config.worker} workers/target, {config.delay}ms delay"
+            f"{mining}) over {len(targets)} URL(s)"
+        )
+
+    def execute(
+        self, targets: list[str], run_dir: Path, config: configs.DalfoxConfig
+    ) -> Path | None:
+        output = run_dir / "dalfox.json"
+        runner.run_dalfox(
+            targets,
+            output,
+            worker=config.worker,
+            delay=config.delay,
+            mining=config.mining,
+            timeout=config.timeout,
+        )
+        # An absent report means the outcome is unknown, which is not the same as
+        # "no XSS found" — the same distinction the other handlers draw.
+        if not output.exists():
+            raise runner.ToolError(
+                "dalfox left no report, so the run's outcome is unknown. The job fails "
+                "rather than report no findings."
+            )
+        return output
+
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        result = client.import_file(
+            engagement_id, "dalfox", str(output), **({"job_id": job_id} if job_id else {})
+        )
+        record = result.get("import_record", {})
+        count = record.get("imported_count", "?")
+        # The backend dedupes dalfox, so the interesting number is what is new.
+        # Say "candidate" rather than "finding": nothing here has been verified.
+        incomplete = _dalfox_incomplete(output)
+        suffix = " (dalfox reported the scan incomplete)" if incomplete else ""
+        return f"imported {count} new XSS candidate(s){suffix}"
+
+
+def _dalfox_incomplete(output: Path) -> bool:
+    """Whether dalfox flagged its own scan as incomplete, from the report's meta.
+
+    Worth surfacing in the job summary: an incomplete scan that found nothing is
+    not evidence that there is nothing to find, and the operator reading the job
+    log is the person who needs to know that.
+    """
+    try:
+        report = json.loads(output.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return False
+    meta = report.get("meta") if isinstance(report, dict) else None
+    return bool(meta.get("incomplete")) if isinstance(meta, dict) else False
+
+
 class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
     """Run a VardrGate API authorization test job and upload its result.
 
@@ -739,6 +824,7 @@ REGISTRY: dict[str, ToolHandler[Any]] = {
         NaabuHandler(),
         KatanaHandler(),
         GauHandler(),
+        DalfoxHandler(),
         VardrGateHandler(),
     )
 }

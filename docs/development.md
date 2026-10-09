@@ -4,7 +4,8 @@
 - Python **3.10+**
 - `git`
 - (Optional, for real runs) the external tools. `vardrrunner tools install --all` installs
-  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, and `gau` into
+  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `gau`
+  and `dalfox` into
   `~/.vardrmap/tools`; `nmap` and `vardrgate` (only for `vardrgate_api_test` jobs) still
   come from your OS or `PATH`. None are needed to run the test suite — every subprocess
   call is mocked.

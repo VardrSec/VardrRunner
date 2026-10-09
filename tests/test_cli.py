@@ -409,6 +409,64 @@ class TestRunCommands:
             max_targets=run_cmd.MAX_TARGETS_DEFAULT,
         )
 
+    def test_run_dalfox_defaults(self):
+        with patch("vardrrunner.commands.run.run_dalfox") as mock:
+            invoke("run", "dalfox", "--engagement", "p1", "--from-recon")
+        mock.assert_called_once_with(
+            engagement_id="p1",
+            scope=False,
+            from_recon=True,
+            target=None,
+            targets_file=None,
+            limit=100,
+            worker=10,
+            delay=0,
+            mining=True,
+            yes=False,
+            max_targets=run_cmd.MAX_TARGETS_DEFAULT,
+        )
+
+    def test_run_dalfox_options(self):
+        with patch("vardrrunner.commands.run.run_dalfox") as mock:
+            invoke(
+                "run",
+                "dalfox",
+                "-p",
+                "p1",
+                "--target",
+                "https://a.test/?q=1",
+                "--worker",
+                "5",
+                "--delay",
+                "250",
+                "--no-mining",
+                "-y",
+            )
+        mock.assert_called_once_with(
+            engagement_id="p1",
+            scope=False,
+            from_recon=False,
+            target="https://a.test/?q=1",
+            targets_file=None,
+            limit=100,
+            worker=5,
+            delay=250,
+            mining=False,
+            yes=True,
+            max_targets=run_cmd.MAX_TARGETS_DEFAULT,
+        )
+
+    @pytest.mark.parametrize(
+        "flag,value",
+        [("--worker", "0"), ("--worker", "101"), ("--delay", "-1"), ("--delay", "10001")],
+    )
+    def test_run_dalfox_rejects_out_of_range_load_controls(self, flag, value):
+        """These bound the traffic a job puts on a client's host."""
+        with patch("vardrrunner.commands.run.run_dalfox") as mock:
+            result = invoke("run", "dalfox", "-p", "p1", "--scope", flag, value)
+        assert result.exit_code != 0
+        mock.assert_not_called()
+
     def test_run_gau_defaults(self):
         with patch("vardrrunner.commands.run.run_gau") as mock:
             invoke("run", "gau", "--engagement", "p1")

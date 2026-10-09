@@ -7,6 +7,40 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.46.0] — 2026-10-09
+
+dalfox XSS scanning. **Pairs with VardrMap v0.41.0**, which adds the job type and importer. See
+[`changelog/v0.46.0.md`](changelog/v0.46.0.md).
+
+### Added
+
+- **`vardrrunner run dalfox`** and the `dalfox` job type. Uploads dalfox's report as the tool
+  wrote it, so its tier, detection method and confidence reach VardrMap intact — nothing here
+  re-grades a match or decides what is confirmed, and the summary says "XSS candidate(s)".
+  Options: `--worker` (1–100, per target), `--delay` (0–10000 ms, per worker),
+  `--mining/--no-mining`.
+- `dalfox` pinned at **3.2.4** for all five platforms.
+
+### Changed
+
+- **dalfox's load is bounded in two places.** `--workers` is per target and dalfox scans
+  several targets at once, so left at its defaults a job could put ~2,500 requests in flight at
+  a client's host. `--max-concurrent-targets` is pinned low and `--worker` caps the per-target
+  half, making the ceiling `worker × 5`. `--include-all`/`--include-request`/
+  `--include-response` are never passed: they attach a client's request and response bodies to
+  every finding.
+- **An absent dalfox report fails the job** rather than reporting no XSS, and a scan dalfox
+  flags as `incomplete` says so in the job summary — an incomplete scan that found nothing is
+  not evidence that there is nothing to find.
+- **The installer handles an archive that nests its binary.** An asset may record a `member`
+  (the binary's path inside the archive); extraction still copies exactly that one named entry,
+  and the path must be relative, non-climbing and end in the binary that entry installs, so it
+  cannot redirect an install. `install()` separates the archive path from the installed name.
+- **`pin_tools.py` supports per-asset checksums and a per-source asset template.** dalfox's own
+  `checksum.txt` covers only its source tarballs, so the sibling `<asset>.sha256` is used
+  instead; its format differs between Unix and Windows within one release, so the digest is
+  located by shape, requiring exactly one SHA-256 in a file that names the asset it attests.
+
 ## [0.41.0] — 2026-10-09
 
 Every upload names its job, authorization cases can be drafted for review, and the MCP reads page

@@ -334,6 +334,7 @@ version, and moves it into place in one step. Anything that fails installs nothi
 |---|---|---|
 | httpx, nuclei, subfinder, dnsx, katana | yes | |
 | gau | yes | `.tar.gz` on Linux/macOS, `.zip` on Windows; same single-file extraction |
+| dalfox | yes | Binary sits one directory inside the archive, so the manifest records its path (`member`); extraction still copies exactly that one named entry |
 | naabu | yes | port scans also need libpcap (Linux/macOS) or [Npcap](https://npcap.com) (Windows) |
 | nmap | no | install with your OS installer or package manager |
 | vardrgate | no | install from the VardrGate repository |
@@ -361,6 +362,7 @@ vardrrunner run dnsx      --engagement <id> [options]
 vardrrunner run naabu     --engagement <id> [--top-ports N] [options]
 vardrrunner run katana    --engagement <id> [--depth N] [--js-crawl] [options]
 vardrrunner run gau       --engagement <id> [--no-subs] [--providers otx,wayback]
+vardrrunner run dalfox    --engagement <id> [--worker N] [--delay MS] [--no-mining]
 ```
 Executes the named tool, captures output into an atomically unique timestamp-prefixed run
 directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
@@ -378,6 +380,11 @@ directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
 - `run gau` — passive: asks public archives (Wayback Machine, Common Crawl, AlienVault
   OTX, urlscan) for URLs they have recorded under each wildcard scope domain, and
   uploads them as recon. Nothing is sent to the target itself.
+- `run dalfox` — XSS scanning. Uploads **candidates**, not findings: the report goes up as
+  dalfox wrote it, and VardrMap stores each match as a scan item with `status: "new"`,
+  keeping dalfox's own tier (`vulnerable`/`reflected`/`ast`/`informational`), detection
+  method and confidence. Nothing in the runner re-grades a match or decides what is
+  confirmed. Give it URLs that carry parameters — recon is the useful source.
 - katana and gau upload large results in pieces under VardrMap's 2 MiB import limit.
 
 ### Choosing targets
@@ -392,7 +399,7 @@ Every `run` command except `subfinder` and `gau` takes one target source (`subfi
 | `--targets <path>` | A targets `.txt` file, one per line |
 
 With `--from-recon`, `--limit` caps how many recon items are pulled (default 100 for
-httpx/nuclei/katana, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
+httpx/nuclei/katana/dalfox, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
 (httpx and nuclei only).
 
 All sources are treated as untrusted. Empty entries are removed and duplicates collapsed;
@@ -408,8 +415,21 @@ limited to 10 MiB. The same validation applies to backend data and pipeline hand
 | `run naabu` | `--top-ports N` (default 100) |
 | `run katana` | `--depth N` (1-10, default 3) · `--js-crawl` (also parse JavaScript for endpoints) |
 | `run gau` | `--subs/--no-subs` (default on) · `--providers` (any of `wayback,commoncrawl,otx,urlscan`; default all) |
+| `run dalfox` | `--worker N` (1–100, default 10; concurrent workers **per target**) · `--delay MS` (0–10000, per worker) · `--mining/--no-mining` (default on; discover extra parameters to test) |
 
 `--yes`/`-y` skips the confirmation prompt on any of them.
+
+**dalfox's load is bounded in two places, because its concurrency multiplies.** `--workers`
+is per target and dalfox scans several targets at once, so left at its own defaults (50 and
+50) a job could put ~2,500 requests in flight at a client's host. VardrRunner pins
+`--max-concurrent-targets` low and `--worker` caps the per-target half, making the ceiling
+`worker × 5`. `--include-all`, `--include-request` and `--include-response` are never
+passed: they attach a client's request and response bodies to every finding, which is not
+something to ship to the backend as a side effect of a scan.
+
+An absent report fails the job rather than reporting no XSS — the outcome is unknown, which
+is a different result. If dalfox flags its own scan as `incomplete`, the job summary says
+so: an incomplete scan that found nothing is not evidence that there is nothing to find.
 
 ### Target classification and local deny rules
 
@@ -548,7 +568,7 @@ responsibility. They are also emitted as a `policy_warning` job event so the bac
 Terminal records them. Stop-work is the only policy condition that halts.
 
 Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`, `nmap`,
-`dnsx`, `naabu`, `katana`, `gau`) plus `vardrgate_api_test`, which runs a VardrGate API authorization
+`dnsx`, `naabu`, `katana`, `gau`, `dalfox`) plus `vardrgate_api_test`, which runs a VardrGate API authorization
 test via the local `vardrgate` binary and uploads the result to the job. See
 [ADR 0006](adr/0006-vardrgate-api-test-handler.md).
 

@@ -32,6 +32,7 @@ ALLOWED_TOOLS = {
     "naabu": "naabu",
     "katana": "katana",
     "gau": "gau",
+    "dalfox": "dalfox",
     # Job type "vardrgate_api_test" maps to the "vardrgate" binary on PATH.
     "vardrgate_api_test": "vardrgate",
 }
@@ -40,6 +41,12 @@ ALLOWED_TOOLS = {
 # daemon forever — the run is killed and the job marked failed. Override per run
 # (job config `timeout`) or globally via the VARDRRUNNER_TOOL_TIMEOUT env var.
 DEFAULT_TOOL_TIMEOUT = 1800  # 30 minutes
+
+# dalfox's `--workers` is per target and it scans several targets at once, so the
+# two multiply. Left at its defaults (50 and 50) a job could put 2,500 requests
+# in flight at a client's host. Pinning the target half low keeps the operator's
+# `worker` setting meaningful: the ceiling is `worker * this`.
+DALFOX_MAX_CONCURRENT_TARGETS = 5
 _SENSITIVE_TEMP_PREFIX = "vardrrunner-vardrgate-"
 
 
@@ -296,6 +303,7 @@ _VERSION_ARGS: dict[str, list[str]] = {
     "naabu": ["-version"],
     "katana": ["-version"],
     "gau": ["--version"],
+    "dalfox": ["--version"],
     "nmap": ["--version"],
 }
 
@@ -610,6 +618,57 @@ def run_gau(
         cmd += ["--providers", ",".join(providers)]
     cmd += ["--", *domains]
     return _run_tool(cmd, None, "gau", timeout)
+
+
+def run_dalfox(
+    targets: list[str],
+    output_path: Path,
+    worker: int = 10,
+    delay: int = 0,
+    mining: bool = True,
+    timeout: int | None = None,
+) -> None:
+    """Scan a list of URLs for XSS with dalfox. Output is its JSON report.
+
+    Load is bounded in two places, because ``--workers`` is per *target* and
+    dalfox scans several targets at once: left at its defaults (50 workers, 50
+    concurrent targets) a job could have 2,500 requests in flight at a client's
+    host. ``--max-concurrent-targets`` is therefore pinned low and the operator's
+    ``worker`` setting caps the per-target half, so the ceiling is
+    ``worker * MAX_CONCURRENT_TARGETS``. ``--delay`` (milliseconds, per worker)
+    spaces requests out further.
+
+    ``--include-all`` is deliberately never passed. It attaches the full request
+    and response to every finding, and a response body from a client's
+    application is not something to ship to the backend as a side effect of a
+    scan. The report still carries the payload and the reflected evidence.
+    """
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
+        tmp.write("\n".join(targets))
+        targets_file = tmp.name
+
+    cmd = [
+        program("dalfox"),
+        "scan",
+        "--input-type",
+        "file",
+        targets_file,
+        "--format",
+        "json",
+        "--output",
+        str(output_path),
+        "--workers",
+        str(worker),
+        "--max-concurrent-targets",
+        str(DALFOX_MAX_CONCURRENT_TARGETS),
+        "--delay",
+        str(delay),
+        "--silence",
+        "--no-color",
+    ]
+    if not mining:
+        cmd.append("--skip-mining")
+    return _run_tool(cmd, targets_file, "dalfox", timeout)
 
 
 def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> None:

@@ -363,6 +363,40 @@ def run_katana(
     _finish("katana", client, engagement_id, urls, cfg, _make_run_dir())
 
 
+def run_dalfox(
+    engagement_id: str,
+    scope: bool = False,
+    from_recon: bool = False,
+    target: str | None = None,
+    targets_file: Path | None = None,
+    limit: int = 100,
+    worker: int = 10,
+    delay: int = 0,
+    mining: bool = True,
+    yes: bool = False,
+    max_targets: int = MAX_TARGETS_DEFAULT,
+):
+    """Scan URLs for XSS with dalfox and upload the candidates to VardrMap."""
+    runner.check_tool("dalfox")
+    url, key = config.require_auth()
+    client = api.VardrMapClient(url, key)
+
+    cfg = _build_config(
+        "dalfox", {"limit": limit, "worker": worker, "delay": delay, "mining": mining}
+    )
+    raw = _resolve_targets(
+        client, engagement_id, scope, from_recon, target, targets_file, None, limit
+    )
+    urls = list(dict.fromkeys(t.strip() for t in raw if t.strip()))
+    if not urls:
+        console.print("[yellow]No targets found.[/yellow]")
+        raise typer.Exit(0)
+
+    _check_target_cap(urls, max_targets)
+    _confirm(urls, "dalfox", yes)
+    _finish("dalfox", client, engagement_id, urls, cfg, _make_run_dir())
+
+
 def run_gau(
     engagement_id: str,
     subs: bool = True,
