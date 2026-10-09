@@ -406,8 +406,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
             [
                 _target(engagement_id),
                 "Write the operator a brief covering:",
-                "- **Engagement** — type, client, status, and the authorization window if one "
-                "is set (get_engagement).\n"
+                "- **Engagement** — type, client and status (get_engagement).\n"
                 "- **Scope** — what is in and out of scope (list_scope).\n"
                 "- **Coverage** — which tools have run, when, and anything that failed "
                 "(list_jobs; get_job_events on a failure worth explaining).\n"
@@ -416,7 +415,14 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
                 "than the rows, so read one page and use its count).\n"
                 "- **Findings** — counts by severity and the ones needing attention "
                 "(list_findings).\n"
-                "- **Deliverables** — which reports exist and their state (list_reports).",
+                "- **Finding reports** — which exist and their state (list_reports). These "
+                "are the per-finding write-ups, not the engagement's client deliverables, "
+                "which this server does not expose.",
+                "Two things an operator expects in a brief are not available here, so leave "
+                "them out rather than guessing: the authorization record and its testing "
+                "window (get_engagement returns the engagement's own fields and scope, not "
+                "its authorizations), and the client deliverable and its revisions. Say they "
+                "need checking in VardrMap if they matter for what comes next.",
                 "Close with the three things you would do next, and why each is next. Keep it "
                 "under about 400 words and name ids so the operator can open them. Queue "
                 "nothing from this prompt.",
@@ -483,6 +489,10 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
                 "step would tell the operator. Run preview_job for each step so the target "
                 "count is visible before anything is queued, and prefer queue_pipeline where "
                 "stages feed each other. Then stop and let the operator choose.",
+                "preview_job reports the targets VardrMap resolves, which for some tools is "
+                "an upper bound rather than the exact set — ffuf, for one, collapses its "
+                "targets to site roots on the runner afterwards. Quote the count as the "
+                "ceiling it is, not as a promise.",
                 _WRITES,
                 _UNTRUSTED,
             ]
@@ -493,32 +503,46 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         description="Verify that a remediated finding is actually fixed, and report the evidence.",
     )
     def retest(engagement_id: str = "", finding_id: str = "") -> str:
-        """Plan and run the narrowest check that proves a fix landed."""
+        """Plan a check that a fix landed, within what this server can actually do."""
         subject = (
             f"Retest finding {finding_id.strip()}."
             if finding_id.strip()
             else (
-                "Find the findings that are due a retest — the ones recorded as remediated or "
-                "awaiting verification (list_findings) — and ask the operator which to take if "
-                "more than one qualifies."
+                "No finding was named. List the engagement's findings (list_findings), show "
+                "the operator the candidates, and ask which to retest. Do not infer which "
+                "are due one: a finding's status is new, candidate, triaged, in_progress or "
+                'closed — none of which means "remediated" — and the remediation notes and '
+                "retest history this server would need are not among the fields it can read."
             )
         )
         return "\n\n".join(
             [
                 _target(engagement_id),
                 subject,
-                "For each finding you retest:\n"
+                "Know the shape of what you can do before you plan it. A retest wants one "
+                "asset, and **this server cannot scope a job to one asset**: queue_job takes "
+                "a whole target source (scope or recon) and no target selector. So the honest "
+                "options are to queue the narrowest available job and say out loud that it is "
+                "broader than the finding, or to hand the operator the one-line local command "
+                "for the single asset — `vardrrunner run <tool> --engagement <id> --target "
+                "<asset>` — which does take one target. Recommend the second where the "
+                "difference in traffic matters to the client.",
+                "Then:\n"
                 "- Restate the original issue, its asset, and what made it a finding.\n"
-                "- Decide the narrowest check that would prove the fix landed — a retest "
-                "targets the one affected asset, not the whole engagement.\n"
-                "- preview_job it, then queue it once the operator agrees, and follow the job "
-                "with list_jobs and get_job_events until it finishes.\n"
-                "- Read the result and say plainly whether the evidence shows it fixed, still "
-                "present, or inconclusive. Inconclusive is a real answer; do not round it up "
-                "to fixed.",
-                "Report the outcome to the operator with the job id as evidence. Recording the "
-                "retest against the finding's history is done in VardrMap — this server has no "
-                "tool for it — so give the operator exactly what they need to enter.",
+                "- Name the check that would prove the fix landed, and which of the two "
+                "routes above you are proposing.\n"
+                "- If queueing: preview_job first, queue once the operator agrees, and follow "
+                "it with list_jobs and get_job_events until it finishes.\n"
+                "- Judge the outcome from what you can read: whether an equivalent finding "
+                "comes back in list_findings after the run, and what the job's own events "
+                "say. There is no tool here that reads a job's scan results directly, so say "
+                "which signal you used.\n"
+                "- Report fixed, still present, or inconclusive. Inconclusive is a real "
+                "answer — and the likeliest one when the job was broader than the finding or "
+                "the signal was indirect. Do not round it up to fixed.",
+                "Give the operator the job id as evidence. Recording the retest against the "
+                "finding's history is done in VardrMap — this server has no tool for it — so "
+                "hand them exactly what to enter.",
                 _WRITES,
                 _UNTRUSTED,
             ]

@@ -21,6 +21,14 @@ Four MCP prompts for the workflows every engagement repeats. See
   proposes an ordered plan; `retest` verifies a fix against the one affected asset and may report
   "inconclusive". Each takes an optional `engagement_id` and asks which engagement to use when it is
   blank. `severity` narrows `triage`; `finding_id` targets `retest`.
+- **Each prompt states its own limits rather than implying a capability.** `retest` says that
+  `queue_job` takes a target source and so cannot be scoped to one asset, offers
+  `vardrrunner run <tool> --target <asset>` as the route that can, names the real finding
+  statuses instead of guessing which are "remediated", and admits there is no scan-results
+  tool — so it judges by whether an equivalent finding returns and keeps "inconclusive"
+  available. `brief` omits the authorization window and the client deliverable, which this
+  server cannot read, and labels `list_reports` as the per-finding write-ups. A test requires
+  every tool a prompt names to exist, because expansion tests prove phrasing, not feasibility.
 - **Prompts are instruction text and fetch nothing when expanded.** A prompt is the most trusted
   content in the agent's context, while findings, recon URLs and scanner output come from the
   targets under test, so none of that is embedded; the agent gathers it through the read tools,

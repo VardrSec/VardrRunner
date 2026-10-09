@@ -117,6 +117,28 @@ bounds the injection risk this ADR is built around. The agent therefore gathers
 its own data through the read tools, and a test asserts that expanding any
 prompt leaves the API client untouched.
 
+**A prompt may only promise what the tools can do.** Prompt text is easy to
+write past the tool surface, and the first version of these did: `brief` asked
+for the authorization window, which `get_engagement` does not return, and called
+`list_reports` the engagement's deliverables, when it reads the per-finding
+write-ups and the client deliverable has its own API; `retest` told the agent to
+find findings "recorded as remediated or awaiting verification", which are not
+VardrMap statuses, and to target the one affected asset, which `queue_job`
+cannot express because it takes a target source rather than a target. Each read
+as a working workflow and would have had the agent improvise against a tool that
+cannot answer.
+
+The prompts now state their own limits instead: `retest` names the real statuses,
+says plainly that no job can be scoped to one asset, offers the local
+`run --target` command as the route that can, and admits there is no
+scan-results tool, so it judges by whether an equivalent finding returns.
+`brief` names the authorization record and the client deliverable as things to
+check in VardrMap rather than asking for them. Tests pin this: every
+`snake_case` tool reference in every prompt must resolve to a tool the server
+exposes, and the specific mismatches above are asserted absent. Expansion tests
+alone prove phrasing, not feasibility — that gap is what let the first version
+through.
+
 Consequences of the split: a prompt stays correct as the engagement changes,
 because nothing is baked in at expansion time, and the server needs no new
 permission — every prompt works through the tools already described above.
