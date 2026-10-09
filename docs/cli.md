@@ -445,6 +445,17 @@ phantom endpoints into the shared recon store. A non-zero exit on any one target
 whole job rather than skipping that host, because a silent skip would report coverage the
 engagement does not actually have.
 
+**"Found nothing" and "outcome unknown" are different results.** A valid ffuf report with
+an empty `results` array means no matches, and the job succeeds. A report that is absent,
+unreadable or not the shape ffuf writes fails the job — otherwise a broken run would finish
+green while recording that this host has nothing on it. A single malformed *entry* inside an
+otherwise valid report is skipped instead, since the report parsed and one bad row should
+not discard a long scan.
+
+**`--limit` counts recon rows, not hosts.** Targets collapse to roots *after* the limit is
+applied, so 100 recon URLs that all live on one host consume the default limit and fuzz a
+single root. Raise `--limit`, or use `--scope`, when a recon table is dense on few hosts.
+
 ### Target classification and local deny rules
 
 Every resolved target is classified before any tool runs. Loopback, link-local and **cloud

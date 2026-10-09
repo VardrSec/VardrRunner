@@ -93,6 +93,39 @@ def test_config_rejects(bad):
         configs.FfufConfig.from_dict(bad)
 
 
+@pytest.mark.parametrize(
+    "config, accepted",
+    [
+        # match_codes takes a bare status code, because a JSON caller naturally
+        # sends one and VardrMap accepts it.
+        ({"match_codes": 200}, True),
+        ({"match_codes": [200, 403]}, True),
+        ({"match_codes": "200,403"}, True),
+        ({"match_codes": True}, False),
+        ({"match_codes": 3.5}, False),
+        # An extension is never a number, so there is no scalar form to support.
+        ({"extensions": ".php"}, True),
+        ({"extensions": [".php"]}, True),
+        ({"extensions": 3}, False),
+        ({"extensions": True}, False),
+    ],
+)
+def test_accepted_types_match_vardrmaps_validator(config, accepted):
+    """The two validators must agree on which types pass.
+
+    VardrMap's `_validate_ffuf_config` has the same table (see its
+    `test_accepted_types_match_the_runners`). A type this accepts but the
+    backend refuses is a job the operator cannot queue; one the backend accepts
+    but this refuses clears queue-time validation and then fails on the
+    operator's machine, which is exactly what queue-time validation is for.
+    """
+    if accepted:
+        configs.FfufConfig.from_dict(config)
+    else:
+        with pytest.raises(configs.ConfigError):
+            configs.FfufConfig.from_dict(config)
+
+
 def test_rate_cannot_be_disabled():
     """There is no value that means "unlimited" — the cap is not optional."""
     assert configs.FfufConfig.from_dict({"rate": ""}).rate == configs.FFUF_DEFAULT_RATE
@@ -318,17 +351,51 @@ def test_execute_fails_when_the_wordlist_is_missing(monkeypatch, tmp_path, wordl
         json.dumps({"results": "nope"}),
         json.dumps({}),
         json.dumps([{"url": "https://a.test/x"}]),
-        json.dumps({"results": [{"no_url": 1}, "string", {"url": ""}]}),
     ],
 )
-def test_malformed_report_yields_no_records(tmp_path, report):
+def test_an_unreadable_report_fails_rather_than_reporting_no_matches(tmp_path, report):
+    """ "Nothing found" and "outcome unknown" must not look the same.
+
+    Returning [] for a broken report would finish the job green while claiming
+    this host has nothing on it — recorded as coverage the scan never achieved.
+    """
     path = tmp_path / "f.json"
     path.write_text(report)
+    with pytest.raises(runner.ToolError, match="unknown"):
+        handlers._ffuf_records(path)
+
+
+def test_a_missing_report_fails(tmp_path):
+    with pytest.raises(runner.ToolError, match="unknown"):
+        handlers._ffuf_records(tmp_path / "absent.json")
+
+
+def test_a_valid_empty_report_is_a_real_empty_result(tmp_path):
+    """This is the case that legitimately means "ffuf found no matches"."""
+    path = tmp_path / "f.json"
+    path.write_text(json.dumps({"results": []}))
     assert handlers._ffuf_records(path) == []
 
 
-def test_missing_report_yields_no_records(tmp_path):
-    assert handlers._ffuf_records(tmp_path / "absent.json") == []
+def test_one_malformed_entry_does_not_discard_the_rest(tmp_path):
+    """The report parsed, so the run is accounted for; skip the bad row only."""
+    path = tmp_path / "f.json"
+    path.write_text(
+        json.dumps(
+            {"results": [{"no_url": 1}, "string", {"url": ""}, *_report("admin")["results"]]}
+        )
+    )
+    records = handlers._ffuf_records(path)
+    assert [r["url"] for r in records] == ["https://a.test/admin"]
+
+
+def test_execute_fails_the_job_when_a_report_is_unreadable(monkeypatch, tmp_path):
+    handler = handlers.REGISTRY["ffuf"]
+    monkeypatch.setattr(runner, "resolve_wordlist", lambda name: tmp_path / "w.txt")
+    # ffuf "succeeds" but writes nothing readable — the job must not go green.
+    monkeypatch.setattr(runner, "run_ffuf", lambda target, output, wordlist, **kw: None)
+    with pytest.raises(runner.ToolError):
+        handler.execute(["https://a.test"], tmp_path, configs.FfufConfig.from_dict({}))
 
 
 def test_upload_chunks_and_reports_the_count(monkeypatch, tmp_path):

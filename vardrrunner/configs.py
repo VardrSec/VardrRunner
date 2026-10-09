@@ -291,7 +291,12 @@ def _parse_wordlist(raw) -> str:
 
 
 def _parse_extensions(raw) -> tuple[str, ...]:
-    """Normalize fuzzing extensions to a de-duplicated tuple of '.ext' tokens."""
+    """Normalize fuzzing extensions to a de-duplicated tuple of '.ext' tokens.
+
+    Strings and lists only. Unlike ``match_codes`` there is no scalar form worth
+    supporting — an extension is never a number — so VardrMap refuses the same
+    types here, and the two validators agree.
+    """
     if raw is None or raw == "":
         return ()
     if isinstance(raw, str):
@@ -308,15 +313,29 @@ def _parse_extensions(raw) -> tuple[str, ...]:
 
 
 def _parse_match_codes(raw) -> str | None:
-    """Normalize ffuf's status-code filter to a comma string, or None for its default."""
+    """Normalize ffuf's status-code filter to a comma string, or None for its default.
+
+    A bare integer is accepted — ``{"match_codes": 200}`` is the natural thing
+    for a JSON caller to send, and VardrMap accepts it. The two validators have
+    to agree on exactly which types pass, or a job clears queue-time validation
+    and then fails on the operator's machine, which is the failure mode
+    queue-time validation exists to prevent. ``bool`` is excluded: ``True`` is
+    an ``int`` in Python, and a status code of ``1`` is not what anyone meant.
+    """
     if raw is None or raw == "":
         return None
-    if isinstance(raw, str):
+    if isinstance(raw, bool):
+        raise ConfigError("'match_codes' must be a status code, string or list, got bool")
+    if isinstance(raw, int):
+        tokens = [str(raw)]
+    elif isinstance(raw, str):
         tokens = [t.strip() for t in raw.split(",") if t.strip()]
     elif isinstance(raw, (list, tuple)):
         tokens = [str(t).strip() for t in raw if str(t).strip()]
     else:
-        raise ConfigError(f"'match_codes' must be a string or list, got {type(raw).__name__}")
+        raise ConfigError(
+            f"'match_codes' must be a status code, string or list, got {type(raw).__name__}"
+        )
     if tokens == ["all"]:
         return "all"
     invalid = [t for t in tokens if not _STATUS_CODE.match(t)]

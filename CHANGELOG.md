@@ -32,7 +32,14 @@ ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queu
   of 1000 and no way to disable it — this is the one tool here that puts sustained load on a
   client's host. `-ac` is always on, so a host answering every path with `200` cannot import
   thousands of phantom endpoints into shared recon. A non-zero exit on any one target fails the
-  job rather than skipping that host.
+  job rather than skipping that host, and so does a report that cannot be read: a valid empty
+  `results` array means "no matches" and succeeds, but an absent or broken report means the
+  outcome is *unknown*, and reporting those identically would finish a broken run green while
+  recording that the host has nothing on it. One malformed entry among good ones is skipped.
+- **ffuf config types match VardrMap's validator exactly.** `match_codes` takes a bare status
+  code as well as a string or list; `extensions` takes only strings and lists. A type one side
+  accepts and the other refuses either cannot be queued or clears queue-time validation and then
+  fails locally. Both repos carry the same table so the pair cannot drift.
 - `toolchain` accepts an uppercase `version_args` flag (ffuf's is `-V`); the check still admits
   nothing but a bare flag.
 

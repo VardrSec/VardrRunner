@@ -679,14 +679,38 @@ def _ffuf_records(output: Path) -> list[dict[str, Any]]:
     ``content-type``) rather than a compact shape of our own: VardrMap's
     ``parse_ffuf`` already reads exactly these, so a run imports with no
     backend parser change.
+
+    **An unreadable report is a failure, not an empty result.** A valid report
+    whose ``results`` array is empty means ffuf found no matches; a report that
+    is absent, unreadable or not the shape ffuf writes means the outcome is
+    *unknown*. Returning ``[]`` for both would let a broken run finish as a
+    green job that silently claims this host has nothing on it — the same
+    mistake as skipping a target, and worse, because it is recorded as coverage.
+
+    A single malformed *entry* inside an otherwise valid results array is
+    skipped rather than fatal: the report parsed, so the run is accounted for,
+    and one bad row should not discard the rest of a long scan.
     """
     try:
-        report = json.loads(output.read_text(encoding="utf-8", errors="replace"))
-    except (OSError, ValueError):
-        return []
+        raw = output.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise runner.ToolError(
+            f"ffuf left no readable report at {output.name}: {exc.__class__.__name__}. "
+            "The run's outcome is unknown, so the job fails rather than report no matches."
+        ) from exc
+    try:
+        report = json.loads(raw)
+    except ValueError as exc:
+        raise runner.ToolError(
+            f"ffuf's report at {output.name} is not valid JSON, so the run's outcome is "
+            "unknown. The job fails rather than report no matches."
+        ) from exc
     results = report.get("results") if isinstance(report, dict) else None
     if not isinstance(results, list):
-        return []
+        raise runner.ToolError(
+            f"ffuf's report at {output.name} has no 'results' array, so the run's outcome "
+            "is unknown. The job fails rather than report no matches."
+        )
     records = []
     for item in results:
         if not isinstance(item, dict):
@@ -715,8 +739,9 @@ class FfufHandler(ToolHandler[configs.FfufConfig]):
 
     Unlike the other handlers this runs the tool once per target (see
     ``runner.run_ffuf`` for why), merging every report into one upload. A
-    non-zero exit on any target fails the job: quietly skipping a host would
-    report coverage the engagement does not actually have.
+    non-zero exit on any target fails the job, and so does a report that cannot
+    be read (see ``_ffuf_records``): quietly treating either as "nothing found"
+    would report coverage the engagement does not actually have.
     """
 
     tool = "ffuf"
