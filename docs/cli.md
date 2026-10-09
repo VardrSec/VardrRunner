@@ -243,8 +243,24 @@ For Claude Desktop, add to its MCP config:
 
 | Kind | Tools |
 |------|-------|
-| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_findings`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `preview_job` |
-| Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding` |
+| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_authorizations`, `list_findings`, `get_finding_activity`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `list_deliverables`, `get_deliverable_revision`, `preview_job`, `draft_test_cases` |
+| Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding`, `draft_report` |
+
+`draft_test_cases` is grouped as a read because it stores and queues nothing — it is
+VardrMap's `test-cases/preview`, which returns drafts and says so.
+
+**Two writes are withheld because they are assertions only you can make.** This is a
+different reason from the scope/delete set below, which is withheld to bound what a
+compromised agent could do:
+
+- **Saving a VardrGate test case.** Saving declares that a human reviewed the case, which is
+  the entire purpose of that step — see `test-cases save --reviewed`. The agent drafts;
+  you review and save.
+- **Creating or revising a client deliverable.** A revision is immutable and is the document
+  handed to the client. The agent reads deliverables (`list_deliverables`,
+  `get_deliverable_revision`) and can draft the per-finding write-up with `draft_report`,
+  which is always created as a `draft` — it takes no status argument, so it cannot mark
+  anything final or delivered.
 
 **Prompts (the workflows you repeat on every engagement)**
 
@@ -262,15 +278,17 @@ In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
 not a target, so this server cannot scope a job to the single asset a retest wants. The
 prompt says so and offers two honest routes: queue the narrowest available job while stating
 it is broader than the finding, or run `vardrrunner run <tool> --engagement <id> --target
-<asset>` locally, which does take one target. It judges the outcome from whether an
+<asset>` locally, which does take one target. It reads `get_finding_activity` to see whether
+a retest already happened and what it concluded, then judges the outcome from whether an
 equivalent finding returns in `list_findings` and from the job's events — there is no tool
-here that reads a job's scan results directly — and it will not infer which findings are due
-a retest, because remediation notes and retest history are not fields it can read.
+here that reads a job's scan results directly, so it names the signal it used. Recording the
+retest against the finding's history stays with you: the server reads that history but
+cannot append to it.
 
-`brief` likewise leaves out two things an operator expects and this server cannot reach: the
-authorization record and its testing window (`get_engagement` returns the engagement's own
-fields and scope, not its authorizations), and the client deliverable and its revisions.
-`list_reports` reads the **per-finding** write-ups, not those deliverables.
+`brief` reads the authorization behind the work from `list_authorizations` (not
+`get_engagement`, which returns the engagement's own fields and scope), and keeps the
+per-finding write-ups (`list_reports`) separate from the client-facing documents
+(`list_deliverables`) rather than conflating the two.
 
 A prompt is **instructions only** — expanding one makes no API call and embeds no
 engagement data. Prompt text arrives as the most trusted content in the agent's

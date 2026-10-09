@@ -111,7 +111,11 @@ vardrrunner daemon start
 - `test-cases draft|save` — draft VardrGate cases from observed operations/OpenAPI into a review file, save only with `--reviewed`
 - `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra.
   Prompts (`brief`/`triage`/`untested`/`retest`) are instruction text only — never pre-fetch
-  engagement data into one, or target-controlled strings land in the trusted prompt position
+  engagement data into one, or target-controlled strings land in the trusted prompt position.
+  A prompt may only name tools that exist; a test enforces it. **Never add a tool that saves a
+  VardrGate case or writes a client deliverable** — both are assertions only the operator can
+  make (human review; an immutable client-facing document), unlike the scope/delete set, which
+  is withheld to bound a compromised agent. Draft and read; stop where a human commits
 
 Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
 back-compat aliases.
