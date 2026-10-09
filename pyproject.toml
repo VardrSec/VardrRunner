@@ -40,6 +40,11 @@ Issues = "https://github.com/VardrSec/VardrRunner/issues"
 Security = "https://github.com/VardrSec/VardrRunner/security/policy"
 
 [project.optional-dependencies]
+# The MCP server is opt-in: `pip install vardrrunner[mcp]`. It pulls pydantic,
+# anyio, starlette and friends, which the lean core deliberately avoids.
+mcp = [
+    "mcp>=2,<3",
+]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
@@ -47,6 +52,10 @@ dev = [
     "mypy>=1.11",
     "types-requests>=2.31",
     "bandit>=1.7",
+    # The MCP server is an optional runtime feature, but CI must install it so its
+    # tests run, mypy can resolve its (lazy) `mcp` imports, and coverage counts the
+    # module. Keeping it here means no change to the CI workflow is needed.
+    "mcp>=2,<3",
 ]
 
 [project.scripts]

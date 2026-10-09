@@ -41,6 +41,10 @@ results, and heartbeats so the backend always knows which machines are online.
   raw targets, credentials, request bodies, or headers
 - **Small-team operations** — stable runner UUID/name, rotating JSON logs, strict production
   preflight, and native systemd/launchd/Windows Scheduled Task management
+- **AI agent integration (MCP)** — `vardrrunner mcp` serves the engagement to an MCP client
+  (Claude Code, Claude Desktop): the agent reads scope, findings, assets, recon and jobs, and
+  queues scans or drafts findings with your approval. No tool can edit scope or delete, so
+  target-controlled output can't steer it. Optional extra: `pip install 'vardrrunner[mcp]'`
 - **Guided verified setup** — one idempotent `init` command for interactive onboarding or
   non-interactive host provisioning, ending in a doctor acceptance gate
 - **Bounded execution** — schema/capability negotiation, target and artifact ceilings,

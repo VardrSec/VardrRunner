@@ -17,13 +17,14 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `redaction.py` — the single sanitization layer in front of every trust boundary (ADR 0008)
   - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
+  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015). `mcp` imported lazily; optional extra
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
   - `toolchain.py` — pinned, verified tool installs into `~/.vardrmap/tools` from `tool_manifest.json`; re-hashes managed binaries before use (ADR 0014)
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
   - `compatibility.py` / `resources.py` / `updates.py` — wire negotiation, bounded local policy, and cached release checks (ADR 0012)
   - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `tools`, `updates`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (1045 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite (1065 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `scripts/pin_tools.py` — the only way tool pins change: downloads, hashes, cross-checks upstream checksums (`--check` for drift)
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
@@ -106,6 +107,7 @@ vardrrunner daemon start
 - `status` — local config, version, tool availability and source
 - `doctor` — deep preflight for unattended use; exits non-zero on failures (`--json`)
 - `update check` — cached opt-in release discovery; never installs automatically
+- `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra
 
 Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
 back-compat aliases.

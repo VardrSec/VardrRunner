@@ -26,3 +26,4 @@ the way it does.
 | [0012](0012-compatibility-and-local-safety-controls.md) | Compatibility negotiation and local execution safety controls | Accepted |
 | [0013](0013-guided-setup-and-host-lifecycle.md) | Guided setup and verified host lifecycle | Accepted |
 | [0014](0014-pinned-verified-tool-installs.md) | Pinned, verified tool installs in one managed directory | Accepted |
+| [0015](0015-mcp-server.md) | MCP server for agent-driven engagements | Accepted |

@@ -7,6 +7,30 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.40.0] — 2026-10-08
+
+Optional MCP server so an AI agent can drive an engagement. See
+[`changelog/v0.40.0.md`](changelog/v0.40.0.md) and
+[ADR 0015](docs/adr/0015-mcp-server.md).
+
+### Added
+
+- **`vardrrunner mcp`** — a Model Context Protocol server over stdio that exposes a VardrMap
+  engagement to an MCP client (Claude Code, Claude Desktop), using the same `vmap_` key this
+  runner already holds. The agent's model comes from the client; this only adapts the API.
+  - **Read tools:** `list_engagements`, `get_engagement`, `list_scope`, `list_findings`,
+    `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`,
+    `list_reports`, `preview_job`. Each caps output to a sample plus the true total.
+  - **Guarded writes** (the client asks the operator to approve each): `queue_job`,
+    `queue_pipeline`, `create_finding`.
+  - **Not exposed, by design:** editing scope or authorization, stop-work, any delete, and
+    member/API-key/settings management. Withholding a scope-editing tool is the main guard
+    against prompt injection, since the agent reads target-controlled output.
+  - HTTP failures surface as readable tool errors; a 404 is reported without confirming an
+    object exists, matching the backend's non-revealing 404s.
+- **Optional `[mcp]` extra.** `pip install 'vardrrunner[mcp]'`; the lean core never imports
+  `mcp`. The command prints an install hint when the extra is absent.
+
 ## [0.39.0] — 2026-10-08
 
 Operability polish on top of katana/gau, plus a pipeline that uses them. See

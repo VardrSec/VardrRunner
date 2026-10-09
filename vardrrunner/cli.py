@@ -71,6 +71,24 @@ def _startup_cleanup() -> None:
     process_runner.cleanup_sensitive_temp_dirs()
 
 
+@app.command("mcp")
+def mcp() -> None:
+    """Run the MCP server so an AI agent (Claude Code, Claude Desktop) can drive VardrMap.
+
+    Serves over stdio. Requires the optional extra: `pip install vardrrunner[mcp]`.
+    """
+    try:
+        from vardrrunner import mcp_server
+    except ImportError as exc:  # the mcp package (and its deps) are opt-in
+        # Escape the [mcp] bracket so Rich prints it literally instead of as a tag.
+        console.print(
+            "[red]The MCP server needs the optional 'mcp' extra.[/red]\n"
+            "Install it with:  [bold]pip install 'vardrrunner\\[mcp]'[/bold]"
+        )
+        raise typer.Exit(1) from exc
+    mcp_server.run()
+
+
 @app.command("init")
 def initialize(
     api_url: str | None = typer.Option(None, "--url", help="VardrMap API base URL"),
