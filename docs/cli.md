@@ -246,6 +246,25 @@ For Claude Desktop, add to its MCP config:
 | Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_findings`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `preview_job` |
 | Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding` |
 
+**Prompts (the workflows you repeat on every engagement)**
+
+In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
+`engagement_id`, and asks you which engagement to use when you leave it blank.
+
+| Prompt | What it does |
+|--------|--------------|
+| `brief` | Where the engagement stands — scope, which tools have run, findings by severity, reports — and the three things to do next. Queues nothing. |
+| `triage` | Works through the findings inventory and judges each one: real or a bare template match, whether the severity holds, what evidence exists, and the smallest check that would confirm it. Optional `severity` narrows it. |
+| `untested` | Compares the declared scope and discovered surface against the jobs actually run, names the gaps, and proposes an ordered plan with `preview_job` target counts before anything is queued. |
+| `retest` | Verifies a fix landed: restates the issue, picks the narrowest check for the one affected asset, follows the job, and reports fixed / still present / inconclusive. Optional `finding_id`. |
+
+A prompt is **instructions only** — expanding one makes no API call and embeds no
+engagement data. Prompt text arrives as the most trusted content in the agent's
+context, and finding titles, recon URLs and scanner output all come from the targets
+under test; pasting those into a prompt would put target-controlled strings in that
+trusted position. The agent gathers what it needs with the read tools instead, where
+the result is already framed as untrusted data.
+
 **Not exposed, by design:** editing scope or authorization, stop-work, any delete, and
 member/API-key/settings management — do those in the UI. Withholding a scope-editing tool is
 the main guard against prompt injection: the agent reads target-controlled text (response

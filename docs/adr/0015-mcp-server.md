@@ -96,3 +96,33 @@ message naming the required version rather than presenting a first-page sample
 as the whole inventory. Every upload also now carries the producing `job_id`
 (ADR 0014's installer is unaffected), which VardrMap validates against the
 engagement.
+
+## Amendment (v0.42.0): prompts carry instructions, never fetched data
+
+The server now exposes four MCP prompts — `brief`, `triage`, `untested`,
+`retest` — for the workflows an operator repeats on every engagement. They are
+the slash commands a client surfaces (`/mcp__vardr__brief`), and each takes an
+optional `engagement_id`, asking the operator to choose when it is blank rather
+than guessing.
+
+**A prompt expands to instruction text and makes no API call.** The tempting
+version pre-fetches — pull the findings, paste them into the triage prompt — and
+it is the wrong shape here. Prompt text arrives as the most trusted content in
+the agent's context, whereas a tool result is already framed as untrusted data
+by the server's `instructions`. Finding titles, recon URLs and scanner output
+all originate from the targets under test, so embedding them in a prompt would
+launder target-controlled strings out of the untrusted position and into the
+trusted one — defeating, for the sake of saving one tool call, the framing that
+bounds the injection risk this ADR is built around. The agent therefore gathers
+its own data through the read tools, and a test asserts that expanding any
+prompt leaves the API client untouched.
+
+Consequences of the split: a prompt stays correct as the engagement changes,
+because nothing is baked in at expansion time, and the server needs no new
+permission — every prompt works through the tools already described above.
+`brief` is read-only by construction and says so; the three that can lead to
+work carry the same rule as the write tools, which is to preview, say what it
+intends, and let the operator approve. The prompts also state plainly where no
+tool exists: `triage` cannot edit a finding and `retest` cannot record itself
+against a finding's history, so both hand the operator what to enter in the UI
+rather than inventing a capability.
