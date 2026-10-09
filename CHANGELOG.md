@@ -7,6 +7,37 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.45.0] — 2026-10-09
+
+MCP phase 6 — versioned methodology checklists, with coverage kept out of the data. See
+[`changelog/v0.45.0.md`](changelog/v0.45.0.md).
+
+### Added
+
+- **Two methodology checklists ship in the package**: the OWASP API Security Top 10 (2023) and
+  the OWASP Web Security Testing Guide 4.2 (its twelve top-level categories).
+  `list_methodologies` and `get_methodology` serve them, and neither makes an API call — the
+  data is local, so a checklist cannot be influenced by anything a target says. Each is pinned
+  to an exact edition and each item carries its source URL, so a write-up can cite what it was
+  assessed against.
+- **A `methodology` prompt** that sorts every item into evidenced (naming job or finding ids),
+  not evidenced, or requires manual testing, and is told to report no percentage or score —
+  a methodology is not something you can be 70% through.
+
+### Deliberately not representable
+
+- **Coverage is not part of the checklist data.** The schema refuses `status`, `covered`,
+  `done` and `coverage` at load. A checklist that can hold a tick will get one as soon as a
+  scanner runs, and "assessed against the OWASP API Top 10" with ticks earned by a nuclei job
+  is a false claim in a client deliverable. Each item instead carries `evidence`: `tooling`
+  (a job type can produce evidence of a *candidate*) or `manual` (nothing in VardrMap can
+  evidence it, however many scans run). A test asserts both methodologies contain items of
+  each kind so the distinction cannot become decorative. See
+  [ADR 0015 § Amendment (v0.45.0)](docs/adr/0015-mcp-server.md).
+- Only OWASP identifiers, titles and source URLs are referenced; no OWASP prose ships. The
+  guides are CC BY-SA 4.0 and these repositories are AGPL-3.0, and each methodology carries an
+  `attribution` field naming its source and licence.
+
 ## [0.44.0] — 2026-10-09
 
 MCP phases 4/5 — the engagement reads the prompts were missing, and case/report drafting. See

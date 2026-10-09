@@ -243,7 +243,7 @@ For Claude Desktop, add to its MCP config:
 
 | Kind | Tools |
 |------|-------|
-| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_authorizations`, `list_findings`, `get_finding_activity`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `list_deliverables`, `get_deliverable_revision`, `preview_job`, `draft_test_cases` |
+| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_authorizations`, `list_findings`, `get_finding_activity`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `list_deliverables`, `get_deliverable_revision`, `list_methodologies`, `get_methodology`, `preview_job`, `draft_test_cases` |
 | Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding`, `draft_report` |
 
 `draft_test_cases` is grouped as a read because it stores and queues nothing — it is
@@ -272,6 +272,7 @@ In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
 | `brief` | Where the engagement stands — scope, which tools have run, findings by severity, reports — and the three things to do next. Queues nothing. |
 | `triage` | Works through the findings inventory and judges each one: real or a bare template match, whether the severity holds, what evidence exists, and the smallest check that would confirm it. Optional `severity` narrows it. |
 | `untested` | Compares the declared scope and discovered surface against the jobs actually run, names the gaps, and proposes an ordered plan with `preview_job` target counts before anything is queued. |
+| `methodology` | Walks a published methodology against the engagement and sorts every item into evidenced (with job or finding ids), not evidenced, or requires manual testing. Optional `methodology_id`. |
 | `retest` | Verifies a fix landed: restates the issue, proposes a check, follows the job, and reports fixed / still present / inconclusive. Optional `finding_id`. |
 
 **What `retest` can and cannot do.** `queue_job` takes a target *source* (scope or recon),
@@ -284,6 +285,31 @@ equivalent finding returns in `list_findings` and from the job's events — ther
 here that reads a job's scan results directly, so it names the signal it used. Recording the
 retest against the finding's history stays with you: the server reads that history but
 cannot append to it.
+
+**Methodology checklists.** `list_methodologies` and `get_methodology` serve two versioned
+checklists that ship inside the package — the **OWASP API Security Top 10 (2023)** and the
+**OWASP Web Security Testing Guide (4.2)**. Neither tool makes an API call; the data is
+local. Each methodology is pinned to an exact edition and each item carries its source URL,
+so a write-up can cite what it was assessed against.
+
+A checklist item is a **suggestion, never coverage**. No item carries a status, and the
+schema refuses one — `status`, `covered`, `done` and `coverage` are rejected outright at
+load time. Whether this engagement has covered an item comes only from its own jobs and
+findings. Each item instead carries `evidence`:
+
+- `tooling` — a job type here can produce evidence bearing on the item. Evidence of a
+  *candidate*: a nuclei match is not a confirmed finding.
+- `manual` — nothing in VardrMap can evidence it, however many scans run. Business logic,
+  authentication flows and session handling are in this group. Such an item may still name a
+  job type worth a look; `evidence` is the authority on what a run proves.
+
+The `methodology` prompt enforces the same line: it sorts items into evidenced (citing job
+or finding ids), not evidenced, and requires manual testing, and it is told not to report a
+percentage or a score, because a number invites reading a plan as a certification.
+
+Only identifiers, official titles and source URLs are referenced from OWASP, whose guides are
+published under CC BY-SA 4.0 and credited per methodology in an `attribution` field. The
+"what to look at" notes and job-type suggestions are this project's own.
 
 `brief` reads the authorization behind the work from `list_authorizations` (not
 `get_engagement`, which returns the engagement's own fields and scope), and keeps the

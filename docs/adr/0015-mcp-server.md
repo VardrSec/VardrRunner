@@ -97,6 +97,47 @@ as the whole inventory. Every upload also now carries the producing `job_id`
 (ADR 0014's installer is unaffected), which VardrMap validates against the
 engagement.
 
+## Amendment (v0.45.0): checklists suggest, engagements evidence
+
+Phase 6 ships two versioned methodology checklists inside the package — the
+OWASP API Security Top 10 (2023) and WSTG 4.2 — served by `list_methodologies`
+and `get_methodology`, plus a `methodology` prompt. Neither tool makes an API
+call; the data is local, which also means a checklist cannot be influenced by
+anything a target says.
+
+**Coverage is not representable in the data, deliberately.** The schema refuses
+`status`, `covered`, `done` and `coverage` at load time. The temptation is a
+tick-box per item, and it is a trap: a checklist that can hold a tick will get
+one as soon as a scanner runs, and "we assessed against the OWASP API Top 10"
+with ticks earned by a nuclei job is a false claim in a client deliverable.
+Wrong data in an engagement's record is worse than none — the same reasoning as
+ffuf's auto-calibration and its unreadable-report failure.
+
+So an item says what to look at, which job types relate, and one thing more:
+
+- `evidence: "tooling"` — a job type here can produce evidence bearing on it,
+  and evidence of a *candidate* at that.
+- `evidence: "manual"` — nothing in VardrMap can evidence it at all. Business
+  logic, authentication flows and session handling sit here, and both shipped
+  methodologies are asserted by test to contain some, so the distinction cannot
+  quietly become decorative.
+
+Whether this engagement covered an item is derived at the point of asking, from
+its own jobs and findings, cited by id. The `methodology` prompt sorts items into
+evidenced / not evidenced / requires manual testing, and is told not to report a
+percentage: a number collapses that distinction back into the claim the design
+exists to prevent.
+
+Every `suggests` entry must name a job type in the handler registry. That check
+immediately caught the checklist suggesting `ffuf` while its handler was still on
+an unmerged branch — a suggestion pointing at a tool the runner cannot run.
+
+Only identifiers, official titles and source URLs are referenced from OWASP. The
+guides are CC BY-SA 4.0 and the repositories are AGPL-3.0, so rather than reason
+about share-alike interaction, no OWASP prose is shipped: the "what to look at"
+notes are this project's own, and each methodology carries an `attribution` field
+naming the source and its licence.
+
 ## Amendment (v0.44.0): two writes are assertions, not capabilities
 
 Phases 4/5 add the reads the prompts were missing — `list_authorizations`,

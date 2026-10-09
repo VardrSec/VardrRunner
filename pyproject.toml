@@ -71,7 +71,7 @@ include = ["vardrrunner*"]
 
 # The pinned tool manifest is the installer's trust anchor; it must ship in the wheel.
 [tool.setuptools.package-data]
-vardrrunner = ["tool_manifest.json"]
+vardrrunner = ["tool_manifest.json", "methodologies.json"]
 
 [tool.ruff]
 line-length = 100
