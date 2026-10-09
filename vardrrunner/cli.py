@@ -21,6 +21,7 @@ from vardrrunner.commands import pipeline as pipeline_cmd
 from vardrrunner.commands import service as service_cmd
 from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
+from vardrrunner.commands import test_cases as test_cases_cmd
 from vardrrunner.commands import updates as updates_cmd
 
 # Characters the CLI's output uses that legacy code pages (Windows cp1252 when
@@ -765,3 +766,37 @@ def pipeline_run(
         as_json=as_json,
         max_targets=max_targets,
     )
+
+
+cases_app = typer.Typer(
+    help="Draft and save reviewed VardrGate authorization cases.", no_args_is_help=True
+)
+app.add_typer(cases_app, name="test-cases")
+
+
+@cases_app.command("draft")
+def draft_cases(
+    engagement_id: str = typer.Argument(..., help="Engagement ID"),
+    output: Path = typer.Option(..., "--output", help="New JSON file for operator review"),
+    openapi: Path | None = typer.Option(None, "--openapi", help="OpenAPI 3.x JSON file"),
+    endpoint_ids: list[str] = typer.Option(
+        [], "--endpoint", help="Observed endpoint ID; repeat to select more"
+    ),
+    base_url: str = typer.Option("", "--base-url", help="Override the API server URL"),
+    offset: int = typer.Option(0, "--offset", min=0),
+    limit: int = typer.Option(50, "--limit", min=1, max=100),
+) -> None:
+    test_cases_cmd.draft_cases(
+        engagement_id, openapi, endpoint_ids, output, base_url, offset, limit
+    )
+
+
+@cases_app.command("save")
+def save_cases(
+    engagement_id: str = typer.Argument(..., help="Engagement ID"),
+    file: Path = typer.Option(..., "--file", help="Reviewed JSON cases file"),
+    reviewed: bool = typer.Option(
+        False, "--reviewed", help="Confirm review of targets, identities and access decisions"
+    ),
+) -> None:
+    test_cases_cmd.save_cases(engagement_id, file, reviewed)

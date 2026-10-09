@@ -26,7 +26,7 @@ from typing import Any
 
 import requests
 
-from vardrrunner import __version__, api, config
+from vardrrunner import __version__, api, config, redaction
 
 # One client per process, built on first use from the same env/keychain/file
 # precedence the rest of the CLI uses. Tests replace the factory.
@@ -73,7 +73,7 @@ def _get_client() -> api.VardrMapClient:
             from mcp.server.mcpserver.exceptions import ToolError as MCPToolError
 
             raise MCPToolError(
-                f"VardrRunner is not configured: {exc}. Run `vardrrunner login vardrmap` "
+                f"VardrRunner is not configured: {redaction.redact_exception(exc)}. Run `vardrrunner login vardrmap` "
                 "or set VARDRMAP_URL and VARDRMAP_API_KEY."
             ) from exc
     return _client
@@ -109,27 +109,51 @@ def _call(fn: Callable[[], Any]) -> Any:
                 "Not found, or it belongs to another user. VardrMap returns 404 rather than "
                 "reveal another operator's objects."
             ) from exc
-        raise MCPToolError(f"VardrMap returned {status}: {detail or 'request failed'}") from exc
+        raise MCPToolError(
+            f"VardrMap returned {status}: {redaction.redact_text(detail) or 'request failed'}"
+        ) from exc
     except requests.RequestException as exc:
-        raise MCPToolError(f"Could not reach VardrMap: {exc}") from exc
+        raise MCPToolError(f"Could not reach VardrMap: {redaction.redact_exception(exc)}") from exc
 
 
 def _clamp(limit: int) -> int:
     return max(1, min(limit, MAX_LIMIT))
 
 
-def _cap(items: list[dict], limit: int, total: int | None = None) -> dict[str, Any]:
-    """Shape a list result: a bounded sample plus the true total, so the agent
-    knows there is more without being handed thousands of rows."""
+def _cap(
+    items: list[dict], limit: int, total: int | None = None, offset: int = 0
+) -> dict[str, Any]:
+    """Describe an already-paginated result without discarding the matching total."""
     limit = _clamp(limit)
     shown = items[:limit]
     real_total = total if total is not None else len(items)
+    next_offset = offset + len(shown)
     return {
         "count": real_total,
         "shown": len(shown),
         "truncated": real_total > len(shown),
+        "offset": offset,
+        "limit": limit,
+        "next_offset": next_offset if shown and next_offset < real_total else None,
         "items": shown,
     }
+
+
+def _page(
+    path: str, key: str, limit: int, offset: int, max_limit: int = MAX_LIMIT, **filters: str | None
+) -> dict[str, Any]:
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    if offset < 0:
+        raise ToolError("offset must be zero or greater")
+    limit = min(_clamp(limit), max_limit)
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    params.update({k: v.strip().lower() for k, v in filters.items() if v})
+    data = _call(lambda: _get_client().get(path, params=params))
+    # Never label a first-page sample as the true total when paired with an old backend.
+    if not isinstance(data, dict) or not isinstance(data.get("total"), int):
+        raise ToolError("This read requires VardrMap v0.39.0 or newer (paginated totals).")
+    return _cap(data.get(key, []), limit, total=data["total"], offset=offset)
 
 
 def _engagement_brief(e: dict) -> dict[str, Any]:
@@ -160,10 +184,14 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
     # ── read ────────────────────────────────────────────────────────────────
 
     @mcp.tool(annotations=read)
-    def list_engagements() -> dict[str, Any]:
+    def list_engagements(limit: int = DEFAULT_LIMIT, offset: int = 0) -> dict[str, Any]:
         """List the engagements the configured API key can see (id, name, type, status)."""
         items = _call(lambda: _get_client().engagements())
-        return _cap([_engagement_brief(e) for e in items], MAX_LIMIT)
+        if offset < 0:
+            from mcp.server.mcpserver.exceptions import ToolError
+
+            raise ToolError("offset must be zero or greater")
+        return _cap([_engagement_brief(e) for e in items[offset:]], limit, len(items), offset)
 
     @mcp.tool(annotations=read)
     def get_engagement(engagement_id: str) -> dict[str, Any]:
@@ -194,75 +222,69 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
 
     @mcp.tool(annotations=read)
     def list_findings(
-        engagement_id: str, severity: str | None = None, limit: int = DEFAULT_LIMIT
+        engagement_id: str,
+        severity: str | None = None,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
     ) -> dict[str, Any]:
-        """Findings for an engagement, newest first. Optional severity filter
-        (info/low/medium/high/critical)."""
-        data = _call(
-            lambda: _get_client().get(
-                f"/engagements/{engagement_id}/findings", params={"limit": _clamp(limit)}
-            )
+        """Page through findings, newest first. Severity filters the entire inventory.
+        Follow next_offset with the same filter until it is null."""
+        return _page(
+            f"/engagements/{engagement_id}/findings",
+            "findings",
+            limit,
+            offset,
+            max_limit=200,
+            severity=severity,
         )
-        items = data.get("findings", [])
-        if severity:
-            items = [f for f in items if str(f.get("severity", "")).lower() == severity.lower()]
-        return _cap(items, limit, total=None if severity else data.get("total"))
 
     @mcp.tool(annotations=read)
-    def list_assets(engagement_id: str, limit: int = DEFAULT_LIMIT) -> dict[str, Any]:
-        """Hosts/assets discovered for an engagement."""
-        data = _call(
-            lambda: _get_client().get(
-                f"/engagements/{engagement_id}/assets", params={"limit": _clamp(limit)}
-            )
-        )
-        return _cap(data.get("assets", []), limit, total=data.get("total"))
+    def list_assets(
+        engagement_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0
+    ) -> dict[str, Any]:
+        """Page through discovered assets; follow next_offset until null."""
+        return _page(f"/engagements/{engagement_id}/assets", "assets", limit, offset)
 
     @mcp.tool(annotations=read)
-    def list_api_endpoints(engagement_id: str, limit: int = DEFAULT_LIMIT) -> dict[str, Any]:
-        """The engagement's API surface inventory (discovered endpoints)."""
-        data = _call(
-            lambda: _get_client().get(
-                f"/engagements/{engagement_id}/api/endpoints", params={"limit": _clamp(limit)}
-            )
-        )
-        return _cap(data.get("endpoints", []), limit, total=data.get("total"))
+    def list_api_endpoints(
+        engagement_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0
+    ) -> dict[str, Any]:
+        """Page through the API operation inventory; follow next_offset until null."""
+        return _page(f"/engagements/{engagement_id}/api/endpoints", "endpoints", limit, offset)
 
     @mcp.tool(annotations=read)
     def list_recon(
-        engagement_id: str, source: str | None = None, limit: int = DEFAULT_LIMIT
+        engagement_id: str,
+        source: str | None = None,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
     ) -> dict[str, Any]:
-        """Recon items (URLs/hosts) for an engagement. Optional source filter
-        (e.g. httpx, katana, gau, ffuf)."""
-        items = _call(lambda: _get_client().recon(engagement_id, limit=_clamp(limit)))
-        if source:
-            items = [r for r in items if str(r.get("source", "")).lower() == source.lower()]
-        return _cap(items, limit)
+        """Page through recon. Source (httpx/katana/gau/ffuf) filters before pagination."""
+        return _page(f"/engagements/{engagement_id}/recon", "recon", limit, offset, source=source)
 
     @mcp.tool(annotations=read)
     def list_jobs(
-        engagement_id: str, status: str | None = None, limit: int = DEFAULT_LIMIT
+        engagement_id: str,
+        status: str | None = None,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
     ) -> dict[str, Any]:
-        """Scan jobs for an engagement. Optional status filter
-        (pending/running/done/failed)."""
-        data = _call(lambda: _get_client().get(f"/engagements/{engagement_id}/jobs"))
-        items = data.get("jobs", [])
-        if status:
-            items = [j for j in items if str(j.get("status", "")).lower() == status.lower()]
-        return _cap(items, limit)
+        """Page through jobs, newest first. Status filters pending/running/done/failed."""
+        return _page(f"/engagements/{engagement_id}/jobs", "jobs", limit, offset, status=status)
 
     @mcp.tool(annotations=read)
-    def get_job_events(job_id: str, limit: int = DEFAULT_LIMIT) -> dict[str, Any]:
-        """Lifecycle events and output lines for one scan job, to follow its progress."""
-        data = _call(lambda: _get_client().get(f"/jobs/{job_id}/events"))
-        items = data.get("events", data) if isinstance(data, dict) else data
-        return _cap(items if isinstance(items, list) else [], limit)
+    def get_job_events(job_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0) -> dict[str, Any]:
+        """Page through lifecycle events in chronological order; follow next_offset."""
+        return _page(f"/jobs/{job_id}/events", "events", limit, offset)
 
     @mcp.tool(annotations=read)
-    def list_reports(engagement_id: str, limit: int = DEFAULT_LIMIT) -> dict[str, Any]:
-        """Reports for an engagement."""
-        data = _call(lambda: _get_client().get(f"/engagements/{engagement_id}/reports"))
-        return _cap(data.get("reports", []), limit, total=data.get("total"))
+    def list_reports(
+        engagement_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0
+    ) -> dict[str, Any]:
+        """Page through finding reports; follow next_offset until null."""
+        return _page(
+            f"/engagements/{engagement_id}/reports", "reports", limit, offset, max_limit=200
+        )
 
     # ── write (operator approves each call in the MCP client) ────────────────
 
