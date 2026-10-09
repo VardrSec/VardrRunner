@@ -343,16 +343,35 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         )
 
     @mcp.tool(annotations=read)
-    def list_authorizations(engagement_id: str, limit: int = DEFAULT_LIMIT) -> dict[str, Any]:
+    def list_authorizations(
+        engagement_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0
+    ) -> dict[str, Any]:
         """The engagement's authorization records: who permitted this work, and the window.
 
         Required for pentest and red_team engagements, optional for bug bounty. An
         engagement with none, or whose window has closed, is not a reason to stop
         on your own — report it to the operator, who owns that call.
+
+        Follow next_offset until it is null, as with every other paged read. This
+        endpoint returns a bare array rather than a paginated envelope, so the page
+        is taken here; the contract the agent sees is the same.
         """
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        if offset < 0:
+            raise ToolError("offset must be zero or greater")
         items = _call(lambda: _get_client().get(f"/engagements/{engagement_id}/authorizations"))
-        rows = items if isinstance(items, list) else []
-        return _cap(rows, limit)
+        if not isinstance(items, list):
+            # "Unknown" is not "none". Reporting an unreadable response as an empty
+            # inventory invites the agent to tell the operator this engagement has
+            # no authorization on record, which for a pentest is a serious claim to
+            # get wrong in either direction.
+            raise ToolError(
+                "VardrMap returned an unexpected shape for this engagement's "
+                "authorizations, so whether any exist is unknown. Check it in VardrMap "
+                "rather than treating it as none."
+            )
+        return _cap(items[offset:], limit, len(items), offset)
 
     @mcp.tool(annotations=read)
     def list_deliverables(

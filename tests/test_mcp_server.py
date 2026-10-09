@@ -354,11 +354,33 @@ def test_list_authorizations_caps_a_bare_list():
     assert out["items"][0]["id"] == "a1"
 
 
-def test_list_authorizations_tolerates_an_unexpected_shape():
+def test_list_authorizations_pages_what_it_advertises():
+    """A next_offset the caller cannot follow is worse than no paging at all.
+
+    The last record was unreachable: the tool emitted next_offset but took no
+    offset argument.
+    """
+    fake = MagicMock()
+    fake.get.return_value = [{"id": f"a{i}"} for i in range(501)]
+    srv = _server(fake)
+    first = _call(srv, "list_authorizations", engagement_id="e1", limit=500)
+    assert (first["count"], first["shown"], first["next_offset"]) == (501, 500, 500)
+    last = _call(srv, "list_authorizations", engagement_id="e1", limit=500, offset=500)
+    assert last["items"] == [{"id": "a500"}]
+    assert last["next_offset"] is None
+
+
+def test_list_authorizations_rejects_a_negative_offset():
+    with pytest.raises(ToolError, match="offset"):
+        _call(_server(MagicMock()), "list_authorizations", engagement_id="e1", offset=-1)
+
+
+def test_list_authorizations_unknown_shape_is_not_reported_as_none():
+    """An unreadable response must not become "this engagement has no authorization"."""
     fake = MagicMock()
     fake.get.return_value = {"unexpected": True}
-    out = _call(_server(fake), "list_authorizations", engagement_id="e1")
-    assert out["count"] == 0 and out["items"] == []
+    with pytest.raises(ToolError, match="unknown"):
+        _call(_server(fake), "list_authorizations", engagement_id="e1")
 
 
 def test_list_deliverables_pages():

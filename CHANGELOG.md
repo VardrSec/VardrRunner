@@ -14,7 +14,10 @@ MCP phases 4/5 — the engagement reads the prompts were missing, and case/repor
 
 ### Added
 
-- **Four read tools**: `list_authorizations` (authorization records and testing windows),
+- **Four read tools**: `list_authorizations` (authorization records and testing windows; it
+  pages like the others, and raises rather than returning an empty inventory when the response
+  is not the shape it expects — "unknown" must not be read as "this engagement has no
+  authorization"),
   `get_finding_activity` (a finding's revisions, remediation updates and completed retests),
   `list_deliverables` and `get_deliverable_revision` (the client-facing documents and their
   immutable revisions).
