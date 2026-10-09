@@ -629,3 +629,81 @@ class TestMcpCommand:
         result = invoke("mcp")
         assert result.exit_code == 1
         assert "vardrrunner[mcp]" in result.stdout
+
+
+class TestTestCasesCommands:
+    """Wiring for `test-cases draft|save`. Asserts the arguments that reach the command, and the
+    out-of-range values for options that bound what is requested or confirm a review."""
+
+    def test_draft_defaults(self):
+        with patch("vardrrunner.commands.test_cases.draft_cases") as mock:
+            result = invoke(
+                "test-cases", "draft", "eng", "--output", "out.json", "--endpoint", "ep1"
+            )
+        assert result.exit_code == 0
+        mock.assert_called_once_with("eng", None, ["ep1"], Path("out.json"), "", 0, 50)
+
+    def test_draft_options_reach_the_command(self):
+        with patch("vardrrunner.commands.test_cases.draft_cases") as mock:
+            invoke(
+                "test-cases",
+                "draft",
+                "eng",
+                "--output",
+                "out.json",
+                "--openapi",
+                "api.json",
+                "--base-url",
+                "https://api.example.test",
+                "--offset",
+                "5",
+                "--limit",
+                "20",
+            )
+        mock.assert_called_once_with(
+            "eng", Path("api.json"), [], Path("out.json"), "https://api.example.test", 5, 20
+        )
+
+    def test_draft_endpoint_is_repeatable(self):
+        with patch("vardrrunner.commands.test_cases.draft_cases") as mock:
+            invoke(
+                "test-cases",
+                "draft",
+                "eng",
+                "--output",
+                "o.json",
+                "--endpoint",
+                "a",
+                "--endpoint",
+                "b",
+            )
+        assert mock.call_args.args[2] == ["a", "b"]
+
+    @pytest.mark.parametrize(
+        "flag, value", [("--limit", "0"), ("--limit", "101"), ("--offset", "-1")]
+    )
+    def test_draft_rejects_out_of_range_paging(self, flag, value):
+        with patch("vardrrunner.commands.test_cases.draft_cases") as mock:
+            result = invoke(
+                "test-cases", "draft", "eng", "--output", "o.json", "--endpoint", "a", flag, value
+            )
+        assert result.exit_code == 2
+        mock.assert_not_called()
+
+    def test_draft_requires_an_output_path(self):
+        with patch("vardrrunner.commands.test_cases.draft_cases") as mock:
+            result = invoke("test-cases", "draft", "eng", "--endpoint", "a")
+        assert result.exit_code == 2
+        mock.assert_not_called()
+
+    @pytest.mark.parametrize("flags, expected", [((), False), (("--reviewed",), True)])
+    def test_save_passes_the_review_confirmation_through(self, flags, expected):
+        with patch("vardrrunner.commands.test_cases.save_cases") as mock:
+            invoke("test-cases", "save", "eng", "--file", "reviewed.json", *flags)
+        mock.assert_called_once_with("eng", Path("reviewed.json"), expected)
+
+    def test_save_requires_a_file(self):
+        with patch("vardrrunner.commands.test_cases.save_cases") as mock:
+            result = invoke("test-cases", "save", "eng", "--reviewed")
+        assert result.exit_code == 2
+        mock.assert_not_called()

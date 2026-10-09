@@ -25,8 +25,9 @@ calls, all through `api.py`:
 | `GET /me` | `whoami`, and the auth check in `doctor` |
 | `GET /engagements` · `GET /engagements/{id}` | engagement list and scope lookup |
 | `GET /engagements/{id}/recon` | `--from-recon` target resolution (paginated, 500/page) |
-| `POST /engagements/{id}/imports` | httpx/nuclei/subfinder/dnsx/katana/gau result upload |
-| `POST /engagements/{id}/services` | nmap/naabu open-port upload |
+| `POST /engagements/{id}/imports` | httpx/nuclei/subfinder/dnsx/katana/gau result upload, with the producing `job_id` |
+| `POST /engagements/{id}/services` | nmap/naabu open-port upload, with the producing `job_id` |
+| `POST /engagements/{id}/test-cases/preview` · `.../reviewed` | `test-cases draft` / `save` |
 | `GET /jobs/pending` | poll the queue |
 | `POST /jobs/{id}/claim` | atomic claim |
 | `PATCH /jobs/{id}` | mark a job `done` / `failed` |
@@ -62,7 +63,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/targets.py` | Target resolution (scope/recon/inline/file → list of targets). Shared by the `run` commands and the handlers — lives here to avoid an import cycle. |
 | `vardrrunner/handlers.py` | One `ToolHandler` per job type (`parse_config`/`resolve_targets`/`execute`/`upload`) plus the `REGISTRY`. Adding a tool is a one-file change here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract — no shared code (see ADR 0006) — and resolves identity credential references (`value_env`/`value_keychain`) to real secrets locally before execution (see ADR 0007). |
 | `vardrrunner/pipelines.py` | Named recon pipelines — ordered lists of `Stage(tool, source)`. Stages reference handlers; each stage writes its discovered targets to a local handoff file, which the next stage reads directly instead of querying the backend recon store. |
-| `vardrrunner/mcp_server.py` | Optional MCP server (`vardrrunner mcp`): adapts VardrMap's API to Model Context Protocol tools so an AI agent can read an engagement and queue jobs. Read tools plus guarded writes (queue job/pipeline, draft finding); no scope/auth/delete tools. Imports `mcp` lazily; the core never depends on it (ADR 0015). |
+| `vardrrunner/mcp_server.py` | Optional MCP server (`vardrrunner mcp`): adapts VardrMap's API to Model Context Protocol tools so an AI agent can read an engagement and queue jobs. Read tools page server-side with `offset`/`next_offset` (VardrMap v0.39.0+) plus guarded writes (queue job/pipeline, draft finding); no scope/auth/delete tools. Imports `mcp` lazily; the core never depends on it (ADR 0015). |
 | `vardrrunner/runner.py` | Allowlisted process-group execution, process-tree timeouts, stdout/stderr capture, private VardrGate job files, and atomically unique run directories under `~/.vardrmap/runs`. Every command's program comes from `program()`, which asks `toolchain.py` for a verified managed path before falling back to `PATH`. |
 | `vardrrunner/toolchain.py` | Pinned, verified tool installs (ADR 0014). Loads `tool_manifest.json` (shipped in the package: version, per-platform archive URL, SHA-256), installs into `~/.vardrmap/tools` fail-closed (hash → single-member extract → version check → one rename → receipt), and re-hashes managed binaries before first use; a mismatch is never executed. |
 | `vardrrunner/commands/auth.py` | `login` / `logout` / `whoami` — prompt for and persist backend URL + API key, remove stored credentials, and report the identity behind the key. |
@@ -78,6 +79,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — continuous worker (poll + heartbeat) with PID file and graceful shutdown. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
 | `vardrrunner/commands/status.py` | `status` — local config, version, and each tool's source (managed / PATH / missing) (quick glance). |
+| `vardrrunner/commands/test_cases.py` | `test-cases draft|save` - draft VardrGate cases from observed operations or OpenAPI into a never-overwritten review file, refuse literal credentials, and save only with `--reviewed`. |
 | `vardrrunner/commands/tools.py` | `tools install|list|verify|remove|purge` — manage pinned tool installs; also naabu's capture-library check shared with `doctor`. |
 | `vardrrunner/commands/doctor.py` | `doctor` — deep preflight; runs health checks and exits non-zero on actionable failures (`--json` report). Reuses `daemon` PID helpers and `config` validation. |
 | `vardrrunner/commands/engagements.py` | `engagements` (list) and `scope` (show in/out-of-scope items) — renamed from `commands/programs.py` in v0.27.0. |

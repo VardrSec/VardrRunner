@@ -250,12 +250,43 @@ For Claude Desktop, add to its MCP config:
 member/API-key/settings management — do those in the UI. Withholding a scope-editing tool is
 the main guard against prompt injection: the agent reads target-controlled text (response
 bodies, scanner output) and must not be able to act on a planted "add this to scope"
-instruction. Read tools cap their output to a sample plus the true total, so large recon or
+instruction. Read tools return one page at a time with the true `count`, an `offset`, and a
+`next_offset` to follow until it is `null`; filters (`severity`, `source`, `status`) are applied by
+VardrMap **before** paging, so they cover the whole inventory rather than one page. This needs
+VardrMap v0.39.0 or newer; against an older backend the reads fail with a clear message instead of
+reporting a first-page sample as the total. Large recon or
 asset tables never flood the agent. A queued job that falls outside scope still returns
 warnings and still runs — staying in scope is the operator's call, exactly as elsewhere.
 
 Requires a configured key (as for any authenticated command). The command exits with an
 install hint if the `mcp` extra is missing.
+
+---
+
+## `test-cases` — draft and save reviewed authorization cases
+
+```bash
+vardrrunner test-cases draft <engagement-id> --output review.json --endpoint <id> [--endpoint <id> ...]
+vardrrunner test-cases draft <engagement-id> --output review.json --openapi api.json [--base-url https://api.example.test]
+vardrrunner test-cases save  <engagement-id> --file review.json --reviewed
+```
+
+Drafts [VardrGate](https://github.com/VardrSec/VardrGate) authorization test cases from the
+engagement's observed API operations, or from an OpenAPI 3.x JSON file, and saves them only after
+you have reviewed them. Nothing is queued: run a saved case from the job composer.
+
+- **`draft`** asks VardrMap to generate drafts and writes them to a **new** file (`--output` must not
+  exist, so a draft you are editing is never overwritten). Exactly one of `--endpoint` (repeatable)
+  or `--openapi` is required. `--offset` / `--limit` (1-100, default 50) page through large inputs;
+  the file records `total` and `next_offset`. A draft containing a literal credential value is refused
+  and no file is written; identities use `value_env` / `value_keychain` references that this runner
+  resolves locally at run time.
+- **Review the file.** Replace `{path variables}` with concrete values, set each identity's secret
+  reference, and replace every `skip` with `allow` or `deny`. Observed responses say what the API
+  *does*, not who *should* have access, so drafts never guess. Delete cases you do not want.
+- **`save`** needs `--reviewed` (your confirmation that you checked targets, identities and access
+  decisions) and posts the file to VardrMap, which validates each case again. It accepts the file
+  `draft` wrote or a bare JSON array of cases.
 
 ---
 

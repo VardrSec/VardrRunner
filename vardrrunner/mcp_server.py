@@ -72,10 +72,14 @@ def _get_client() -> api.VardrMapClient:
             # error the agent can relay, not a hidden crash.
             from mcp.server.mcpserver.exceptions import ToolError as MCPToolError
 
-            raise MCPToolError(
-                f"VardrRunner is not configured: {redaction.redact_exception(exc)}. Run `vardrrunner login vardrmap` "
-                "or set VARDRMAP_URL and VARDRMAP_API_KEY."
-            ) from exc
+            reason = redaction.redact_exception(exc)
+            # config.require_auth already says how to log in; don't repeat it.
+            hint = (
+                ""
+                if "login" in reason.lower()
+                else " Run `vardrrunner login vardrmap` or set VARDRMAP_URL and VARDRMAP_API_KEY."
+            )
+            raise MCPToolError(f"VardrRunner is not configured: {reason}.{hint}") from exc
     return _client
 
 

@@ -319,5 +319,16 @@ def test_unconfigured_client_surfaces_a_login_hint():
         raise RuntimeError("Not logged in")
 
     srv = mcp_server.build_server(client_factory=boom)
-    with pytest.raises(ToolError, match="not configured"):
+    with pytest.raises(ToolError, match="not configured") as exc:
         _call(srv, "list_engagements")
+    assert "vardrrunner login vardrmap" in str(exc.value)
+
+
+def test_unconfigured_message_does_not_repeat_a_login_hint_already_given():
+    def boom():
+        raise RuntimeError("Not logged in. Run: vardrrunner login vardrmap (or set VARDRMAP_URL)")
+
+    srv = mcp_server.build_server(client_factory=boom)
+    with pytest.raises(ToolError) as exc:
+        _call(srv, "list_engagements")
+    assert str(exc.value).lower().count("login") == 1
