@@ -28,7 +28,7 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **1065 tests** at ~95.6% coverage (CI floor: 95%), all hermetic: no network, no real
+- **1122 tests** at ~96.0% coverage (CI floor: 95%), all hermetic: no network, no real
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
@@ -74,6 +74,8 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 | `tests/test_status.py` | tool detection + status output |
 | `tests/test_doctor.py` | preflight checks, exit codes, and `--json` report |
 | `tests/test_toolchain.py` | pinned installs: manifest validation, hash mismatch, single-member extraction, hostile archives, version checks, antivirus quarantine, receipts, tamper detection, PATH fallback |
+| `tests/test_upload_provenance.py` | every tool's upload carries the producing `job_id` (files, services, and each katana/gau chunk) and sends none when there is no job |
+| `tests/test_test_cases_command.py` | `test-cases draft|save`: never overwrites the review file, refuses literal credentials, needs `--reviewed`, accepts a BOM and a bare list, forwards server refusals |
 | `tests/test_mcp_server.py` | the MCP server: tool surface and read/write hints, that no scope/auth/delete tool exists, output capping, severity/source/status filters, writes posting the right body, and 404/400/connection error mapping (skipped if the `mcp` extra is absent) |
 | `tests/test_katana_gau.py` | katana/gau configs, argv construction (incl. `--` before gau domains), katana body stripping, tar.gz installs refusing links and directories, and that every installable tool is runnable |
 | `tests/test_tools_commands.py` | `tools` commands, runner resolution of managed binaries, `doctor` tool checks, HTTPS-only size-capped asset download |

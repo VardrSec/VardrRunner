@@ -151,57 +151,74 @@ def test_get_engagement_includes_scope_and_tolerates_missing_stats():
     assert out["stats"] == {}  # swallowed, not fatal
 
 
-def test_list_findings_filters_by_severity():
+@pytest.mark.parametrize(
+    "tool,key,path,filter_name,filter_value,max_limit",
+    [
+        ("list_findings", "findings", "findings", "severity", "high", 200),
+        ("list_recon", "recon", "recon", "source", "gau", 500),
+        ("list_jobs", "jobs", "jobs", "status", "done", 500),
+        ("list_assets", "assets", "assets", None, None, 500),
+        ("list_api_endpoints", "endpoints", "api/endpoints", None, None, 500),
+        ("list_reports", "reports", "reports", None, None, 200),
+    ],
+)
+def test_pages_use_backend_filters_and_matching_total(
+    tool, key, path, filter_name, filter_value, max_limit
+):
     fake = MagicMock()
-    fake.get.return_value = {
-        "findings": [
-            {"id": "f1", "severity": "high"},
-            {"id": "f2", "severity": "low"},
-            {"id": "f3", "severity": "High"},
-        ],
-        "total": 3,
-    }
-    out = _call(_server(fake), "list_findings", engagement_id="e1", severity="high")
-    assert {f["id"] for f in out["items"]} == {"f1", "f3"}  # case-insensitive
-    assert fake.get.call_args[0][0] == "/engagements/e1/findings"
+    fake.get.return_value = {key: [{"id": "later-match"}], "total": 601}
+    args = {"engagement_id": "e1", "limit": 9999, "offset": 500}
+    if filter_name:
+        args[filter_name] = filter_value.upper()
+    out = _call(_server(fake), tool, **args)
+    params = {"limit": max_limit, "offset": 500}
+    if filter_name:
+        params[filter_name] = filter_value
+    fake.get.assert_called_once_with(f"/engagements/e1/{path}", params=params)
+    assert out["count"] == 601
+    assert out["next_offset"] == 501
+    assert out["items"] == [{"id": "later-match"}]
+    assert out["truncated"] is True
 
 
-def test_list_recon_filters_by_source():
+def test_events_have_next_page_and_last_page():
     fake = MagicMock()
-    fake.recon.return_value = [
-        {"url": "a", "source": "katana"},
-        {"url": "b", "source": "gau"},
-        {"url": "c", "source": "katana"},
-    ]
-    out = _call(_server(fake), "list_recon", engagement_id="e1", source="katana")
-    assert [r["url"] for r in out["items"]] == ["a", "c"]
+    fake.get.return_value = {"events": [{"id": "last"}], "total": 51}
+    out = _call(_server(fake), "get_job_events", job_id="j1", offset=50)
+    assert out["next_offset"] is None
+    assert out["count"] == 51
+    fake.get.assert_called_once_with("/jobs/j1/events", params={"limit": 50, "offset": 50})
 
 
-def test_list_jobs_filters_by_status():
+def test_empty_page_retains_total_without_looping():
     fake = MagicMock()
-    fake.get.return_value = {
-        "jobs": [
-            {"id": "j1", "status": "running"},
-            {"id": "j2", "status": "done"},
-        ]
-    }
-    out = _call(_server(fake), "list_jobs", engagement_id="e1", status="done")
-    assert [j["id"] for j in out["items"]] == ["j2"]
+    fake.get.return_value = {"recon": [], "total": 10}
+    out = _call(_server(fake), "list_recon", engagement_id="e1", offset=20)
+    assert out["count"] == 10 and out["shown"] == 0 and out["next_offset"] is None
 
 
-def test_results_are_capped_with_true_total():
+@pytest.mark.parametrize(
+    "tool,args", [("list_recon", {"engagement_id": "e1"}), ("list_engagements", {})]
+)
+def test_negative_offset_is_rejected(tool, args):
+    with pytest.raises(ToolError, match="offset"):
+        _call(_server(MagicMock()), tool, offset=-1, **args)
+
+
+def test_old_backend_does_not_invent_total():
     fake = MagicMock()
-    fake.get.return_value = {"assets": [{"id": i} for i in range(10)], "total": 100}
-    out = _call(_server(fake), "list_assets", engagement_id="e1", limit=3)
-    assert out["shown"] == 3 and out["count"] == 100 and out["truncated"] is True
+    fake.get.return_value = {"recon": [{"id": "one"}]}
+    with pytest.raises(ToolError, match="v0.39.0"):
+        _call(_server(fake), "list_recon", engagement_id="e1")
 
 
-def test_limit_is_clamped_to_max():
+def test_engagement_pages_are_reachable():
     fake = MagicMock()
-    fake.recon.return_value = [{"url": str(i)} for i in range(5)]
-    _call(_server(fake), "list_recon", engagement_id="e1", limit=99999)
-    # recon() is asked for at most MAX_LIMIT, never the absurd value.
-    assert fake.recon.call_args.kwargs["limit"] == mcp_server.MAX_LIMIT
+    fake.engagements.return_value = [{"id": str(i)} for i in range(60)]
+    out = _call(_server(fake), "list_engagements", offset=50)
+    assert out["items"][0]["id"] == "50"
+    assert out["count"] == 60 and out["shown"] == 10
+    assert out["next_offset"] is None
 
 
 # ── write tools ───────────────────────────────────────────────────────────────
@@ -302,5 +319,16 @@ def test_unconfigured_client_surfaces_a_login_hint():
         raise RuntimeError("Not logged in")
 
     srv = mcp_server.build_server(client_factory=boom)
-    with pytest.raises(ToolError, match="not configured"):
+    with pytest.raises(ToolError, match="not configured") as exc:
         _call(srv, "list_engagements")
+    assert "vardrrunner login vardrmap" in str(exc.value)
+
+
+def test_unconfigured_message_does_not_repeat_a_login_hint_already_given():
+    def boom():
+        raise RuntimeError("Not logged in. Run: vardrrunner login vardrmap (or set VARDRMAP_URL)")
+
+    srv = mcp_server.build_server(client_factory=boom)
+    with pytest.raises(ToolError) as exc:
+        _call(srv, "list_engagements")
+    assert str(exc.value).lower().count("login") == 1

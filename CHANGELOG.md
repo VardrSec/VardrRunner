@@ -7,6 +7,38 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.41.0] — 2026-10-09
+
+Every upload names its job, authorization cases can be drafted for review, and the MCP reads page
+correctly. **Requires VardrMap v0.39.0.** See [`changelog/v0.41.0.md`](changelog/v0.41.0.md).
+
+### Added
+
+- **`vardrrunner test-cases draft|save`.** Draft [VardrGate](https://github.com/VardrSec/VardrGate)
+  authorization cases from the engagement's observed API operations or an OpenAPI 3.x file into a
+  review file, then save them with `--reviewed`. The review file is created exclusively (an existing
+  file is never overwritten), a draft containing a literal credential is refused, and nothing is
+  queued.
+- **Every upload carries the producing job's id** (`job_id` on `POST /imports` and `POST /services`,
+  for every tool and for each katana/gau chunk), so VardrMap can record what each run observed. Direct
+  `run` commands, which have no job, send none.
+
+### Changed
+
+- **MCP reads page server-side.** `list_findings`, `list_recon`, `list_jobs`, `list_assets`,
+  `list_api_endpoints`, `list_reports`, `get_job_events` and `list_engagements` take an `offset` and
+  return `count`, `offset`, and `next_offset`. `severity`, `source` and `status` filters are applied by
+  VardrMap before paging, so they cover the whole inventory. Against an older backend a read fails
+  with a message naming the required version instead of reporting a first-page sample as the total.
+- MCP error messages from the backend and the "not configured" message pass through the redactor, and
+  the login hint is no longer printed twice.
+
+### Fixed
+
+- **MCP filters only examined the first page.** `list_findings(severity=...)` and
+  `list_recon(source=...)` filtered the page they had fetched, so matches beyond it were missed and the
+  reported total was not the filtered total.
+
 ## [0.40.0] — 2026-10-08
 
 Optional MCP server so an AI agent can drive an engagement. See

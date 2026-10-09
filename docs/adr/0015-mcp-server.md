@@ -79,3 +79,20 @@ API to MCP tools and nothing more; the agent's model is supplied by the client.
   capable, but hands an agent reading untrusted target output the ability to
   change the engagement's boundaries or destroy work. The curated surface is the
   point.
+
+## Amendment (v0.41.0): server-side filtering and paging
+
+The first version filtered each page in the MCP server after fetching it, so
+`list_findings(severity="high")` only examined the first page and could miss
+matches while reporting a total that was not the filtered total. Read tools now
+send their filters (`severity`, `source`, `status`) and an `offset` to VardrMap,
+which applies the filter before paging and returns the matching `total`. Each
+result reports `count`, `offset`, and `next_offset` (`null` on the last page) so
+the agent can follow pages without guessing.
+
+This requires VardrMap v0.39.0, which added `total` to the job and event lists
+and the `source` recon filter. Against an older backend a read fails with a
+message naming the required version rather than presenting a first-page sample
+as the whole inventory. Every upload also now carries the producing `job_id`
+(ADR 0014's installer is unaffected), which VardrMap validates against the
+engagement.

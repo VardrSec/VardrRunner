@@ -109,6 +109,7 @@ def _upload_jsonl_in_chunks(
     tool: str,
     output: Path,
     max_bytes: int | None = None,
+    job_id: str = "",
 ) -> int:
     """Upload a JSONL file in line-aligned pieces of at most ``max_bytes``; return the total.
 
@@ -122,7 +123,11 @@ def _upload_jsonl_in_chunks(
         return count if isinstance(count, int) else 0
 
     if output.stat().st_size <= max_bytes:
-        return _count(client.import_file(engagement_id, tool, str(output)))
+        return _count(
+            client.import_file(
+                engagement_id, tool, str(output), **({"job_id": job_id} if job_id else {})
+            )
+        )
 
     total = 0
     pieces: list[Path] = []
@@ -136,7 +141,11 @@ def _upload_jsonl_in_chunks(
                 piece = output.with_name(f"{output.stem}.part{len(pieces) + 1}.jsonl")
                 piece.write_bytes(b"".join(chunk))
                 pieces.append(piece)
-                total += _count(client.import_file(engagement_id, tool, str(piece)))
+                total += _count(
+                    client.import_file(
+                        engagement_id, tool, str(piece), **({"job_id": job_id} if job_id else {})
+                    )
+                )
                 chunk, size = [], 0
             if line:
                 chunk.append(line)
@@ -266,7 +275,9 @@ class HttpxHandler(ToolHandler[configs.HttpxConfig]):
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        result = client.import_file(engagement_id, "httpx", str(output))
+        result = client.import_file(
+            engagement_id, "httpx", str(output), **({"job_id": job_id} if job_id else {})
+        )
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} result(s)"
 
@@ -309,7 +320,9 @@ class NucleiHandler(ToolHandler[configs.NucleiConfig]):
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        result = client.import_file(engagement_id, "nuclei", str(output))
+        result = client.import_file(
+            engagement_id, "nuclei", str(output), **({"job_id": job_id} if job_id else {})
+        )
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} finding(s)"
 
@@ -354,7 +367,9 @@ class NmapHandler(ToolHandler[configs.NmapConfig]):
         services = runner.parse_nmap_xml(output)
         if not services:
             return "no open ports found"
-        result = client.create_services(engagement_id, services)
+        result = client.create_services(
+            engagement_id, services, **({"job_id": job_id} if job_id else {})
+        )
         created = result.get("created", 0)
         updated = result.get("updated", 0)
         return f"{created} new, {updated} updated service(s)"
@@ -399,7 +414,9 @@ class SubfinderHandler(ToolHandler[configs.SubfinderConfig]):
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        result = client.import_file(engagement_id, "httpx", str(output))
+        result = client.import_file(
+            engagement_id, "httpx", str(output), **({"job_id": job_id} if job_id else {})
+        )
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} subdomain(s) as recon targets"
 
@@ -446,7 +463,9 @@ class DnsxHandler(ToolHandler[configs.DnsxConfig]):
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        result = client.import_file(engagement_id, "httpx", str(output))
+        result = client.import_file(
+            engagement_id, "httpx", str(output), **({"job_id": job_id} if job_id else {})
+        )
         count = result.get("import_record", {}).get("imported_count", "?")
         return f"imported {count} resolvable host(s)"
 
@@ -489,7 +508,9 @@ class NaabuHandler(ToolHandler[configs.NaabuConfig]):
         services = runner.parse_naabu_json(output)
         if not services:
             return "no open ports found"
-        result = client.create_services(engagement_id, services)
+        result = client.create_services(
+            engagement_id, services, **({"job_id": job_id} if job_id else {})
+        )
         created = result.get("created", 0)
         updated = result.get("updated", 0)
         return f"{created} new, {updated} updated service(s)"
@@ -593,7 +614,7 @@ class KatanaHandler(ToolHandler[configs.KatanaConfig]):
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        count = _upload_jsonl_in_chunks(client, engagement_id, "katana", output)
+        count = _upload_jsonl_in_chunks(client, engagement_id, "katana", output, job_id=job_id)
         return f"imported {count} endpoint(s)"
 
     def extract_handoff_targets(self, output: Path) -> list[str]:
@@ -644,7 +665,7 @@ class GauHandler(ToolHandler[configs.GauConfig]):
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        count = _upload_jsonl_in_chunks(client, engagement_id, "gau", output)
+        count = _upload_jsonl_in_chunks(client, engagement_id, "gau", output, job_id=job_id)
         return f"imported {count} URL(s)"
 
     def extract_handoff_targets(self, output: Path) -> list[str]:

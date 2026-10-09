@@ -45,6 +45,9 @@ results, and heartbeats so the backend always knows which machines are online.
   (Claude Code, Claude Desktop): the agent reads scope, findings, assets, recon and jobs, and
   queues scans or drafts findings with your approval. No tool can edit scope or delete, so
   target-controlled output can't steer it. Optional extra: `pip install 'vardrrunner[mcp]'`
+- **Reviewed authorization-case authoring** — `test-cases draft` turns observed API operations or an
+  OpenAPI file into VardrGate drafts in a review file that is never overwritten; `test-cases save
+  --reviewed` stores them. Drafts never contain credentials and never guess who should have access
 - **Guided verified setup** — one idempotent `init` command for interactive onboarding or
   non-interactive host provisioning, ending in a doctor acceptance gate
 - **Bounded execution** — schema/capability negotiation, target and artifact ceilings,

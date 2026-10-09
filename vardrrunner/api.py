@@ -171,12 +171,14 @@ class VardrMapClient:
 
         return results
 
-    def import_file(self, engagement_id: str, tool_type: str, file_path: str) -> dict:
+    def import_file(
+        self, engagement_id: str, tool_type: str, file_path: str, job_id: str = ""
+    ) -> dict:
         with open(file_path, "rb") as fh:
             return self.post(
                 f"/engagements/{engagement_id}/imports",
                 files={"file": (file_path, fh, "application/json")},
-                data={"tool_type": tool_type},
+                data={"tool_type": tool_type, **({"job_id": job_id} if job_id else {})},
             )
 
     # ------------------------------------------------------------------
@@ -250,6 +252,9 @@ class VardrMapClient:
     # Services
     # ------------------------------------------------------------------
 
-    def create_services(self, engagement_id: str, services: list[dict]) -> dict:
+    def create_services(self, engagement_id: str, services: list[dict], job_id: str = "") -> dict:
         """Bulk-upsert nmap service results for an engagement."""
-        return self.post(f"/engagements/{engagement_id}/services", json={"services": services})
+        return self.post(
+            f"/engagements/{engagement_id}/services",
+            json={"services": services, **({"job_id": job_id} if job_id else {})},
+        )
