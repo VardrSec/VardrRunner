@@ -21,7 +21,7 @@ def _entry(**overrides):
         "look_at": "Where to look.",
         "source": "https://example.test/x1",
         "suggests": ["httpx"],
-        "evidence": "tooling",
+        "method": "tooling",
     }
     item.update(overrides.pop("item", {}))
     entry = {
@@ -29,6 +29,7 @@ def _entry(**overrides):
         "version": "1.0",
         "source": "https://example.test/",
         "attribution": "Example attribution.",
+        "scope": "Example scope.",
         "items": [item],
     }
     entry.update(overrides)
@@ -74,7 +75,7 @@ def test_no_shipped_item_claims_coverage():
             assert not {"status", "covered", "done", "coverage"} & set(item)
 
 
-def test_both_methodologies_have_items_nothing_here_can_evidence():
+def test_both_methodologies_mix_tooling_and_manual_methods():
     """If every item were automatable the distinction would be decorative.
 
     Business logic, authentication flows and session handling are not reachable
@@ -82,8 +83,34 @@ def test_both_methodologies_have_items_nothing_here_can_evidence():
     passed is wrong.
     """
     for key, entry in methodologies.load()["methodologies"].items():
-        kinds = {item["evidence"] for item in entry["items"]}
+        kinds = {item["method"] for item in entry["items"]}
         assert kinds == {"tooling", "manual"}, key
+
+
+def test_method_counts_are_reported_per_method():
+    rows = {row["id"]: row for row in methodologies.summaries()}
+    for key, row in rows.items():
+        assert set(row["by_method"]) == {"tooling", "manual"}, key
+        assert sum(row["by_method"].values()) == row["items"], key
+
+
+def test_no_shipped_item_uses_the_old_evidence_field():
+    """`evidence` invited reading "tested by hand" as "unevidenced"."""
+    for entry in methodologies.load()["methodologies"].values():
+        for item in entry["items"]:
+            assert "evidence" not in item
+
+
+def test_wstg_scope_defers_scenario_identifiers():
+    """4.1-4.12 are section numbers; OWASP identifies scenarios separately.
+
+    The checklist is category-level, so it must say so rather than letting a
+    reader take a category as covering `WSTG-v42-INFO-02` and its siblings.
+    """
+    scope = methodologies.get("owasp-wstg")["scope"]
+    assert "Category-level" in scope
+    assert "WSTG-v42-INFO-02" in scope
+    assert "not included yet" in scope
 
 
 def test_get_returns_one_methodology_and_rejects_an_unknown_id():
@@ -124,6 +151,7 @@ def test_malformed_documents_are_refused(data, match):
         ({"title": ""}, "missing title"),
         ({"version": ""}, "missing version"),
         ({"attribution": ""}, "missing attribution"),
+        ({"scope": ""}, "missing scope"),
         ({"source": "http://example.test/"}, "must be an HTTPS URL"),
         ({"items": []}, "lists no items"),
         ({"items": "nope"}, "lists no items"),
@@ -142,8 +170,8 @@ def test_bad_methodology_entries_are_refused(overrides, match):
         ({"title": ""}, "missing title"),
         ({"look_at": ""}, "missing look_at"),
         ({"source": "http://example.test/x"}, "must be an HTTPS URL"),
-        ({"evidence": "partial"}, "evidence must be one of"),
-        ({"evidence": None}, "evidence must be one of"),
+        ({"method": "partial"}, "method must be one of"),
+        ({"method": None}, "method must be one of"),
         ({"suggests": "httpx"}, "must be a list"),
         ({"suggests": [3]}, "must be a list"),
         ({"suggests": ["dalfox"]}, "unknown job type"),
@@ -163,8 +191,14 @@ def test_duplicate_item_ids_are_refused():
 
 
 def test_a_manual_item_may_still_suggest_where_to_look():
-    """`evidence` is the authority on what a run proves; a hint is still useful."""
-    methodologies.validate(_entry(item={"evidence": "manual", "suggests": ["nuclei"]}))
+    """nuclei can hint at broken authentication without establishing it."""
+    methodologies.validate(_entry(item={"method": "manual", "suggests": ["nuclei"]}))
+
+
+def test_the_old_evidence_field_name_is_refused():
+    """Refusing the old name stops method and evidence re-conflating."""
+    with pytest.raises(methodologies.MethodologyError, match="use 'method'"):
+        methodologies.validate(_entry(item={"evidence": "manual"}))
 
 
 def test_an_unusable_methodology_id_is_refused():

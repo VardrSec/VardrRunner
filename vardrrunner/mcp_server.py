@@ -60,10 +60,11 @@ INSTRUCTIONS = (
     "jobs or pipelines and draft findings and write-ups; the client asks the operator to "
     "approve each one. The prompts (brief, triage, untested, methodology, retest) are the "
     "common workflows; each one gathers what it needs through the read tools.\n\n"
-    "A methodology checklist is a planning aid, never a coverage claim. An item's "
-    "`evidence` field says whether any job type here could bear on it at all; whether this "
-    "engagement has covered it comes only from its own jobs and findings, cited by id. A "
-    "tool having run is not coverage, and a scanner match is a candidate, not a finding.\n\n"
+    "A methodology checklist is a planning aid, never a coverage claim. An item's `method` "
+    "field says how it is tested — by a job type, or by hand — not whether it has been. "
+    "Whether this engagement has covered it comes only from its own jobs and findings, cited "
+    "by id, and a recorded manual test counts. A tool having run is not coverage, and a "
+    "scanner match is a candidate, not a finding.\n\n"
     "Two things you can draft but not finish, because they are assertions only the operator "
     "can make: a VardrGate test case can be drafted, never saved (saving declares a human "
     "reviewed it), and a client deliverable can be read, never written (a revision is "
@@ -440,9 +441,10 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
             "count": len(rows),
             "items": rows,
             "note": (
-                "A checklist item is a suggestion, never coverage. tooling_items can be "
-                "evidenced from this engagement's jobs and findings; manual_items cannot be "
-                "evidenced by anything in VardrMap and must be tested by hand."
+                "A checklist item is a suggestion, never coverage. by_method counts how items "
+                "are tested, not whether they have been: a 'manual' item is established by "
+                "hand rather than by a job type, and recorded manual work evidences it just as "
+                "a job does. Coverage comes from this engagement's own jobs and findings."
             ),
         }
 
@@ -452,10 +454,12 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
     ) -> dict[str, Any]:
         """One methodology's items: what to look at, and which job types relate.
 
-        Each item carries `evidence`: "tooling" means a job type here can produce
-        evidence bearing on it, "manual" means nothing in VardrMap can, however
-        many scans run. No item carries a status — whether this engagement has
-        covered it comes from its own jobs and findings, never from this list.
+        Each item carries `method` — how it is tested, **not** whether it has
+        been. "tooling" means a job type here can produce evidence bearing on it;
+        "manual" means it is established by hand instead, so no number of scans
+        will cover it, though recorded manual work evidences it as well as a job
+        does. No item carries a status: whether this engagement has covered it
+        comes from its own jobs and findings, never from this list.
         """
         from mcp.server.mcpserver.exceptions import ToolError
 
@@ -474,6 +478,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
             title=entry["title"],
             version=entry["version"],
             source=entry["source"],
+            scope=entry["scope"],
             attribution=entry["attribution"],
         )
         return page
@@ -747,14 +752,20 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
                 "(list_jobs, list_findings, list_api_endpoints, list_recon, and "
                 "get_finding_activity where a finding matters). Then give the operator one "
                 "row per checklist item under exactly three headings:",
-                "- **Evidenced** — something in this engagement bears on the item. Name the "
-                "job ids or finding ids. No ids means it does not belong here.\n"
-                "- **Not evidenced** — the item could be evidenced by a job type "
-                "(`evidence: tooling`) but nothing in this engagement has. Say which job "
-                "would change that.\n"
-                "- **Requires manual testing** — `evidence: manual`. Nothing in VardrMap can "
-                "evidence these however many scans run, so they stay here no matter what has "
-                "been queued.",
+                "- **Evidenced** — the engagement's record bears on the item. Name the job "
+                "ids or finding ids. No ids means it does not belong here.\n"
+                "- **Not evidenced, a job would help** — nothing in the record bears on it "
+                "yet and its `method` is `tooling`. Say which job would change that.\n"
+                "- **Not evidenced, needs hands-on work** — nothing in the record bears on it "
+                "yet and its `method` is `manual`, so queueing scans will not move it. Say "
+                "what the operator would have to do.",
+                "**`method` tells you how an item is tested, not whether it has been.** Sort "
+                "on the record, not on the method: a `manual` item that was tested by hand "
+                "and written up — a finding, an entry in its activity history — is "
+                "**evidenced**, and belongs under the first heading with those ids cited. "
+                "Only an item with nothing in the record goes under one of the other two. "
+                "Equally, a `tooling` item is not evidenced merely because its suggested job "
+                "type exists; something must actually have run.",
                 "Three rules about what you may claim, because this is the kind of output "
                 "that ends up in front of a client:\n"
                 "- **A tool having run is not coverage.** A nuclei job that matched nothing "
@@ -768,9 +779,12 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
                 "the reading the two rules above forbid. Counts per heading are fine.",
                 "Cite the methodology's title and version in anything you write, and say "
                 "plainly that this is a planning aid against a published methodology, not a "
-                "certification of compliance with it. Close with the next few jobs worth "
-                'queueing to move items out of "not evidenced", and the manual work only '
-                "the operator can do.",
+                "certification of compliance with it. For the WSTG, note that this covers its "
+                "twelve top-level categories rather than the individual scenarios beneath "
+                "them, which OWASP identifies separately (`WSTG-v42-INFO-02` and the like); "
+                "do not cite a scenario identifier you have not actually assessed. Close with "
+                "the next few jobs worth queueing, and the hands-on work only the operator "
+                "can do.",
                 _WRITES,
                 _UNTRUSTED,
             ]

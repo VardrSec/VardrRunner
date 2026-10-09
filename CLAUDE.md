@@ -23,8 +23,12 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `methodologies.py` — versioned checklists from `methodologies.json` (OWASP API Top 10
     2023, WSTG 4.2). **Coverage is not representable**: a `status`/`covered`/`done`/`coverage`
     key is refused at load, because a checklist that can hold a tick gets one as soon as a
-    scanner runs. Items carry `evidence: tooling|manual`; coverage is derived per engagement
-    from its own jobs and findings. Every `suggests` entry must be a real job type
+    scanner runs. Items carry `method: tooling|manual` — **how** an item is tested, never
+    whether it has been, so recorded manual work evidences a `manual` item as well as a job
+    does; the old name `evidence` is refused to stop the two re-conflating. Coverage is
+    derived per engagement from its own jobs and findings. Every `suggests` entry must be a
+    real job type. WSTG is category-level; OWASP's scenario ids (`WSTG-v42-INFO-02`) are
+    deferred, and each methodology says so in `scope`
   - `toolchain.py` — pinned, verified tool installs into `~/.vardrmap/tools` from `tool_manifest.json`; re-hashes managed binaries before use (ADR 0014)
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)

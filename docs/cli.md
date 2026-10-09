@@ -272,7 +272,7 @@ In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
 | `brief` | Where the engagement stands — scope, which tools have run, findings by severity, reports — and the three things to do next. Queues nothing. |
 | `triage` | Works through the findings inventory and judges each one: real or a bare template match, whether the severity holds, what evidence exists, and the smallest check that would confirm it. Optional `severity` narrows it. |
 | `untested` | Compares the declared scope and discovered surface against the jobs actually run, names the gaps, and proposes an ordered plan with `preview_job` target counts before anything is queued. |
-| `methodology` | Walks a published methodology against the engagement and sorts every item into evidenced (with job or finding ids), not evidenced, or requires manual testing. Optional `methodology_id`. |
+| `methodology` | Walks a published methodology against the engagement and sorts every item into evidenced (with job or finding ids), not evidenced where a job would help, or not evidenced where hands-on work is needed. Optional `methodology_id`. |
 | `retest` | Verifies a fix landed: restates the issue, proposes a check, follows the job, and reports fixed / still present / inconclusive. Optional `finding_id`. |
 
 **What `retest` can and cannot do.** `queue_job` takes a target *source* (scope or recon),
@@ -295,17 +295,33 @@ so a write-up can cite what it was assessed against.
 A checklist item is a **suggestion, never coverage**. No item carries a status, and the
 schema refuses one — `status`, `covered`, `done` and `coverage` are rejected outright at
 load time. Whether this engagement has covered an item comes only from its own jobs and
-findings. Each item instead carries `evidence`:
+findings.
+
+Each item carries `method`, which says **how it is tested, not whether it has been**:
 
 - `tooling` — a job type here can produce evidence bearing on the item. Evidence of a
   *candidate*: a nuclei match is not a confirmed finding.
-- `manual` — nothing in VardrMap can evidence it, however many scans run. Business logic,
-  authentication flows and session handling are in this group. Such an item may still name a
-  job type worth a look; `evidence` is the authority on what a run proves.
+- `manual` — no job type here can establish it; it is tested by hand. Business logic,
+  authentication flows and session handling are in this group. Queueing more scans will
+  never cover one of these, but **recorded manual work evidences it just as a job does** — a
+  hand-tested authentication issue with a finding and an activity entry is evidenced. Such an
+  item may still name a job type worth a look.
 
-The `methodology` prompt enforces the same line: it sorts items into evidenced (citing job
-or finding ids), not evidenced, and requires manual testing, and it is told not to report a
-percentage or a score, because a number invites reading a plan as a certification.
+The two are independent, and the field was briefly named `evidence`, which invited reading
+"tested by hand" as "unevidenced". The old name is now refused at load so the conflation
+cannot creep back.
+
+The `methodology` prompt sorts on the **record**, not the method: evidenced (citing job or
+finding ids), not evidenced where a job would help, and not evidenced where hands-on work is
+needed. It is told not to report a percentage or a score, because a number invites reading a
+plan as a certification.
+
+**Scope.** The WSTG entry is a category-level planning guide covering the guide's twelve
+top-level categories by section number. OWASP identifies each individual test scenario
+separately, in the form `WSTG-<version>-<category>-<number>` (for example
+`WSTG-v42-INFO-02`); scenario-level mapping is deliberately deferred, and each methodology
+carries a `scope` field saying so, so a category is never mistaken for coverage of a specific
+scenario id.
 
 Only identifiers, official titles and source URLs are referenced from OWASP, whose guides are
 published under CC BY-SA 4.0 and credited per methodology in an `attribution` field. The

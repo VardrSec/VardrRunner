@@ -15,15 +15,20 @@ checklist would let a methodology item be marked satisfied because a scanner
 ran, and a false claim of methodology coverage in a client report is worse than
 no claim at all.
 
-``evidence`` records which side of that line an item can even reach:
+``method`` says **how an item is tested, not whether it has been**. The two are
+independent, and conflating them is a mistake worth naming: an earlier version
+called this field ``evidence``, and consumers then read "tested by hand" as
+"unevidenced", so a manually verified authentication issue with a finding and a
+recorded history could never count as covered. Keep them separate — ``method``
+is a property of the checklist item, evidence is a property of the engagement.
 
-- ``"tooling"`` — a job type here can produce evidence that bears on the item.
+- ``"tooling"`` — a job type here can produce evidence bearing on the item.
   Evidence of a candidate, still: a nuclei match is not a confirmed finding.
-- ``"manual"`` — nothing in VardrMap can evidence it. Business logic, session
-  handling and authentication flows are in this group, and an assessment that
-  reports them as covered because a scan passed is simply wrong. Such an item may
-  still name a job type under ``suggests`` where one is worth a look; ``evidence``
-  is the authority on what a run actually proves.
+- ``"manual"`` — no job type here can evidence it; it is established by hand.
+  Business logic, session handling and authentication flows are in this group.
+  Queueing more scans will never cover one of these, but recorded manual work
+  — a finding, its activity history — evidences it perfectly well. Such an item
+  may still name a job type under ``suggests`` where one is worth a look.
 
 Only identifiers, official titles and source URLs are referenced from OWASP (CC
 BY-SA 4.0, credited per methodology in ``attribution``). The ``look_at`` and
@@ -40,7 +45,7 @@ from typing import Any
 RESOURCE = "methodologies.json"
 SCHEMA_VERSION = 1
 
-EVIDENCE_KINDS = frozenset({"tooling", "manual"})
+METHODS = frozenset({"tooling", "manual"})
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.:_-]{0,40}$")
 
 
@@ -72,7 +77,7 @@ def validate(data: Any) -> dict[str, Any]:
             raise MethodologyError(f"{key!r} is not a usable methodology id")
         if not isinstance(entry, dict):
             raise MethodologyError(f"{key}: entry is not an object")
-        for field in ("title", "version", "source", "attribution"):
+        for field in ("title", "version", "source", "attribution", "scope"):
             if not isinstance(entry.get(field), str) or not entry[field]:
                 raise MethodologyError(f"{key}: missing {field}")
         if not entry["source"].startswith("https://"):
@@ -100,16 +105,16 @@ def _validate_item(key: str, item: Any, seen: set[str]) -> None:
             raise MethodologyError(f"{key} {item_id}: missing {field}")
     if not item["source"].startswith("https://"):
         raise MethodologyError(f"{key} {item_id}: source must be an HTTPS URL")
-    if item.get("evidence") not in EVIDENCE_KINDS:
-        raise MethodologyError(f"{key} {item_id}: evidence must be one of {sorted(EVIDENCE_KINDS)}")
+    if item.get("method") not in METHODS:
+        raise MethodologyError(f"{key} {item_id}: method must be one of {sorted(METHODS)}")
     suggests = item.get("suggests")
     if not isinstance(suggests, list) or any(not isinstance(t, str) for t in suggests):
         raise MethodologyError(f"{key} {item_id}: suggests must be a list of job types")
     # A "manual" item may still suggest a job type — nuclei can hint at broken
-    # authentication without evidencing it — because `evidence` is the authority
-    # on what a run proves, and saying where to look is useful. What is refused
-    # is a suggestion naming a job type that does not exist, which would send an
-    # operator or an agent after a tool this runner cannot run.
+    # authentication without establishing it — because saying where to look is
+    # useful. What is refused is a suggestion naming a job type that does not
+    # exist, which would send an operator or an agent after a tool this runner
+    # cannot run.
     unknown = [t for t in suggests if t not in _job_types()]
     if unknown:
         raise MethodologyError(f"{key} {item_id}: unknown job type(s) {unknown}")
@@ -121,6 +126,14 @@ def _validate_item(key: str, item: Any, seen: set[str]) -> None:
         raise MethodologyError(
             f"{key} {item_id}: a checklist item carries no coverage state (found {present}) — "
             "coverage comes from the engagement's own evidence, never from this data"
+        )
+    # `evidence` was this field's first name, and it invited reading "tested by
+    # hand" as "unevidenced". Refuse the old name so the conflation cannot creep
+    # back: how an item is tested and whether it has been are independent.
+    if "evidence" in item:
+        raise MethodologyError(
+            f"{key} {item_id}: use 'method' — this field says how an item is tested, not "
+            "whether it has been. Evidence is a property of the engagement, not the checklist"
         )
 
 
@@ -139,9 +152,12 @@ def summaries() -> list[dict[str, Any]]:
             "title": entry["title"],
             "version": entry["version"],
             "source": entry["source"],
+            "scope": entry["scope"],
             "items": len(entry["items"]),
-            "tooling_items": sum(1 for i in entry["items"] if i["evidence"] == "tooling"),
-            "manual_items": sum(1 for i in entry["items"] if i["evidence"] == "manual"),
+            "by_method": {
+                method: sum(1 for i in entry["items"] if i["method"] == method)
+                for method in sorted(METHODS)
+            },
         }
         for key, entry in sorted(load()["methodologies"].items())
     ]

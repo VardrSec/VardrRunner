@@ -6,6 +6,7 @@
       "version": "2023",
       "source": "https://owasp.org/API-Security/editions/2023/en/0x11-t10/",
       "attribution": "OWASP API Security Project. Identifiers and risk titles are referenced from the 2023 edition, which is published by OWASP under CC BY-SA 4.0. The 'look_at' and 'suggests' fields are VardrRunner's own notes, not OWASP text.",
+      "scope": "The ten risks of the 2023 edition, at the level the edition itself defines them.",
       "items": [
         {
           "id": "API1:2023",
@@ -13,7 +14,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
           "look_at": "Per-object access: can one identity read or change another's object by changing an id? This is what a VardrGate case tests directly, one operation and several identities at a time.",
           "suggests": ["vardrgate_api_test"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "API2:2023",
@@ -21,7 +22,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/",
           "look_at": "Credential handling, token issuance, expiry and refresh. Nothing here exercises an authentication flow end to end; a scanner finding is at best a hint.",
           "suggests": ["nuclei"],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "API3:2023",
@@ -29,7 +30,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/",
           "look_at": "Field-level reads and writes within an object an identity may otherwise access: mass assignment, and properties returned that the caller should not see. Needs crafted requests and a view of what each field means.",
           "suggests": ["vardrgate_api_test"],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "API4:2023",
@@ -37,7 +38,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/",
           "look_at": "Absent rate limits, unbounded page sizes, expensive operations. No job type here measures this, and VardrRunner's own rate caps are restraints on our traffic, not a test of the target's.",
           "suggests": [],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "API5:2023",
@@ -45,7 +46,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/",
           "look_at": "Whether an identity can call an operation reserved for another role. A VardrGate case with one identity per role and an explicit decision per identity is the direct test.",
           "suggests": ["vardrgate_api_test"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "API6:2023",
@@ -53,7 +54,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows/",
           "look_at": "Flows that are individually authorized but harmful in bulk â€” checkout, invite, password reset. Identifying which flows matter is a conversation with the client, not a scan.",
           "suggests": [],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "API7:2023",
@@ -61,7 +62,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa7-server-side-request-forgery/",
           "look_at": "Parameters the server fetches on your behalf. nuclei carries SSRF templates, so a match is real evidence of a candidate; absence of a match is not evidence of absence.",
           "suggests": ["nuclei"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "API8:2023",
@@ -69,7 +70,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa8-security-misconfiguration/",
           "look_at": "Headers, TLS, verbose errors, exposed debug and admin surfaces, permissive CORS. httpx fingerprints, nuclei matches known misconfigurations, nmap and naabu show what is listening.",
           "suggests": ["httpx", "nuclei", "nmap", "naabu"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "API9:2023",
@@ -77,7 +78,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa9-improper-inventory-management/",
           "look_at": "Hosts, versions and operations nobody is tracking â€” old /v1 still live, staging reachable, undocumented endpoints. The engagement's own API surface and recon inventory are the evidence here.",
           "suggests": ["subfinder", "httpx", "katana", "gau"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "API10:2023",
@@ -85,7 +86,7 @@
           "source": "https://owasp.org/API-Security/editions/2023/en/0xaa-unsafe-consumption-of-apis/",
           "look_at": "What the target trusts from third-party APIs it calls. This is largely a code and architecture question and is not reachable from outside.",
           "suggests": [],
-          "evidence": "manual"
+          "method": "manual"
         }
       ]
     },
@@ -93,7 +94,8 @@
       "title": "OWASP Web Security Testing Guide",
       "version": "4.2",
       "source": "https://wstg.owasp.org/v4.2/",
-      "attribution": "OWASP Web Security Testing Guide v4.2, published by OWASP under CC BY-SA 4.0. Section numbers and category titles are referenced from the guide; the 'look_at' and 'suggests' fields are VardrRunner's own notes, not OWASP text. These are the twelve top-level categories, not the individual tests within them.",
+      "attribution": "OWASP Web Security Testing Guide v4.2, published by OWASP under CC BY-SA 4.0. Section numbers and category titles are referenced from the guide; the 'look_at' and 'suggests' fields are VardrRunner's own notes, not OWASP text.",
+      "scope": "Category-level planning guide. These are the guide's twelve top-level categories, identified by their section numbers. OWASP also gives every individual test scenario a stable identifier of the form WSTG-<version>-<category>-<number>, such as WSTG-v42-INFO-02; scenario-level mapping is deliberately not included yet, so nothing here should be cited as covering a specific scenario id.",
       "items": [
         {
           "id": "4.1",
@@ -101,7 +103,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/01-Information_Gathering/",
           "look_at": "What exists and what it runs. This is the part of the guide the runner covers best: subdomains, live hosts, crawled endpoints, archived URLs, discovered paths.",
           "suggests": ["subfinder", "dnsx", "httpx", "katana", "gau"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "4.2",
@@ -109,7 +111,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/",
           "look_at": "Exposed admin interfaces, old files, directory listings, HTTP methods, platform defaults. Port and service discovery plus template matching cover a good share of this.",
           "suggests": ["nmap", "naabu", "httpx", "nuclei"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "4.3",
@@ -117,7 +119,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/03-Identity_Management_Testing/",
           "look_at": "Registration, provisioning, role definitions, username policy. Needs accounts and a view of the roles the application intends.",
           "suggests": [],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "4.4",
@@ -125,7 +127,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/04-Authentication_Testing/",
           "look_at": "Credentials over the wire, lockout, password reset, remember-me, cached logins. Hands-on; no job type here walks a login flow.",
           "suggests": [],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "4.5",
@@ -133,7 +135,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/05-Authorization_Testing/",
           "look_at": "Directory traversal, privilege escalation, insecure direct object references. A VardrGate case is the repeatable form of this for API operations.",
           "suggests": ["vardrgate_api_test"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "4.6",
@@ -141,7 +143,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/06-Session_Management_Testing/",
           "look_at": "Cookie attributes, fixation, timeout, logout, CSRF. Needs a live session to observe.",
           "suggests": [],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "4.7",
@@ -149,7 +151,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/07-Input_Validation_Testing/",
           "look_at": "Injection of every kind, plus XSS. nuclei matches known patterns; anything beyond that is manual until a dedicated fuzzer is wired in.",
           "suggests": ["nuclei"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "4.8",
@@ -157,7 +159,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/",
           "look_at": "Stack traces and messages that disclose internals. Crawled and fuzzed responses are where these turn up, but recognising one is a judgement.",
           "suggests": ["katana", "nuclei"],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "4.9",
@@ -165,7 +167,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/",
           "look_at": "TLS versions and ciphers, weak algorithms, padding oracles. Service detection and templates cover the transport layer.",
           "suggests": ["nmap", "nuclei"],
-          "evidence": "tooling"
+          "method": "tooling"
         },
         {
           "id": "4.10",
@@ -173,7 +175,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/10-Business_Logic_Testing/",
           "look_at": "Workflow circumvention, request timing, upload abuse. Requires understanding what the application is for; no scanner finds this.",
           "suggests": [],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "4.11",
@@ -181,7 +183,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/11-Client-side_Testing/",
           "look_at": "DOM XSS, client-side injection, postMessage, CORS from the browser's side. Crawling with JavaScript parsing finds the surface; confirming a client-side issue is manual.",
           "suggests": ["katana"],
-          "evidence": "manual"
+          "method": "manual"
         },
         {
           "id": "4.12",
@@ -189,7 +191,7 @@
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/12-API_Testing/",
           "look_at": "The API as its own surface. Pair this with the OWASP API Security Top 10, which goes into far more detail, and with the engagement's API operation inventory.",
           "suggests": ["vardrgate_api_test"],
-          "evidence": "tooling"
+          "method": "tooling"
         }
       ]
     }

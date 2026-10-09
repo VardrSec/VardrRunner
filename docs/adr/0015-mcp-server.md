@@ -113,20 +113,38 @@ with ticks earned by a nuclei job is a false claim in a client deliverable.
 Wrong data in an engagement's record is worse than none — the same reasoning as
 ffuf's auto-calibration and its unreadable-report failure.
 
-So an item says what to look at, which job types relate, and one thing more:
+So an item says what to look at, which job types relate, and one thing more —
+`method`, which records **how an item is tested, not whether it has been**:
 
-- `evidence: "tooling"` — a job type here can produce evidence bearing on it,
-  and evidence of a *candidate* at that.
-- `evidence: "manual"` — nothing in VardrMap can evidence it at all. Business
-  logic, authentication flows and session handling sit here, and both shipped
-  methodologies are asserted by test to contain some, so the distinction cannot
-  quietly become decorative.
+- `method: "tooling"` — a job type here can produce evidence bearing on it, and
+  evidence of a *candidate* at that.
+- `method: "manual"` — no job type here can establish it; it is tested by hand.
+  Business logic, authentication flows and session handling sit here, and both
+  shipped methodologies are asserted by test to contain some, so the distinction
+  cannot quietly become decorative.
+
+Method and evidence are independent, and keeping them so took a correction. The
+field was first called `evidence`, and the prompt then routed every `manual` item
+to "requires manual testing" whatever the engagement's record said — so a
+hand-tested authentication issue, written up as a finding with an activity
+history, could never count as covered. That is backwards: how a test is performed
+says nothing about whether it was performed. The field is now `method`, the old
+name is refused at load so the conflation cannot creep back, and the prompt sorts
+on the record: evidenced (citing ids, whatever the method), not evidenced where a
+job would help, not evidenced where hands-on work is needed.
 
 Whether this engagement covered an item is derived at the point of asking, from
-its own jobs and findings, cited by id. The `methodology` prompt sorts items into
-evidenced / not evidenced / requires manual testing, and is told not to report a
+its own jobs and findings, cited by id. The prompt is told not to report a
 percentage: a number collapses that distinction back into the claim the design
 exists to prevent.
+
+**Scope is stated per methodology.** The WSTG entry covers the guide's twelve
+top-level categories by section number. OWASP additionally gives every test
+scenario a stable identifier of the form `WSTG-<version>-<category>-<number>`
+(`WSTG-v42-INFO-02`), and a category is not coverage of the scenarios beneath it,
+so each methodology carries a `scope` field saying what level it works at and the
+prompt is told not to cite a scenario identifier it has not assessed.
+Scenario-level mapping is deferred, not implied.
 
 Every `suggests` entry must name a job type in the handler registry. That check
 immediately caught the checklist suggesting `ffuf` while its handler was still on

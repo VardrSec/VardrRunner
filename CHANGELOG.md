@@ -21,19 +21,27 @@ MCP phase 6 — versioned methodology checklists, with coverage kept out of the 
   to an exact edition and each item carries its source URL, so a write-up can cite what it was
   assessed against.
 - **A `methodology` prompt** that sorts every item into evidenced (naming job or finding ids),
-  not evidenced, or requires manual testing, and is told to report no percentage or score —
-  a methodology is not something you can be 70% through.
+  not evidenced where a job would help, or not evidenced where hands-on work is needed, and is
+  told to report no percentage or score — a methodology is not something you can be 70%
+  through. It sorts on the engagement's record, not on how an item happens to be tested.
 
 ### Deliberately not representable
 
 - **Coverage is not part of the checklist data.** The schema refuses `status`, `covered`,
   `done` and `coverage` at load. A checklist that can hold a tick will get one as soon as a
   scanner runs, and "assessed against the OWASP API Top 10" with ticks earned by a nuclei job
-  is a false claim in a client deliverable. Each item instead carries `evidence`: `tooling`
-  (a job type can produce evidence of a *candidate*) or `manual` (nothing in VardrMap can
-  evidence it, however many scans run). A test asserts both methodologies contain items of
-  each kind so the distinction cannot become decorative. See
-  [ADR 0015 § Amendment (v0.45.0)](docs/adr/0015-mcp-server.md).
+  is a false claim in a client deliverable. Each item instead carries `method` — **how it is
+  tested, not whether it has been**: `tooling` (a job type can produce evidence of a
+  *candidate*) or `manual` (tested by hand, so no number of scans will cover it, though
+  recorded manual work evidences it as well as a job does). A test asserts both methodologies
+  contain items of each kind so the distinction cannot become decorative, and the field's
+  former name `evidence` is refused at load because it invited reading "tested by hand" as
+  "unevidenced". See [ADR 0015 § Amendment (v0.45.0)](docs/adr/0015-mcp-server.md).
+- **Scope is stated per methodology.** The WSTG entry is a category-level planning guide over
+  the guide's twelve top-level categories; OWASP identifies individual scenarios separately as
+  `WSTG-<version>-<category>-<number>` (e.g. `WSTG-v42-INFO-02`), and scenario-level mapping is
+  deferred rather than implied. A `scope` field says so, and the prompt is told not to cite a
+  scenario identifier it has not assessed.
 - Only OWASP identifiers, titles and source URLs are referenced; no OWASP prose ships. The
   guides are CC BY-SA 4.0 and these repositories are AGPL-3.0, and each methodology carries an
   `attribution` field naming its source and licence.

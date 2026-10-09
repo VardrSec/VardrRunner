@@ -432,6 +432,9 @@ def test_list_methodologies_needs_no_api_call_and_names_the_edition():
     versions = {row["id"]: row["version"] for row in out["items"]}
     assert versions == {"owasp-api-top10": "2023", "owasp-wstg": "4.2"}
     assert "never coverage" in out["note"]
+    # by_method counts how items are tested, not whether they have been.
+    assert "not whether they have been" in out["note"]
+    assert set(out["items"][0]["by_method"]) == {"tooling", "manual"}
 
 
 def test_get_methodology_pages_items_and_echoes_the_version():
@@ -447,11 +450,18 @@ def test_get_methodology_pages_items_and_echoes_the_version():
     assert last["next_offset"] is None
 
 
-def test_get_methodology_items_carry_evidence_and_no_status():
+def test_get_methodology_items_carry_a_method_and_no_status():
     out = _call(_server(MagicMock()), "get_methodology", methodology_id="owasp-wstg")
     for item in out["items"]:
-        assert item["evidence"] in {"tooling", "manual"}
-        assert not {"status", "covered", "done", "coverage"} & set(item)
+        assert item["method"] in {"tooling", "manual"}
+        assert not {"status", "covered", "done", "coverage", "evidence"} & set(item)
+
+
+def test_get_methodology_states_its_scope():
+    """The WSTG entry is category-level; a reader must not take it for scenarios."""
+    out = _call(_server(MagicMock()), "get_methodology", methodology_id="owasp-wstg")
+    assert "Category-level" in out["scope"]
+    assert "WSTG-v42-INFO-02" in out["scope"]
 
 
 def test_get_methodology_rejects_an_unknown_id_and_a_negative_offset():
@@ -464,11 +474,37 @@ def test_get_methodology_rejects_an_unknown_id_and_a_negative_offset():
 
 def test_methodology_prompt_separates_evidenced_from_suggested():
     text = _expand(_server(MagicMock()), "methodology", engagement_id="e1")
-    for heading in ("Evidenced", "Not evidenced", "Requires manual testing"):
+    for heading in (
+        "**Evidenced**",
+        "**Not evidenced, a job would help**",
+        "**Not evidenced, needs hands-on work**",
+    ):
         assert heading in text
     assert "job ids or finding ids" in text
     assert "A tool having run is not coverage" in text
     assert "candidate, not a finding" in text
+
+
+def test_methodology_prompt_sorts_on_the_record_not_the_method():
+    """A hand-tested item that was written up is evidenced.
+
+    The first version routed every `manual` item to "requires manual testing"
+    whatever the record said, which conflated how an item is tested with whether
+    it has been.
+    """
+    text = _expand(_server(MagicMock()), "methodology", engagement_id="e1")
+    assert "how an item is tested, not whether it has been" in text
+    assert "Sort on the record, not on the method" in text
+    assert "is **evidenced**" in text
+    # And the converse: a tooling item is not evidenced just because a tool exists.
+    assert "something must actually have run" in text
+
+
+def test_methodology_prompt_does_not_cite_unassessed_wstg_scenarios():
+    text = _expand(_server(MagicMock()), "methodology", engagement_id="e1")
+    assert "twelve top-level categories" in text
+    assert "WSTG-v42-INFO-02" in text
+    assert "not actually assessed" in text
 
 
 def test_methodology_prompt_forbids_a_coverage_score():
