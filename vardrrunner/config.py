@@ -23,6 +23,11 @@ JOURNAL_FILE = CONFIG_DIR / "runner-journal.sqlite3"
 # can find, audit, or delete every installed tool in one place.
 TOOLS_DIR = CONFIG_DIR / "tools"
 DATA_DIR = CONFIG_DIR / "data"
+# Wordlists the operator supplies, for the tools that fuzz (ffuf). A queued job
+# names a wordlist; it never sends a path. The name is resolved against this one
+# directory on the machine that runs the scan, so the backend cannot point the
+# runner at an arbitrary file to read and replay at a target.
+WORDLISTS_DIR = CONFIG_DIR / "wordlists"
 
 # Environment overrides — useful for containers, CI, and headless VPS daemons,
 # where a config file is awkward. Env always takes precedence over the file.
@@ -55,6 +60,10 @@ def tools_dir() -> Path:
 
 def data_dir() -> Path:
     return DATA_DIR
+
+
+def wordlists_dir() -> Path:
+    return WORDLISTS_DIR
 
 
 def journal_file() -> Path:
