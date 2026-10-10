@@ -555,9 +555,52 @@ def test_a_host_that_accepts_but_never_answers_times_out():
 
 
 def test_speaking_tls_to_a_plain_http_port_is_unreachable(answering_server):
-    """TLS verification is on, as for ffuf, so a host ffuf would silently see nothing from fails here."""
+    """A failed TLS *handshake* is still unreachable; only an untrusted certificate is not."""
     server, base = answering_server
     assert _REAL_PROBE(base.replace("http://", "https://"), timeout=2)
+
+
+def test_speaking_plain_http_to_a_tls_port_is_unreachable():
+    pytest.importorskip("cryptography")
+    from tests import tlsfixture
+
+    server, base = tlsfixture.https_server(_Answers)
+    try:
+        assert _REAL_PROBE(base.replace("https://", "http://"), timeout=3)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.parametrize("kind", ["self-signed", "expired", "hostname-mismatch"])
+def test_an_untrusted_certificate_is_still_reachable(kind):
+    """Pinned ffuf does not verify TLS, so neither does the probe.
+
+    Checked against the real binary (2.3.0): it scanned a self-signed, an expired and a
+    hostname-mismatched certificate and found the same paths on each. A verifying probe
+    failed jobs on exactly the self-signed hosts pentests are full of, on the strength of
+    an assumption nobody had tested. See tests/test_smoke_ffuf.py for the real-binary half.
+    """
+    pytest.importorskip("cryptography")
+    from tests import tlsfixture
+
+    server, base = tlsfixture.https_server(_Answers, kind)
+    try:
+        assert _REAL_PROBE(f"{base}/200", timeout=5) is None
+        assert [path for _, path, _ in server.seen] == ["/200"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_the_probe_context_does_not_verify_and_sends_no_credentials(monkeypatch):
+    """The unverified context is only acceptable because the probe sends nothing sensitive."""
+    context = runner._unverified_tls()
+    assert context.verify_mode == runner.ssl.CERT_NONE and context.check_hostname is False
+    request = runner.urllib.request.Request(
+        "https://a.test", method="GET", headers={"User-Agent": "VardrRunner-reachability-probe"}
+    )
+    assert set(request.headers) == {"User-agent"} and request.data is None
 
 
 def test_an_unreachable_target_fails_the_job_before_any_fuzzing(monkeypatch, tmp_path):

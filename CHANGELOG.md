@@ -40,7 +40,7 @@ ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queu
   empty report for a host that refuses the connection (with `-s`, `-se` and `-sa` alike), so the
   handler could not tell it from a genuine empty result. Each target is now probed with one GET before
   it is fuzzed; if nothing answers the job fails with the reason and sends no fuzzing traffic. Any HTTP
-  response counts as reachable; connection errors, timeouts and TLS failures do not. Cost: one request
+  response counts as reachable; connection errors, timeouts and a failed TLS handshake do not, but an untrusted certificate is fine, because pinned ffuf does not verify TLS. Cost: one request
   per target.
 - **Scheduled runs repeat active traffic.** A schedule queues an ordinary job, so `--rate`
   applies per execution, not across the engagement; an hourly schedule means active fuzzing

@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import signal
+import ssl
 import stat
 import subprocess
 import tempfile
@@ -434,6 +435,26 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _unverified_tls() -> ssl.SSLContext:
+    """A TLS context that does not verify the server's certificate.
+
+    **Matches pinned ffuf, which does not verify either** — checked against the real
+    binary 2.3.0 with a self-signed certificate, an expired one and a hostname-
+    mismatched one: it scanned all three and found the same paths. This probe asks
+    "would ffuf be able to look?", so it must succeed wherever ffuf does. A verifying
+    probe failed jobs on exactly the self-signed hosts pentests are full of, and an
+    earlier revision of this code did so on the strength of an untested assumption.
+
+    Safe here: the probe sends one GET with a fixed User-Agent and no credentials,
+    cookies or request body, and trusts nothing it receives. A protocol-level failure
+    (not speaking TLS at all, a failed handshake) still counts as unreachable.
+    """
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
 def probe_reachable(url: str, timeout: float = 10.0) -> str | None:
     """Return None if ``url`` answers over HTTP, else a short reason it could not be reached.
 
@@ -444,16 +465,17 @@ def probe_reachable(url: str, timeout: float = 10.0) -> str | None:
     target is checked once before it is fuzzed.
 
     **Any HTTP response counts as reachable**, including 404, 403, 500 and redirects: the
-    question is only whether something answered. A connection error, timeout or TLS
-    failure is "unreachable" — TLS verification is on, as it is for ffuf itself, so a
-    host ffuf would silently see nothing from fails here with a reason an operator can act
-    on. Cost: one GET per target, identified by its User-Agent. It does not close the
-    window between the probe and the fuzz, only the common case.
+    question is only whether something answered. A connection error, timeout or failed
+    TLS *handshake* is "unreachable". An untrusted certificate is not — see
+    ``_unverified_tls``. Cost: one GET per target, identified by its User-Agent. It does
+    not close the window between the probe and the fuzz, only the common case.
     """
     request = urllib.request.Request(
         url, method="GET", headers={"User-Agent": "VardrRunner-reachability-probe"}
     )
-    opener = urllib.request.build_opener(_NoRedirect)
+    opener = urllib.request.build_opener(
+        _NoRedirect, urllib.request.HTTPSHandler(context=_unverified_tls())
+    )
     try:
         with opener.open(request, timeout=timeout):
             return None

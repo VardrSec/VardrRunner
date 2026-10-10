@@ -195,3 +195,32 @@ def test_an_unreachable_target_fails_the_job_instead_of_reporting_nothing_found(
     wordlist("admin", "login")
     with pytest.raises(runner.ToolError, match="unreachable"):
         handlers.REGISTRY[TOOL].execute([dead_url], tmp_path, _config())
+
+
+@pytest.mark.parametrize("kind", ["self-signed", "expired", "hostname-mismatch"])
+def test_real_ffuf_scans_untrusted_https_and_the_probe_agrees(kind, wordlist, tmp_path):
+    """Pinned ffuf does not verify TLS, so the reachability probe must not either.
+
+    A verifying probe failed the job on every one of these hosts even though ffuf scans
+    them without complaint: self-signed certificates are routine on the internal and
+    staging hosts a pentest covers. This runs the real ffuf, so it is the check that the
+    probe and the tool it guards actually agree.
+    """
+    pytest.importorskip("cryptography")
+    from tests import tlsfixture
+
+    wordlist("admin", "login", "nope-1")
+    server, base = tlsfixture.https_server(_Site, kind)
+    try:
+        assert base.startswith("https://127.0.0.1:")
+        assert runner.probe_reachable(base) is None, "the probe must accept what ffuf accepts"
+
+        out = handlers.REGISTRY[TOOL].execute([base], tmp_path, _config())
+
+        records = [json.loads(line) for line in out.read_text().splitlines()]
+        assert {r["input"]["FUZZ"] for r in records} == {"admin", "login"}
+        assert {client for client, _, _ in server.seen} <= {"127.0.0.1"}
+        assert len(server.seen) <= MAX_REQUESTS
+    finally:
+        server.shutdown()
+        server.server_close()

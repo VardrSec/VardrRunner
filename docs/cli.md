@@ -462,9 +462,15 @@ valid, empty report — with `-s`, `-se` and `-sa` alike — so neither the exit
 report can tell "there was nothing there" from "it could not look". The runner therefore sends
 **one GET per target first**; if nothing answers, the job **fails** with the reason and **no
 fuzzing traffic is sent**. Any HTTP answer counts as reachable, including `404`, `403`, `500`
-and redirects (a redirect is not followed, matching ffuf). Connection errors, timeouts and TLS
-verification failures count as unreachable — TLS is verified, as it is for ffuf, so a host ffuf
-would have silently seen nothing from fails with a reason you can act on.
+and redirects (a redirect is not followed, matching ffuf). Connection errors, timeouts and a
+failed TLS *handshake* count as unreachable. **An untrusted certificate does not**: pinned ffuf
+2.3.0 does not verify TLS, and was checked against the real binary on a self-signed, an expired
+and a hostname-mismatched certificate (it scanned all three), so the probe doesn't verify either
+and a self-signed staging host is probed and scanned like any other. The probe sends one GET with
+a fixed User-Agent and no credentials, cookies or body, which is what makes skipping verification
+acceptable. (An earlier revision verified TLS on an untested assumption and would have failed
+jobs on exactly those hosts.) A server too old or exotic for Python's TLS stack could still be
+probed as unreachable while ffuf's Go stack would reach it; none has been observed.
 
 The cost is one extra request per target, identified by `User-Agent: VardrRunner-reachability-probe`.
 It closes the common case, not the window between the probe and the fuzz: a host that answers
