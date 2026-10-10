@@ -47,6 +47,17 @@ DEFAULT_TOOL_TIMEOUT = 1800  # 30 minutes
 # in flight at a client's host. Pinning the target half low keeps the operator's
 # `worker` setting meaningful: the ceiling is `worker * this`.
 DALFOX_MAX_CONCURRENT_TARGETS = 5
+
+# dalfox's documented exit codes: 0 = scan completed, nothing found; 1 = scan
+# completed, findings reported; 2 = input / configuration / runtime error (which
+# also covers a run that could not finish cleanly). Only 0 and 1 are a completed
+# scan. Observed on dalfox 3.2.4, not just read from the documentation: 0 on a page
+# that reflects nothing, 1 on a reflected-XSS page, 2 on an unreachable target — which
+# still writes a valid, empty report, so the report alone can never decide success.
+# tests/test_smoke_dalfox.py (opt-in) pins all three against the real binary.
+DALFOX_EXIT_CLEAN = 0
+DALFOX_EXIT_FINDINGS = 1
+DALFOX_OK_EXIT_CODES = (DALFOX_EXIT_CLEAN, DALFOX_EXIT_FINDINGS)
 _SENSITIVE_TEMP_PREFIX = "vardrrunner-vardrgate-"
 
 
@@ -252,6 +263,26 @@ def _run_tool(cmd: list[str], temp_file: str | None, tool: str, timeout: int | N
     Raises ToolTimeout (after killing the process) if the run exceeds the limit.
     Raises ToolError on any non-zero exit code — callers must not treat failure as success.
     """
+    _run_tool_status(cmd, temp_file, tool, timeout)
+
+
+def _run_tool_status(
+    cmd: list[str],
+    temp_file: str | None,
+    tool: str,
+    timeout: int | None,
+    ok_codes: tuple[int, ...] = (0,),
+) -> int:
+    """Run an allowlisted command and return its exit code, which must be in ``ok_codes``.
+
+    ``_run_tool`` is this with ``ok_codes=(0,)``. A tool that uses its exit code to
+    *report* something rather than only to signal failure needs more than 0 here —
+    dalfox exits 1 for "scan succeeded, findings reported" — and the caller then
+    reads the returned code. Any code outside ``ok_codes`` raises ToolError, so an
+    unlisted code can never be mistaken for success.
+
+    Raises ToolTimeout (after killing the process) if the run exceeds the limit.
+    """
     seconds = _resolve_timeout(timeout)
     observer = _PROCESS_OBSERVER.get()
     try:
@@ -274,8 +305,9 @@ def _run_tool(cmd: list[str], temp_file: str | None, tool: str, timeout: int | N
     finally:
         if temp_file:
             Path(temp_file).unlink(missing_ok=True)
-    if returncode != 0:
+    if returncode not in ok_codes:
         raise ToolError(f"{tool} exited with code {returncode}")
+    return returncode
 
 
 def _executable(name: str) -> str | None:
@@ -627,8 +659,20 @@ def run_dalfox(
     delay: int = 0,
     mining: bool = True,
     timeout: int | None = None,
-) -> None:
+) -> int:
     """Scan a list of URLs for XSS with dalfox. Output is its JSON report.
+
+    **Returns dalfox's exit code, which carries information.** dalfox documents
+    ``0`` as "success, no findings", ``1`` as "success, findings reported" and
+    ``2`` as an input, configuration or runtime error. So ``0`` and ``1`` are both
+    a completed scan and are returned for the caller to reconcile against the
+    report; anything else — ``2`` included — raises ``ToolError``. Treating every
+    non-zero exit as failure, as every other tool here rightly does, would fail a
+    job exactly when dalfox succeeds in finding something.
+
+    The exit code alone proves nothing about the report, and the report alone
+    proves nothing about the exit code: ``DalfoxHandler.execute`` requires them to
+    agree.
 
     Load is bounded in two places, because ``--workers`` is per *target* and
     dalfox scans several targets at once: left at its defaults (50 workers, 50
@@ -668,7 +712,7 @@ def run_dalfox(
     ]
     if not mining:
         cmd.append("--skip-mining")
-    return _run_tool(cmd, targets_file, "dalfox", timeout)
+    return _run_tool_status(cmd, targets_file, "dalfox", timeout, ok_codes=DALFOX_OK_EXIT_CODES)
 
 
 def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> None:

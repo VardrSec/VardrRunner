@@ -29,9 +29,30 @@ dalfox XSS scanning. **Pairs with VardrMap v0.41.0**, which adds the job type an
   half, making the ceiling `worker × 5`. `--include-all`/`--include-request`/
   `--include-response` are never passed: they attach a client's request and response bodies to
   every finding.
-- **An absent dalfox report fails the job** rather than reporting no XSS, and a scan dalfox
-  flags as `incomplete` says so in the job summary — an incomplete scan that found nothing is
-  not evidence that there is nothing to find.
+- **dalfox's exit code is read as information, not just pass/fail.** dalfox exits `0` (completed,
+  nothing found), `1` (completed, findings reported) or `2` (error). `0` and `1` are both a
+  completed scan; anything else fails the job. The first version of this change failed every
+  job in which dalfox *found* something, because it treated any non-zero exit as a failure —
+  missed by 1165 tests since they mock the subprocess, and caught by running the real binary.
+  Every other tool keeps the stricter rule. **Behaviour change** relative to the first revision of
+  this PR (never merged or released): jobs in which dalfox found XSS used to fail and now succeed.
+- **The outcome comes from the exit code and the report together; a report existing proves
+  nothing.** An unreachable target makes dalfox exit `2` while writing a valid, empty report,
+  which reads identically to a clean scan. An absent, empty, corrupt or wrong-shaped report fails
+  the job; exit `1` with no findings, or exit `0` with findings, also fails rather than guess
+  which of the two is right. A scan dalfox flags as `incomplete` still says so in the job
+  summary.
+- **Scheduled runs repeat active traffic.** A schedule queues an ordinary job, so `--worker`/
+  `--delay` (and ffuf's `--rate`) apply per execution, not across the engagement: nothing
+  aggregates traffic across runs or overlapping jobs, and an hourly schedule means active
+  scanning every hour for as long as it exists.
+
+### Testing
+
+- **Opt-in smoke test against the real dalfox** (`VARDRRUNNER_SMOKE=1`; skips otherwise and
+  when the binary is absent). Local fixture on `127.0.0.1` only, bounded traffic and runtime,
+  asserting real argv acceptance, exit behaviour and output parsing. A mutation re-introducing
+  the original exit-code handling makes it fail.
 - **The installer handles an archive that nests its binary.** An asset may record a `member`
   (the binary's path inside the archive); extraction still copies exactly that one named entry,
   and the path must be relative, non-climbing and end in the binary that entry installs, so it

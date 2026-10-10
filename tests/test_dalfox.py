@@ -80,17 +80,18 @@ def test_concurrency_bounds_cannot_be_opened_up():
 # ── argv ────────────────────────────────────────────────────────────────────
 
 
-def _capture(monkeypatch):
-    seen = SimpleNamespace(cmd=None, temp=None, target_text=None, timeout=None)
+def _capture(monkeypatch, exit_code=0):
+    seen = SimpleNamespace(cmd=None, temp=None, target_text=None, timeout=None, ok_codes=None)
 
-    def fake_run(cmd, temp, tool, timeout):
-        seen.cmd, seen.temp, seen.timeout = cmd, temp, timeout
+    def fake_run(cmd, temp, tool, timeout, ok_codes=(0,)):
+        seen.cmd, seen.temp, seen.timeout, seen.ok_codes = cmd, temp, timeout, ok_codes
         if temp:
             seen.target_text = Path(temp).read_text()
             Path(temp).unlink()
+        return exit_code
 
     monkeypatch.setattr(runner, "program", lambda name: f"/managed/{name}")
-    monkeypatch.setattr(runner, "_run_tool", fake_run)
+    monkeypatch.setattr(runner, "_run_tool_status", fake_run)
     return seen
 
 
@@ -149,25 +150,98 @@ def test_handler_is_registered_and_installable():
     assert toolchain.manageable("dalfox")
 
 
-def test_execute_returns_the_report(monkeypatch, tmp_path):
+def _fake_dalfox(monkeypatch, *, exit_code, report=None):
+    """Stand in for run_dalfox: write ``report`` (a str, or a dict to serialise) and exit."""
+
+    def fake(targets, output, **kwargs):
+        if report is not None:
+            output.write_text(report if isinstance(report, str) else json.dumps(report))
+        return exit_code
+
+    monkeypatch.setattr(runner, "run_dalfox", fake)
+
+
+def _execute(tmp_path):
     handler = handlers.REGISTRY["dalfox"]
-    monkeypatch.setattr(
-        runner,
-        "run_dalfox",
-        lambda targets, output, **kw: output.write_text(json.dumps(_report())),
-    )
-    out = handler.execute(["https://a.test"], tmp_path, configs.DalfoxConfig.from_dict({}))
+    return handler.execute(["https://a.test"], tmp_path, configs.DalfoxConfig.from_dict({}))
+
+
+# The four outcomes dalfox can produce. A report file existing decides none of them.
+
+
+def test_exit_0_with_an_empty_report_is_a_valid_empty_result(monkeypatch, tmp_path):
+    _fake_dalfox(monkeypatch, exit_code=0, report=_report(findings=0))
+    out = _execute(tmp_path)
     assert out == tmp_path / "dalfox.json"
+    assert json.loads(out.read_text())["findings"] == []
+
+
+def test_exit_1_with_findings_is_usable_and_uploaded_untranslated(monkeypatch, tmp_path):
+    _fake_dalfox(monkeypatch, exit_code=1, report=_report(findings=2))
+    out = _execute(tmp_path)
     # Uploaded as dalfox wrote it: the tier is not translated here.
-    assert json.loads(out.read_text())["findings"][0]["type"] == "V"
+    assert [f["type"] for f in json.loads(out.read_text())["findings"]] == ["V", "V"]
 
 
-def test_execute_fails_when_no_report_is_written(monkeypatch, tmp_path):
-    """An absent report means unknown, which is not "no XSS found"."""
-    handler = handlers.REGISTRY["dalfox"]
-    monkeypatch.setattr(runner, "run_dalfox", lambda targets, output, **kw: None)
+def test_exit_2_fails_even_though_a_report_exists(monkeypatch, tmp_path):
+    """A report left behind by a run that errored is not a result.
+
+    This goes through the real `_run_tool_status`, so it proves exit 2 is rejected
+    rather than assuming run_dalfox would raise.
+    """
+    (tmp_path / "dalfox.json").write_text(json.dumps(_report(findings=1)))
+    _capture_status(monkeypatch, exit_code=2)
+    monkeypatch.setattr(runner, "program", lambda name: f"/managed/{name}")
+    with pytest.raises(runner.ToolError, match="exited with code 2"):
+        _execute(tmp_path)
+
+
+@pytest.mark.parametrize("exit_code", [0, 1])
+@pytest.mark.parametrize(
+    "report",
+    [
+        None,  # no file at all
+        "",  # empty file
+        "{not json",  # truncated / corrupt
+        "[]",  # valid JSON, wrong shape
+        json.dumps({"meta": {}}),  # no findings array
+        json.dumps({"findings": "none"}),  # findings is not a list
+    ],
+    ids=["absent", "empty", "corrupt", "wrong-shape", "no-findings-key", "findings-not-list"],
+)
+def test_an_unreadable_report_means_the_outcome_is_unknown(
+    monkeypatch, tmp_path, exit_code, report
+):
+    """Whatever the exit code says, a report that cannot be read is not "found nothing"."""
+    _fake_dalfox(monkeypatch, exit_code=exit_code, report=report)
     with pytest.raises(runner.ToolError, match="unknown"):
-        handler.execute(["https://a.test"], tmp_path, configs.DalfoxConfig.from_dict({}))
+        _execute(tmp_path)
+
+
+def test_exit_1_with_an_empty_report_is_refused(monkeypatch, tmp_path):
+    """dalfox claims findings that were never written down; reporting clean would be wrong."""
+    _fake_dalfox(monkeypatch, exit_code=1, report=_report(findings=0))
+    with pytest.raises(runner.ToolError, match="exited 1"):
+        _execute(tmp_path)
+
+
+def test_exit_0_with_findings_is_refused(monkeypatch, tmp_path):
+    """The report contradicts the process; there is no telling which to trust."""
+    _fake_dalfox(monkeypatch, exit_code=0, report=_report(findings=3))
+    with pytest.raises(runner.ToolError, match="disagree"):
+        _execute(tmp_path)
+
+
+def test_an_unexpected_exit_code_from_run_dalfox_is_refused(monkeypatch, tmp_path):
+    _fake_dalfox(monkeypatch, exit_code=7, report=_report(findings=1))
+    with pytest.raises(runner.ToolError, match="unexpected exit code"):
+        _execute(tmp_path)
+
+
+def test_non_object_entries_in_findings_are_not_counted(monkeypatch, tmp_path):
+    """Garbage entries must not turn a clean scan into 'findings reported'."""
+    _fake_dalfox(monkeypatch, exit_code=0, report={"findings": ["x", 3, None], "meta": {}})
+    assert _execute(tmp_path) == tmp_path / "dalfox.json"
 
 
 def test_execute_passes_the_configured_load_controls(monkeypatch, tmp_path):
@@ -177,11 +251,71 @@ def test_execute_passes_the_configured_load_controls(monkeypatch, tmp_path):
     def fake(targets, output, **kwargs):
         seen.update(kwargs)
         output.write_text(json.dumps(_report()))
+        return 1
 
     monkeypatch.setattr(runner, "run_dalfox", fake)
     cfg = configs.DalfoxConfig.from_dict({"worker": 5, "delay": 100, "mining": False})
     handler.execute(["https://a.test"], tmp_path, cfg)
     assert seen["worker"] == 5 and seen["delay"] == 100 and seen["mining"] is False
+
+
+# ── exit-code contract at the runner layer ──────────────────────────────────
+
+
+class _FakeProcess:
+    pid = 4242
+
+    def __init__(self, code):
+        self._code = code
+
+    def wait(self, timeout=None):
+        return self._code
+
+
+def _capture_status(monkeypatch, exit_code):
+    """Replace only the subprocess: the real `_run_tool_status` and run_dalfox still run."""
+    monkeypatch.setattr(runner, "_spawn_tool", lambda cmd: _FakeProcess(exit_code))
+
+
+@pytest.mark.parametrize("code", [0, 1])
+def test_run_dalfox_accepts_exit_0_and_1_and_returns_the_code(monkeypatch, tmp_path, code):
+    monkeypatch.setattr(runner, "program", lambda name: f"/managed/{name}")
+    _capture_status(monkeypatch, code)
+    assert runner.run_dalfox(["https://a.test/?q=1"], tmp_path / "d.json") == code
+
+
+@pytest.mark.parametrize("code", [2, 3, 126, 127, 255, -9])
+def test_run_dalfox_rejects_every_other_exit_code(monkeypatch, tmp_path, code):
+    """Only the two documented success codes are a completed scan."""
+    monkeypatch.setattr(runner, "program", lambda name: f"/managed/{name}")
+    _capture_status(monkeypatch, code)
+    with pytest.raises(runner.ToolError, match=f"exited with code {code}"):
+        runner.run_dalfox(["https://a.test/?q=1"], tmp_path / "d.json")
+
+
+def test_run_dalfox_passes_exactly_the_documented_success_codes(monkeypatch, tmp_path):
+    seen = _capture(monkeypatch)
+    runner.run_dalfox(["https://a.test"], tmp_path / "d.json")
+    assert seen.ok_codes == (runner.DALFOX_EXIT_CLEAN, runner.DALFOX_EXIT_FINDINGS) == (0, 1)
+
+
+def test_other_tools_still_treat_exit_1_as_a_failure(monkeypatch):
+    """The relaxation is dalfox-only: for every other tool a non-zero exit is a failure."""
+    _capture_status(monkeypatch, 1)
+    with pytest.raises(runner.ToolError, match="exited with code 1"):
+        runner._run_tool(["x"], None, "httpx", None)
+
+
+def test_run_tool_status_removes_the_temp_targets_file_on_every_path(monkeypatch, tmp_path):
+    for code in (0, 1, 2):
+        target = tmp_path / f"t{code}.txt"
+        target.write_text("https://a.test")
+        _capture_status(monkeypatch, code)
+        try:
+            runner._run_tool_status(["x"], str(target), "dalfox", None, ok_codes=(0, 1))
+        except runner.ToolError:
+            pass
+        assert not target.exists(), f"temp file left behind after exit {code}"
 
 
 def test_upload_reports_new_candidates_not_findings(monkeypatch, tmp_path):

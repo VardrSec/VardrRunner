@@ -117,6 +117,16 @@ vardrrunner daemon start
 Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
 back-compat aliases.
 
+## Real-binary smoke tests
+`tests/test_smoke_*.py` run the actual pinned tools against a `127.0.0.1` fixture and are
+**opt-in** (`VARDRRUNNER_SMOKE=1`; they skip otherwise, and skip with instructions if the
+binary is absent). The whole suite mocks the subprocess, which is how dalfox's exit code `1`
+("findings reported") shipped as a job failure through 1165 green tests. When adding or
+changing a tool's argv, exit-code handling or output parsing, run its smoke test. A tool's
+exit code is documentation until you have seen it from the real binary — and **a report file
+existing is never evidence a run succeeded** (dalfox writes a valid empty report on an
+unreachable target).
+
 ## Wiring tests
 `tests/test_cli.py` is the only thing that checks Typer wiring, and asserting
 `mock.assert_called_once()` is not enough — it passes whether or not an option reaches the

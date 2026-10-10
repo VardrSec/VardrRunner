@@ -427,9 +427,39 @@ is per target and dalfox scans several targets at once, so left at its own defau
 passed: they attach a client's request and response bodies to every finding, which is not
 something to ship to the backend as a side effect of a scan.
 
-An absent report fails the job rather than reporting no XSS — the outcome is unknown, which
-is a different result. If dalfox flags its own scan as `incomplete`, the job summary says
-so: an incomplete scan that found nothing is not evidence that there is nothing to find.
+**These limits apply per execution, not across the engagement.** A job queued by a schedule
+is an ordinary job: each run is a fresh dalfox process with its own full allowance, and
+nothing aggregates traffic across runs or across jobs that overlap. An hourly schedule
+therefore means active scanning traffic every hour, indefinitely, for as long as the schedule
+exists. `--worker` and `--delay` bound how hard one run pushes; they do not bound how often
+runs happen. The same is true of `run ffuf` and its `--rate`.
+
+**dalfox's exit code carries information, so `run dalfox` does not treat every non-zero exit
+as a failure.** dalfox exits `0` when the scan completed and found nothing, `1` when it
+completed and reported findings, and `2` on an input, configuration or runtime error. `0` and
+`1` are both a completed scan; anything else fails the job. Every other tool keeps the stricter
+rule (only `0` succeeds). Treating `1` as an error, as this runner first did, failed the job
+at exactly the moment dalfox succeeded in finding something, and the findings were never
+uploaded. The exit codes were confirmed against dalfox 3.2.4, not only the documentation.
+
+The outcome is decided from the exit code **and** the report together, and a report file
+existing proves nothing:
+
+| Exit | Report | Result |
+|---|---|---|
+| `0` | readable, no findings | **success**, a valid empty result |
+| `1` | readable, with findings | **success**, uploaded as candidates |
+| `2` (or any other) | anything, including a valid empty report | **failure** |
+| `0` or `1` | absent, unreadable, not JSON, or no `findings` array | **failure** — outcome unknown |
+| `1` | readable, but **no** findings | **failure** — dalfox claims findings it never wrote down |
+| `0` | readable, but **with** findings | **failure** — the report contradicts the process |
+
+The `2` row matters most: dalfox writes a perfectly valid, empty report when the target is
+unreachable, so reading the file alone is indistinguishable from a clean scan. The last two
+rows fail rather than guess which of the process and the report is right.
+
+If dalfox flags its own scan as `incomplete`, the job summary says so: an incomplete scan that
+found nothing is not evidence that there is nothing to find.
 
 ### Target classification and local deny rules
 
