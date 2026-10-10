@@ -4,10 +4,15 @@
 - Python **3.10+**
 - `git`
 - (Optional, for real runs) the external tools. `vardrrunner tools install --all` installs
-  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, and `gau` into
+  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `gau`
+  and `ffuf` into
   `~/.vardrmap/tools`; `nmap` and `vardrgate` (only for `vardrgate_api_test` jobs) still
   come from your OS or `PATH`. None are needed to run the test suite — every subprocess
   call is mocked.
+- (Optional, for real `ffuf` runs) at least one wordlist in `~/.vardrmap/wordlists`, named
+  without the extension — `common.txt` backs `--wordlist common`. A symlink to an existing
+  list (SecLists, dirb) is fine. None ship with VardrRunner, and a job names a wordlist
+  rather than giving a path, so the file has to exist on the machine running the scan.
 
 ## Setup
 ```bash
@@ -32,6 +37,27 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
   subprocesses, no real filesystem state outside temp dirs.
 - The suite must be **green before every commit** (Engineering Charter §3).
 - Add tests in the **same commit** as any behavior change.
+
+### Smoke tests against the real binaries (opt-in)
+The one exception to "hermetic" above. Mocked subprocesses cannot show that a flag is
+accepted or what a tool's exit code means — dalfox exits `1` when it *finds* something, which
+mocked tests could never have revealed — so `tests/test_smoke_*.py` run the actual pinned
+binaries through the real handlers.
+
+```bash
+VARDRRUNNER_SMOKE=1 pytest tests -m smoke -v
+VARDRRUNNER_SMOKE=1 VARDRRUNNER_SMOKE_BIN_DIR=/path/to/bins pytest tests -m smoke -v
+```
+- **Opt-in.** Without `VARDRRUNNER_SMOKE=1` they skip, so a default `pytest` never launches a
+  scanner and CI is unaffected.
+- **Binary resolution.** The normal managed install or `PATH`, or a directory given by
+  `VARDRRUNNER_SMOKE_BIN_DIR`. If a tool cannot be found the test skips and says how to
+  install it; it does not fail.
+- **No external targets.** The only target is a fixture server the test starts on
+  `127.0.0.1`. Each test asserts that every request it caused came from loopback and stayed
+  under a request ceiling, and every run has a 60-second timeout.
+- They assert the real **argv** (the tool accepts every flag we pass), the real **exit
+  behaviour** (clean, findings, unreachable) and the real **output parsing**.
 
 ### What the tests cover
 | File | Area |

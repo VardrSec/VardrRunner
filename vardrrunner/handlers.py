@@ -672,6 +672,151 @@ class GauHandler(ToolHandler[configs.GauConfig]):
         return _extract_jsonl_field(output, "url")
 
 
+def _ffuf_records(output: Path) -> list[dict[str, Any]]:
+    """Reduce one ffuf JSON report to the records VardrMap's ffuf importer reads.
+
+    The keys are deliberately ffuf's own (``input.FUZZ``, ``status``,
+    ``content-type``) rather than a compact shape of our own: VardrMap's
+    ``parse_ffuf`` already reads exactly these, so a run imports with no
+    backend parser change.
+
+    **An unreadable report is a failure, not an empty result.** A valid report
+    whose ``results`` array is empty means ffuf found no matches; a report that
+    is absent, unreadable or not the shape ffuf writes means the outcome is
+    *unknown*. Returning ``[]`` for both would let a broken run finish as a
+    green job that silently claims this host has nothing on it — the same
+    mistake as skipping a target, and worse, because it is recorded as coverage.
+
+    A single malformed *entry* inside an otherwise valid results array is
+    skipped rather than fatal: the report parsed, so the run is accounted for,
+    and one bad row should not discard the rest of a long scan.
+    """
+    try:
+        raw = output.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise runner.ToolError(
+            f"ffuf left no readable report at {output.name}: {exc.__class__.__name__}. "
+            "The run's outcome is unknown, so the job fails rather than report no matches."
+        ) from exc
+    try:
+        report = json.loads(raw)
+    except ValueError as exc:
+        raise runner.ToolError(
+            f"ffuf's report at {output.name} is not valid JSON, so the run's outcome is "
+            "unknown. The job fails rather than report no matches."
+        ) from exc
+    results = report.get("results") if isinstance(report, dict) else None
+    if not isinstance(results, list):
+        raise runner.ToolError(
+            f"ffuf's report at {output.name} has no 'results' array, so the run's outcome "
+            "is unknown. The job fails rather than report no matches."
+        )
+    records = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        if not isinstance(url, str) or not url:
+            continue
+        raw_input = item.get("input")
+        word = raw_input.get("FUZZ") if isinstance(raw_input, dict) else None
+        records.append(
+            {
+                "url": url,
+                "input": {"FUZZ": str(word) if word else ""},
+                "status": item.get("status"),
+                "length": item.get("length"),
+                "words": item.get("words"),
+                "lines": item.get("lines"),
+                "content-type": item.get("content-type") or "",
+            }
+        )
+    return records
+
+
+class FfufHandler(ToolHandler[configs.FfufConfig]):
+    """Content discovery with ffuf, one site root at a time.
+
+    Unlike the other handlers this runs the tool once per target (see
+    ``runner.run_ffuf`` for why), merging every report into one upload. A
+    non-zero exit on any target fails the job, and so does a report that cannot
+    be read (see ``_ffuf_records``): quietly treating either as "nothing found"
+    would report coverage the engagement does not actually have.
+    """
+
+    tool = "ffuf"
+
+    def parse_config(self, cfg: dict) -> configs.FfufConfig:
+        return configs.FfufConfig.from_dict(cfg)
+
+    def resolve_targets(
+        self,
+        client: api.VardrMapClient,
+        engagement_id: str,
+        target_source: str,
+        config: configs.FfufConfig,
+    ) -> list[str]:
+        raw = _resolve_standard(client, engagement_id, target_source, config)
+        return self.normalize_handoff_targets(raw)
+
+    def normalize_handoff_targets(self, targets: list[str]) -> list[str]:
+        # Many recon URLs share one root; fuzzing it twice would double the load.
+        bases = (runner.base_url(t) for t in targets)
+        return list(dict.fromkeys(b for b in bases if b))
+
+    def running_label(self, targets: list[str], config: configs.FfufConfig) -> str:
+        extras = f" +{','.join(config.extensions)}" if config.extensions else ""
+        return (
+            f"ffuf content discovery ({config.wordlist}{extras}, {config.rate} req/s) "
+            f"over {len(targets)} site root(s)"
+        )
+
+    def execute(self, targets: list[str], run_dir: Path, config: configs.FfufConfig) -> Path | None:
+        wordlist = runner.resolve_wordlist(config.wordlist)
+        records: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for index, target in enumerate(targets, start=1):
+            # ffuf exits 0 with a valid empty report for a host that refuses the
+            # connection, so without this an unreachable target is reported as a clean
+            # "found nothing". One request per target, before any fuzzing traffic.
+            unreachable = runner.probe_reachable(target)
+            if unreachable:
+                raise runner.ToolError(
+                    f"ffuf target {target} is unreachable ({unreachable}). ffuf would exit 0 "
+                    "with no results, which is indistinguishable from 'nothing found', so the "
+                    "job fails rather than report an empty result for a host that was never "
+                    "looked at."
+                )
+            report = run_dir / f"ffuf.{index}.json"
+            runner.run_ffuf(
+                target,
+                report,
+                wordlist,
+                extensions=config.extensions,
+                match_codes=config.match_codes,
+                rate=config.rate,
+                timeout=config.timeout,
+            )
+            for record in _ffuf_records(report):
+                if record["url"] not in seen:
+                    seen.add(record["url"])
+                    records.append(record)
+        if not records:
+            return None
+        import_path = run_dir / "ffuf_import.jsonl"
+        _write_jsonl(records, import_path)
+        return import_path
+
+    def upload(
+        self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
+    ) -> str:
+        count = _upload_jsonl_in_chunks(client, engagement_id, "ffuf", output, job_id=job_id)
+        return f"imported {count} path(s)"
+
+    def extract_handoff_targets(self, output: Path) -> list[str]:
+        return list(dict.fromkeys(_extract_jsonl_field(output, "url")))
+
+
 class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
     """Run a VardrGate API authorization test job and upload its result.
 
@@ -739,6 +884,7 @@ REGISTRY: dict[str, ToolHandler[Any]] = {
         NaabuHandler(),
         KatanaHandler(),
         GauHandler(),
+        FfufHandler(),
         VardrGateHandler(),
     )
 }

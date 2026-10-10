@@ -8,12 +8,28 @@ deep inside execution. Each tool's config is a frozen dataclass with a
 ``from_dict`` classmethod that raises ``ConfigError`` on anything invalid.
 """
 
+import re
 from dataclasses import dataclass
 
 # Severities nuclei accepts — mirrors the backend's own validation.
 NUCLEI_SEVERITIES = frozenset({"info", "low", "medium", "high", "critical"})
 GAU_PROVIDERS = frozenset({"wayback", "commoncrawl", "otx", "urlscan"})
 SUPPORTED_JOB_SCHEMA_VERSIONS = frozenset({1})
+
+# A wordlist arrives as a *name*, never a path: the runner resolves it against
+# ~/.vardrmap/wordlists on the machine doing the scanning. This shape admits no
+# separator, no dot and no whitespace, so a job cannot escape that directory or
+# name a file elsewhere on the operator's disk for ffuf to read and replay at a
+# target. Resolution is enforced again in runner.py; this is the first gate.
+WORDLIST_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+# A fuzzing extension, as ffuf wants it: a dot and an alphanumeric suffix.
+_EXTENSION = re.compile(r"^\.[A-Za-z0-9]{1,10}$")
+_STATUS_CODE = re.compile(r"^\d{3}$")
+# ffuf is the only tool here that generates sustained traffic at a client's host,
+# so its request rate is capped by default rather than left to ffuf's unbounded
+# threads. The operator can raise it; they cannot remove it.
+FFUF_DEFAULT_RATE = 50
+FFUF_MAX_RATE = 1000
 
 
 class ConfigError(ValueError):
@@ -254,6 +270,108 @@ class GauConfig:
         return cls(
             subs=_opt_bool(cfg, "subs", True),
             providers=_parse_choices(cfg.get("providers"), "providers", GAU_PROVIDERS),
+            timeout=_opt_int(cfg, "timeout", minimum=1),
+        )
+
+
+def _parse_wordlist(raw) -> str:
+    """Validate a wordlist *name*. Paths are refused outright, not sanitized."""
+    if raw is None or raw == "":
+        return "common"
+    if not isinstance(raw, str):
+        raise ConfigError(f"'wordlist' must be a name, got {type(raw).__name__}")
+    name = raw.strip()
+    if not WORDLIST_NAME.match(name):
+        raise ConfigError(
+            f"invalid wordlist name {raw!r}: expected a name like 'common' or 'api-paths' "
+            "(lowercase letters, digits, '-' and '_'), not a path. Wordlists are resolved "
+            "against the runner's own wordlists directory."
+        )
+    return name
+
+
+def _parse_extensions(raw) -> tuple[str, ...]:
+    """Normalize fuzzing extensions to a de-duplicated tuple of '.ext' tokens.
+
+    Strings and lists only. Unlike ``match_codes`` there is no scalar form worth
+    supporting — an extension is never a number — so VardrMap refuses the same
+    types here, and the two validators agree.
+    """
+    if raw is None or raw == "":
+        return ()
+    if isinstance(raw, str):
+        tokens = [t.strip() for t in raw.split(",") if t.strip()]
+    elif isinstance(raw, (list, tuple)):
+        tokens = [str(t).strip() for t in raw if str(t).strip()]
+    else:
+        raise ConfigError(f"'extensions' must be a string or list, got {type(raw).__name__}")
+    normalized = [t if t.startswith(".") else f".{t}" for t in tokens]
+    invalid = [t for t in normalized if not _EXTENSION.match(t)]
+    if invalid:
+        raise ConfigError(f"invalid extension(s) {invalid}; expected values like '.php' or '.bak'")
+    return tuple(dict.fromkeys(normalized))
+
+
+def _parse_match_codes(raw) -> str | None:
+    """Normalize ffuf's status-code filter to a comma string, or None for its default.
+
+    A bare integer is accepted — ``{"match_codes": 200}`` is the natural thing
+    for a JSON caller to send, and VardrMap accepts it. The two validators have
+    to agree on exactly which types pass, or a job clears queue-time validation
+    and then fails on the operator's machine, which is the failure mode
+    queue-time validation exists to prevent. ``bool`` is excluded: ``True`` is
+    an ``int`` in Python, and a status code of ``1`` is not what anyone meant.
+    """
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, bool):
+        raise ConfigError("'match_codes' must be a status code, string or list, got bool")
+    if isinstance(raw, int):
+        tokens = [str(raw)]
+    elif isinstance(raw, str):
+        tokens = [t.strip() for t in raw.split(",") if t.strip()]
+    elif isinstance(raw, (list, tuple)):
+        tokens = [str(t).strip() for t in raw if str(t).strip()]
+    else:
+        raise ConfigError(
+            f"'match_codes' must be a status code, string or list, got {type(raw).__name__}"
+        )
+    if tokens == ["all"]:
+        return "all"
+    invalid = [t for t in tokens if not _STATUS_CODE.match(t)]
+    if invalid:
+        raise ConfigError(
+            f"invalid match_codes {invalid}; expected three-digit statuses like '200,301,403', "
+            "or 'all'"
+        )
+    return ",".join(dict.fromkeys(tokens)) or None
+
+
+@dataclass(frozen=True)
+class FfufConfig:
+    """Config for a content-discovery fuzz with ffuf.
+
+    ``wordlist`` is a name, not a path — see ``WORDLIST_NAME``. ``rate`` caps
+    requests per second because this is the one tool here that puts sustained
+    load on a client's host; it has a default and a ceiling, and no way to
+    disable it.
+    """
+
+    wordlist: str = "common"
+    extensions: tuple[str, ...] = ()
+    match_codes: str | None = None
+    rate: int = FFUF_DEFAULT_RATE
+    limit: int = 100
+    timeout: int | None = None
+
+    @classmethod
+    def from_dict(cls, cfg: dict) -> "FfufConfig":
+        return cls(
+            wordlist=_parse_wordlist(cfg.get("wordlist")),
+            extensions=_parse_extensions(cfg.get("extensions")),
+            match_codes=_parse_match_codes(cfg.get("match_codes")),
+            rate=_req_int(cfg, "rate", FFUF_DEFAULT_RATE, minimum=1, maximum=FFUF_MAX_RATE),
+            limit=_req_int(cfg, "limit", 100, minimum=1),
             timeout=_opt_int(cfg, "timeout", minimum=1),
         )
 

@@ -49,8 +49,10 @@ MAX_BINARY_BYTES = 400 * 1024 * 1024
 _VERSION_TIMEOUT = 15
 
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
-# A version flag is a bare option, never a value: `-version`, `--version`.
-_FLAG = re.compile(r"^-{1,2}[a-z][a-z-]*$")
+# A version flag is a bare option, never a value: `-version`, `--version`, `-V`.
+# Case-insensitive because ffuf spells its flag `-V`; still no separator, value,
+# path or whitespace can pass, which is the point of the check.
+_FLAG = re.compile(r"^-{1,2}[A-Za-z][A-Za-z-]*$")
 _ARCHIVE_SUFFIXES = (".zip", ".tar.gz")
 
 
