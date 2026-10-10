@@ -18,9 +18,9 @@ Safety bounds (asserted, not just intended):
   MAX_REQUESTS;
 - every run is bounded by a 60s timeout.
 
-One test here is a strict xfail on purpose. It records a real defect that this test
-found: ffuf exits 0 for an unreachable target, so the handler cannot tell "nothing
-there" from "could not look".
+This test found that ffuf exits 0 for an unreachable target, so the exit code cannot tell
+"nothing there" from "could not look". The handler therefore probes each target first;
+the last two tests pin both halves of that.
 """
 
 from __future__ import annotations
@@ -187,15 +187,11 @@ def test_ffuf_exits_0_for_an_unreachable_target(site, dead_url, wordlist, tmp_pa
     assert site.since(mark) == [], "the dead port must not have reached the fixture"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "KNOWN DEFECT: ffuf exits 0 and writes a valid empty report for an unreachable "
-        "target, so the handler reports success with no results, indistinguishable from "
-        "'nothing found'. Remove this marker when the handler can tell the two apart."
-    ),
-)
-def test_an_unreachable_target_should_fail_the_job(site, dead_url, wordlist, tmp_path):
+def test_an_unreachable_target_fails_the_job_instead_of_reporting_nothing_found(
+    site, dead_url, wordlist, tmp_path
+):
+    """ffuf itself would report success with no results (previous test), so the handler's
+    reachability probe is what turns that into a failure. Nothing is fuzzed."""
     wordlist("admin", "login")
-    with pytest.raises(runner.ToolError):
+    with pytest.raises(runner.ToolError, match="unreachable"):
         handlers.REGISTRY[TOOL].execute([dead_url], tmp_path, _config())

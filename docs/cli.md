@@ -456,15 +456,21 @@ not discard a long scan.
 applied, so 100 recon URLs that all live on one host consume the default limit and fuzz a
 single root. Raise `--limit`, or use `--scope`, when a recon table is dense on few hosts.
 
-**Known limitation: an unreachable target looks like "nothing found".** Observed on ffuf
-2.3.0: for a host that refuses the connection, ffuf exits `0` and writes a valid, empty
-report — with `-s`, `-se` and `-sa` alike — so neither the exit code nor the report can tell
-"there was nothing there" from "it could not look". The job succeeds with no results. Treat an
-empty `run ffuf` result as unconfirmed until you know the host was reachable (a `run httpx`
-beforehand is the usual check). This is recorded as a strict `xfail` in
-`tests/test_smoke_ffuf.py`, which will start failing — prompting removal of the marker — the
-day the handler can distinguish the two.
+**Each target is probed once before it is fuzzed, because ffuf cannot say it was unreachable.**
+Observed on ffuf 2.3.0: for a host that refuses the connection, ffuf exits `0` and writes a
+valid, empty report — with `-s`, `-se` and `-sa` alike — so neither the exit code nor the
+report can tell "there was nothing there" from "it could not look". The runner therefore sends
+**one GET per target first**; if nothing answers, the job **fails** with the reason and **no
+fuzzing traffic is sent**. Any HTTP answer counts as reachable, including `404`, `403`, `500`
+and redirects (a redirect is not followed, matching ffuf). Connection errors, timeouts and TLS
+verification failures count as unreachable — TLS is verified, as it is for ffuf, so a host ffuf
+would have silently seen nothing from fails with a reason you can act on.
 
+The cost is one extra request per target, identified by `User-Agent: VardrRunner-reachability-probe`.
+It closes the common case, not the window between the probe and the fuzz: a host that answers
+and then drops during the run still yields whatever ffuf saw. Any one unreachable target fails
+the whole job, like a non-zero exit, because skipping it would report coverage that does not
+exist.
 **These limits apply per execution, not across the engagement.** A job queued by a schedule
 is an ordinary job: each run is a fresh ffuf process with its own full `--rate`, and nothing
 aggregates traffic across runs or across jobs that overlap. An hourly schedule therefore means

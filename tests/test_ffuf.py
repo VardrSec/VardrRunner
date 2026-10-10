@@ -9,6 +9,9 @@ handler preserves ffuf's spelling rather than inventing a compact shape.
 from __future__ import annotations
 
 import json
+import socket
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -16,6 +19,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from vardrrunner import configs, handlers, runner, toolchain
+
+# Captured before the autouse fixture below replaces it, so the probe's own tests can use it.
+_REAL_PROBE = runner.probe_reachable
+
+
+@pytest.fixture(autouse=True)
+def _no_network_probe(monkeypatch):
+    """Handler tests use fake hostnames; the real probe has its own tests further down."""
+    monkeypatch.setattr(runner, "probe_reachable", lambda url, timeout=10.0: None)
 
 
 def _report(*paths: str) -> dict:
@@ -469,3 +481,143 @@ def test_ffuf_is_pinned_for_every_supported_platform():
         "macos-arm64",
         "windows-amd64",
     }
+
+
+# ── reachability probe ──────────────────────────────────────────────────────
+#
+# ffuf exits 0 and writes a valid empty report for a host that refuses the
+# connection, so "nothing found" cannot be told from "could not look". Each target
+# is probed once first; any HTTP answer counts as reachable.
+
+
+class _Answers(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        self.server.seen.append((self.command, self.path, self.headers.get("User-Agent")))
+        status = int(self.path.strip("/") or 200)
+        self.send_response(status)
+        if 300 <= status < 400:
+            # A redirect to a host that is not there: following it would fail, but the
+            # first host did answer.
+            self.send_header("Location", "http://127.0.0.1:9/never")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+
+@pytest.fixture
+def answering_server():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Answers)
+    server.seen = []
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield server, f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.mark.parametrize("status", [200, 301, 302, 403, 404, 500, 503])
+def test_any_http_answer_counts_as_reachable(answering_server, status):
+    """The question is only whether something answered, not what it said."""
+    server, base = answering_server
+    assert _REAL_PROBE(f"{base}/{status}") is None
+
+
+def test_a_redirect_is_not_followed(answering_server):
+    """ffuf does not follow redirects by default; a dead second host must not fail the probe."""
+    server, base = answering_server
+    assert _REAL_PROBE(f"{base}/302") is None
+    assert len(server.seen) == 1
+
+
+def test_the_probe_is_a_single_identified_get(answering_server):
+    server, base = answering_server
+    _REAL_PROBE(f"{base}/200")
+    assert server.seen == [("GET", "/200", "VardrRunner-reachability-probe")]
+
+
+def test_a_refused_connection_is_unreachable_with_a_reason():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    reason = _REAL_PROBE(f"http://127.0.0.1:{port}", timeout=5)
+    # The wording is the OS's (and Windows can take ~2s to report a refusal), so only the
+    # contract is asserted: it is unreachable, and the reason names an error class.
+    assert reason and "Error" in reason
+
+
+def test_a_host_that_accepts_but_never_answers_times_out():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen(1)  # the OS completes the handshake; nothing ever replies
+        reason = _REAL_PROBE(f"http://127.0.0.1:{s.getsockname()[1]}", timeout=0.4)
+    assert reason and "time" in reason.lower()
+
+
+def test_speaking_tls_to_a_plain_http_port_is_unreachable(answering_server):
+    """TLS verification is on, as for ffuf, so a host ffuf would silently see nothing from fails here."""
+    server, base = answering_server
+    assert _REAL_PROBE(base.replace("http://", "https://"), timeout=2)
+
+
+def test_an_unreachable_target_fails_the_job_before_any_fuzzing(monkeypatch, tmp_path):
+    handler = handlers.REGISTRY["ffuf"]
+    monkeypatch.setattr(runner, "resolve_wordlist", lambda name: tmp_path / "w.txt")
+    monkeypatch.setattr(
+        runner, "probe_reachable", lambda url, timeout=10.0: "ConnectionRefusedError: no"
+    )
+    fuzzed = []
+    monkeypatch.setattr(runner, "run_ffuf", lambda *a, **k: fuzzed.append(a))
+    with pytest.raises(
+        runner.ToolError, match=r"https://a\.test is unreachable.*ConnectionRefusedError"
+    ):
+        handler.execute(["https://a.test"], tmp_path, configs.FfufConfig.from_dict({}))
+    assert fuzzed == [], "no fuzzing traffic may be sent at a target that did not answer"
+
+
+def test_the_message_explains_why_an_empty_result_would_have_been_misleading(monkeypatch, tmp_path):
+    handler = handlers.REGISTRY["ffuf"]
+    monkeypatch.setattr(runner, "resolve_wordlist", lambda name: tmp_path / "w.txt")
+    monkeypatch.setattr(runner, "probe_reachable", lambda url, timeout=10.0: "TimeoutError: slow")
+    with pytest.raises(runner.ToolError, match="indistinguishable"):
+        handler.execute(["https://a.test"], tmp_path, configs.FfufConfig.from_dict({}))
+
+
+def test_each_target_is_probed_once_and_before_its_own_run(monkeypatch, tmp_path):
+    handler = handlers.REGISTRY["ffuf"]
+    monkeypatch.setattr(runner, "resolve_wordlist", lambda name: tmp_path / "w.txt")
+    order = []
+    monkeypatch.setattr(
+        runner, "probe_reachable", lambda url, timeout=10.0: order.append(("probe", url))
+    )
+
+    def fake_run(target, output, wordlist, **kw):
+        order.append(("run", target))
+        output.write_text(json.dumps({"results": []}))
+
+    monkeypatch.setattr(runner, "run_ffuf", fake_run)
+    handler.execute(
+        ["https://a.test", "https://b.test"], tmp_path, configs.FfufConfig.from_dict({})
+    )
+    assert order == [
+        ("probe", "https://a.test"),
+        ("run", "https://a.test"),
+        ("probe", "https://b.test"),
+        ("run", "https://b.test"),
+    ]
+
+
+def test_a_later_unreachable_target_fails_the_whole_job(monkeypatch, tmp_path):
+    """Consistent with a non-zero exit: skipping a host would report coverage that does not exist."""
+    handler = handlers.REGISTRY["ffuf"]
+    monkeypatch.setattr(runner, "resolve_wordlist", lambda name: tmp_path / "w.txt")
+    monkeypatch.setattr(
+        runner, "probe_reachable", lambda url, timeout=10.0: "down" if "b.test" in url else None
+    )
+    monkeypatch.setattr(
+        runner, "run_ffuf", lambda t, o, w, **k: o.write_text(json.dumps({"results": []}))
+    )
+    with pytest.raises(runner.ToolError, match=r"b\.test is unreachable"):
+        handler.execute(
+            ["https://a.test", "https://b.test"], tmp_path, configs.FfufConfig.from_dict({})
+        )

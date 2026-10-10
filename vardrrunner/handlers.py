@@ -776,6 +776,17 @@ class FfufHandler(ToolHandler[configs.FfufConfig]):
         records: list[dict[str, Any]] = []
         seen: set[str] = set()
         for index, target in enumerate(targets, start=1):
+            # ffuf exits 0 with a valid empty report for a host that refuses the
+            # connection, so without this an unreachable target is reported as a clean
+            # "found nothing". One request per target, before any fuzzing traffic.
+            unreachable = runner.probe_reachable(target)
+            if unreachable:
+                raise runner.ToolError(
+                    f"ffuf target {target} is unreachable ({unreachable}). ffuf would exit 0 "
+                    "with no results, which is indistinguishable from 'nothing found', so the "
+                    "job fails rather than report an empty result for a host that was never "
+                    "looked at."
+                )
             report = run_dir / f"ffuf.{index}.json"
             runner.run_ffuf(
                 target,

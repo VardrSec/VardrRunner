@@ -12,7 +12,9 @@ import signal
 import stat
 import subprocess
 import tempfile
+import urllib.error
 import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -422,6 +424,46 @@ def resolve_wordlist(name: str) -> Path:
     if path.stat().st_size == 0:
         raise ToolError(f"wordlist {name!r} is empty: {path}")
     return path
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Treat a redirect as an answer. ffuf does not follow redirects by default, so a
+    3xx proves the host is up, and following it could fail on an unrelated second host."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def probe_reachable(url: str, timeout: float = 10.0) -> str | None:
+    """Return None if ``url`` answers over HTTP, else a short reason it could not be reached.
+
+    **Why this exists.** ffuf exits 0 and writes a valid, empty report for a host that
+    refuses the connection — with ``-s``, ``-se`` and ``-sa`` alike — so neither the exit
+    code nor the report can tell "there was nothing there" from "it could not look". A
+    false "found nothing" in an engagement's record is worse than a failed job, so each
+    target is checked once before it is fuzzed.
+
+    **Any HTTP response counts as reachable**, including 404, 403, 500 and redirects: the
+    question is only whether something answered. A connection error, timeout or TLS
+    failure is "unreachable" — TLS verification is on, as it is for ffuf itself, so a
+    host ffuf would silently see nothing from fails here with a reason an operator can act
+    on. Cost: one GET per target, identified by its User-Agent. It does not close the
+    window between the probe and the fuzz, only the common case.
+    """
+    request = urllib.request.Request(
+        url, method="GET", headers={"User-Agent": "VardrRunner-reachability-probe"}
+    )
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(request, timeout=timeout):
+            return None
+    except urllib.error.HTTPError:
+        return None  # the server answered; the status is not our concern here
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        return f"{reason.__class__.__name__}: {reason}"
+    except (TimeoutError, OSError) as exc:
+        return f"{exc.__class__.__name__}: {exc}"
 
 
 def run_ffuf(

@@ -36,11 +36,12 @@ ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queu
   `results` array means "no matches" and succeeds, but an absent or broken report means the
   outcome is *unknown*, and reporting those identically would finish a broken run green while
   recording that the host has nothing on it. One malformed entry among good ones is skipped.
-- **Known limitation, not fixed here: an unreachable target looks like "nothing found".** ffuf
-  2.3.0 exits `0` and writes a valid empty report for a host that refuses the connection (with
-  `-s`, `-se` and `-sa` alike), so the handler cannot tell it from a genuine empty result. An
-  empty `run ffuf` result is therefore unconfirmed. Recorded as a strict `xfail` in the new
-  smoke test; documented in `docs/cli.md`.
+- **An unreachable target no longer looks like "nothing found".** ffuf 2.3.0 exits `0` and writes a valid
+  empty report for a host that refuses the connection (with `-s`, `-se` and `-sa` alike), so the
+  handler could not tell it from a genuine empty result. Each target is now probed with one GET before
+  it is fuzzed; if nothing answers the job fails with the reason and sends no fuzzing traffic. Any HTTP
+  response counts as reachable; connection errors, timeouts and TLS failures do not. Cost: one request
+  per target.
 - **Scheduled runs repeat active traffic.** A schedule queues an ordinary job, so `--rate`
   applies per execution, not across the engagement; an hourly schedule means active fuzzing
   every hour for as long as it exists.
