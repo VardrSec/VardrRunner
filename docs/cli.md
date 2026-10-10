@@ -339,6 +339,39 @@ under test; pasting those into a prompt would put target-controlled strings in t
 trusted position. The agent gathers what it needs with the read tools instead, where
 the result is already framed as untrusted data.
 
+**Prompts (the workflows you repeat on every engagement)**
+
+In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
+`engagement_id`, and asks you which engagement to use when you leave it blank.
+
+| Prompt | What it does |
+|--------|--------------|
+| `brief` | Where the engagement stands — scope, which tools have run, findings by severity, reports — and the three things to do next. Queues nothing. |
+| `triage` | Works through the findings inventory and judges each one: real or a bare template match, whether the severity holds, what evidence exists, and the smallest check that would confirm it. Optional `severity` narrows it. |
+| `untested` | Compares the declared scope and discovered surface against the jobs actually run, names the gaps, and proposes an ordered plan with `preview_job` target counts before anything is queued. |
+| `retest` | Verifies a fix landed: restates the issue, proposes a check, follows the job, and reports fixed / still present / inconclusive. Optional `finding_id`. |
+
+**What `retest` can and cannot do.** `queue_job` takes a target *source* (scope or recon),
+not a target, so this server cannot scope a job to the single asset a retest wants. The
+prompt says so and offers two honest routes: queue the narrowest available job while stating
+it is broader than the finding, or run `vardrrunner run <tool> --engagement <id> --target
+<asset>` locally, which does take one target. It judges the outcome from whether an
+equivalent finding returns in `list_findings` and from the job's events — there is no tool
+here that reads a job's scan results directly — and it will not infer which findings are due
+a retest, because remediation notes and retest history are not fields it can read.
+
+`brief` likewise leaves out two things an operator expects and this server cannot reach: the
+authorization record and its testing window (`get_engagement` returns the engagement's own
+fields and scope, not its authorizations), and the client deliverable and its revisions.
+`list_reports` reads the **per-finding** write-ups, not those deliverables.
+
+A prompt is **instructions only** — expanding one makes no API call and embeds no
+engagement data. Prompt text arrives as the most trusted content in the agent's
+context, and finding titles, recon URLs and scanner output all come from the targets
+under test; pasting those into a prompt would put target-controlled strings in that
+trusted position. The agent gathers what it needs with the read tools instead, where
+the result is already framed as untrusted data.
+
 **Not exposed, by design:** editing scope or authorization, stop-work, any delete, and
 member/API-key/settings management — do those in the UI. Withholding a scope-editing tool is
 the main guard against prompt injection: the agent reads target-controlled text (response
@@ -426,7 +459,8 @@ version, and moves it into place in one step. Anything that fails installs nothi
 | Tool | Managed | Notes |
 |---|---|---|
 | httpx, nuclei, subfinder, dnsx, katana | yes | |
-| gau | yes | `.tar.gz` on Linux/macOS, `.zip` on Windows; same single-file extraction |
+| gau, ffuf | yes | `.tar.gz` on Linux/macOS, `.zip` on Windows; same single-file extraction. ffuf also needs a [wordlist](#wordlists), which is not installed for you |
+| dalfox | yes | Binary sits one directory inside the archive, so the manifest records its path (`member`); extraction still copies exactly that one named entry |
 | naabu | yes | port scans also need libpcap (Linux/macOS) or [Npcap](https://npcap.com) (Windows) |
 | nmap | no | install with your OS installer or package manager |
 | vardrgate | no | install from the VardrGate repository |
@@ -454,6 +488,8 @@ vardrrunner run dnsx      --engagement <id> [options]
 vardrrunner run naabu     --engagement <id> [--top-ports N] [options]
 vardrrunner run katana    --engagement <id> [--depth N] [--js-crawl] [options]
 vardrrunner run gau       --engagement <id> [--no-subs] [--providers otx,wayback]
+vardrrunner run ffuf      --engagement <id> [--wordlist common] [--rate N] [options]
+vardrrunner run dalfox    --engagement <id> [--worker N] [--delay MS] [--no-mining]
 ```
 Executes the named tool, captures output into an atomically unique timestamp-prefixed run
 directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
@@ -471,7 +507,36 @@ directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
 - `run gau` — passive: asks public archives (Wayback Machine, Common Crawl, AlienVault
   OTX, urlscan) for URLs they have recorded under each wildcard scope domain, and
   uploads them as recon. Nothing is sent to the target itself.
-- katana and gau upload large results in pieces under VardrMap's 2 MiB import limit.
+- `run ffuf` — active content discovery: fuzzes each target's **site root** for hidden paths
+  and uploads the hits as recon. Targets collapse to roots first, so a recon table with
+  twenty URLs on one host fuzzes that host once, not twenty times. See
+  [Wordlists](#wordlists) — ffuf needs one, and a job names it rather than giving a path.
+- `run dalfox` — XSS scanning. Uploads **candidates**, not findings: the report goes up as
+  dalfox wrote it, and VardrMap stores each match as a scan item with `status: "new"`,
+  keeping dalfox's own tier (`vulnerable`/`reflected`/`ast`/`informational`), detection
+  method and confidence. Nothing in the runner re-grades a match or decides what is
+  confirmed. Give it URLs that carry parameters — recon is the useful source.
+- katana, gau, ffuf and dalfox upload large results in pieces under VardrMap's 2 MiB import limit.
+
+#### Wordlists
+
+ffuf reads wordlists from `~/.vardrmap/wordlists`, named without the extension:
+
+```bash
+mkdir -p ~/.vardrmap/wordlists
+cp /usr/share/seclists/Discovery/Web-Content/common.txt ~/.vardrmap/wordlists/common.txt
+ln -s /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt \
+      ~/.vardrmap/wordlists/api-paths.txt        # a symlink is fine
+vardrrunner run ffuf --engagement <id> --scope --wordlist api-paths
+```
+
+`--wordlist` and a queued job's `wordlist` take a **name** (lowercase letters, digits, `-`
+and `_`), never a path. The name is resolved against this one directory on the machine
+running the scan, so a job cannot name an arbitrary file for ffuf to read and replay at a
+target; a path, a traversal, or anything else path-shaped is refused at queue time and again
+before the subprocess starts. A missing or empty wordlist fails the job with a message naming
+the file it expected. No wordlists ship with VardrRunner — their licences and sizes are the
+operator's choice.
 
 ### Choosing targets
 Every `run` command except `subfinder` and `gau` takes one target source (`subfinder` and
@@ -485,7 +550,7 @@ Every `run` command except `subfinder` and `gau` takes one target source (`subfi
 | `--targets <path>` | A targets `.txt` file, one per line |
 
 With `--from-recon`, `--limit` caps how many recon items are pulled (default 100 for
-httpx/nuclei/katana, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
+httpx/nuclei/katana/ffuf/dalfox, 500 for nmap/dnsx/naabu) and `--status-code` filters them by HTTP status
 (httpx and nuclei only).
 
 All sources are treated as untrusted. Empty entries are removed and duplicates collapsed;
@@ -501,8 +566,93 @@ limited to 10 MiB. The same validation applies to backend data and pipeline hand
 | `run naabu` | `--top-ports N` (default 100) |
 | `run katana` | `--depth N` (1-10, default 3) · `--js-crawl` (also parse JavaScript for endpoints) |
 | `run gau` | `--subs/--no-subs` (default on) · `--providers` (any of `wayback,commoncrawl,otx,urlscan`; default all) |
+| `run ffuf` | `--wordlist <name>` (default `common`) · `--extensions .php,.bak` · `--match-codes 200,301,403` (default: ffuf's own) · `--rate N` (1–1000, default 50) |
+| `run dalfox` | `--worker N` (1–100, default 10; concurrent workers **per target**) · `--delay MS` (0–10000, per worker) · `--mining/--no-mining` (default on; discover extra parameters to test) |
 
 `--yes`/`-y` skips the confirmation prompt on any of them.
+
+**ffuf's request rate is always capped.** It is the one tool here that puts sustained load on
+a client's host, so `--rate` has a modest default and a ceiling of 1000, and there is no value
+that disables it. The rate applies per target. ffuf also always runs with auto-calibration
+(`-ac`): a host that answers every path with `200` would otherwise import thousands of
+phantom endpoints into the shared recon store. A non-zero exit on any one target fails the
+whole job rather than skipping that host, because a silent skip would report coverage the
+engagement does not actually have.
+
+**"Found nothing" and "outcome unknown" are different results.** A valid ffuf report with
+an empty `results` array means no matches, and the job succeeds. A report that is absent,
+unreadable or not the shape ffuf writes fails the job — otherwise a broken run would finish
+green while recording that this host has nothing on it. A single malformed *entry* inside an
+otherwise valid report is skipped instead, since the report parsed and one bad row should
+not discard a long scan.
+
+**`--limit` counts recon rows, not hosts.** Targets collapse to roots *after* the limit is
+applied, so 100 recon URLs that all live on one host consume the default limit and fuzz a
+single root. Raise `--limit`, or use `--scope`, when a recon table is dense on few hosts.
+
+**Each target is probed once before it is fuzzed, because ffuf cannot say it was unreachable.**
+Observed on ffuf 2.3.0: for a host that refuses the connection, ffuf exits `0` and writes a
+valid, empty report — with `-s`, `-se` and `-sa` alike — so neither the exit code nor the
+report can tell "there was nothing there" from "it could not look". The runner therefore sends
+**one GET per target first**; if nothing answers, the job **fails** with the reason and **no
+fuzzing traffic is sent**. Any HTTP answer counts as reachable, including `404`, `403`, `500`
+and redirects (a redirect is not followed, matching ffuf). Connection errors, timeouts and a
+failed TLS *handshake* count as unreachable. **An untrusted certificate does not**: pinned ffuf
+2.3.0 does not verify TLS, and was checked against the real binary on a self-signed, an expired
+and a hostname-mismatched certificate (it scanned all three), so the probe doesn't verify either
+and a self-signed staging host is probed and scanned like any other. The probe sends one GET with
+a fixed User-Agent and no credentials, cookies or body, which is what makes skipping verification
+acceptable. (An earlier revision verified TLS on an untested assumption and would have failed
+jobs on exactly those hosts.) A server too old or exotic for Python's TLS stack could still be
+probed as unreachable while ffuf's Go stack would reach it; none has been observed.
+
+The cost is one extra request per target, identified by `User-Agent: VardrRunner-reachability-probe`.
+It closes the common case, not the window between the probe and the fuzz: a host that answers
+and then drops during the run still yields whatever ffuf saw. Any one unreachable target fails
+the whole job, like a non-zero exit, because skipping it would report coverage that does not
+exist.
+
+**dalfox's load is bounded in two places, because its concurrency multiplies.** `--workers`
+is per target and dalfox scans several targets at once, so left at its own defaults (50 and
+50) a job could put ~2,500 requests in flight at a client's host. VardrRunner pins
+`--max-concurrent-targets` low and `--worker` caps the per-target half, making the ceiling
+`worker × 5`. `--include-all`, `--include-request` and `--include-response` are never
+passed: they attach a client's request and response bodies to every finding, which is not
+something to ship to the backend as a side effect of a scan.
+
+**dalfox's exit code carries information, so `run dalfox` does not treat every non-zero exit
+as a failure.** dalfox exits `0` when the scan completed and found nothing, `1` when it
+completed and reported findings, and `2` on an input, configuration or runtime error. `0` and
+`1` are both a completed scan; anything else fails the job. Every other tool keeps the stricter
+rule (only `0` succeeds). Treating `1` as an error, as this runner first did, failed the job
+at exactly the moment dalfox succeeded in finding something, and the findings were never
+uploaded. The exit codes were confirmed against dalfox 3.2.4, not only the documentation.
+
+The outcome is decided from the exit code **and** the report together, and a report file
+existing proves nothing:
+
+| Exit | Report | Result |
+|---|---|---|
+| `0` | readable, no findings | **success**, a valid empty result |
+| `1` | readable, with findings | **success**, uploaded as candidates |
+| `2` (or any other) | anything, including a valid empty report | **failure** |
+| `0` or `1` | absent, unreadable, not JSON, or no `findings` array | **failure** — outcome unknown |
+| `1` | readable, but **no** findings | **failure** — dalfox claims findings it never wrote down |
+| `0` | readable, but **with** findings | **failure** — the report contradicts the process |
+
+The `2` row matters most: dalfox writes a perfectly valid, empty report when the target is
+unreachable, so reading the file alone is indistinguishable from a clean scan. The last two
+rows fail rather than guess which of the process and the report is right.
+
+If dalfox flags its own scan as `incomplete`, the job summary says so: an incomplete scan that
+found nothing is not evidence that there is nothing to find.
+
+**These limits apply per execution, not across the engagement.** A job queued by a schedule
+is an ordinary job: each run is a fresh ffuf or dalfox process with its own full allowance,
+and nothing aggregates traffic across runs or across jobs that overlap. An hourly schedule
+therefore means active scanning traffic every hour, indefinitely, for as long as the schedule
+exists. ffuf's `--rate` and dalfox's `--worker`/`--delay` bound how hard one run pushes; they
+do not bound how often runs happen.
 
 ### Target classification and local deny rules
 
@@ -641,7 +791,7 @@ responsibility. They are also emitted as a `policy_warning` job event so the bac
 Terminal records them. Stop-work is the only policy condition that halts.
 
 Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`, `nmap`,
-`dnsx`, `naabu`, `katana`, `gau`) plus `vardrgate_api_test`, which runs a VardrGate API authorization
+`dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`) plus `vardrgate_api_test`, which runs a VardrGate API authorization
 test via the local `vardrgate` binary and uploads the result to the job. See
 [ADR 0006](adr/0006-vardrgate-api-test-handler.md).
 

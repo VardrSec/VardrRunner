@@ -77,7 +77,7 @@
           "title": "Improper Inventory Management",
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa9-improper-inventory-management/",
           "look_at": "Hosts, versions and operations nobody is tracking â€” old /v1 still live, staging reachable, undocumented endpoints. The engagement's own API surface and recon inventory are the evidence here.",
-          "suggests": ["subfinder", "httpx", "katana", "gau"],
+          "suggests": ["subfinder", "httpx", "katana", "gau", "ffuf"],
           "method": "tooling"
         },
         {
@@ -102,15 +102,15 @@
           "title": "Information Gathering",
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/01-Information_Gathering/",
           "look_at": "What exists and what it runs. This is the part of the guide the runner covers best: subdomains, live hosts, crawled endpoints, archived URLs, discovered paths.",
-          "suggests": ["subfinder", "dnsx", "httpx", "katana", "gau"],
+          "suggests": ["subfinder", "dnsx", "httpx", "katana", "gau", "ffuf"],
           "method": "tooling"
         },
         {
           "id": "4.2",
           "title": "Configuration and Deployment Management Testing",
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/",
-          "look_at": "Exposed admin interfaces, old files, directory listings, HTTP methods, platform defaults. Port and service discovery plus template matching cover a good share of this.",
-          "suggests": ["nmap", "naabu", "httpx", "nuclei"],
+          "look_at": "Exposed admin interfaces, old files, directory listings, HTTP methods, platform defaults. Port and service discovery, template matching and content discovery cover a good share of this.",
+          "suggests": ["nmap", "naabu", "httpx", "nuclei", "ffuf"],
           "method": "tooling"
         },
         {
@@ -149,8 +149,8 @@
           "id": "4.7",
           "title": "Input Validation Testing",
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/07-Input_Validation_Testing/",
-          "look_at": "Injection of every kind, plus XSS. nuclei matches known patterns; anything beyond that is manual until a dedicated fuzzer is wired in.",
-          "suggests": ["nuclei"],
+          "look_at": "Injection of every kind, plus XSS. nuclei matches known patterns and dalfox tests parameters for XSS; both report candidates, not confirmed issues. Every other injection class, and anything beyond known patterns, is manual.",
+          "suggests": ["nuclei", "dalfox"],
           "method": "tooling"
         },
         {

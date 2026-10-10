@@ -1,6 +1,41 @@
 {
   "schema_version": 1,
   "tools": {
+    "dalfox": {
+      "binary": "dalfox",
+      "platforms": {
+        "linux-amd64": {
+          "member": "dalfox-v3.2.4-linux-x86_64/dalfox",
+          "sha256": "aaef3f3d26d2de6d4e61ef5295151d9de36e111981618136ac7ec54b578582b8",
+          "url": "https://github.com/hahwul/dalfox/releases/download/v3.2.4/dalfox-v3.2.4-linux-x86_64.tar.gz"
+        },
+        "linux-arm64": {
+          "member": "dalfox-v3.2.4-linux-aarch64/dalfox",
+          "sha256": "5c65627fd82b987eddf1296cf97b7862a401a364a05cf7262e59c9e5b5407d60",
+          "url": "https://github.com/hahwul/dalfox/releases/download/v3.2.4/dalfox-v3.2.4-linux-aarch64.tar.gz"
+        },
+        "macos-amd64": {
+          "member": "dalfox-v3.2.4-macos-x86_64/dalfox",
+          "sha256": "e10916b975ab6e3c8845ec689351372979085098db5cdc5c85bec537d5711731",
+          "url": "https://github.com/hahwul/dalfox/releases/download/v3.2.4/dalfox-v3.2.4-macos-x86_64.tar.gz"
+        },
+        "macos-arm64": {
+          "member": "dalfox-v3.2.4-macos-aarch64/dalfox",
+          "sha256": "e03a0b7ba7617c4b17b4467eba760289a3ed689d0363119bde466152ffbecab0",
+          "url": "https://github.com/hahwul/dalfox/releases/download/v3.2.4/dalfox-v3.2.4-macos-aarch64.tar.gz"
+        },
+        "windows-amd64": {
+          "member": "dalfox-v3.2.4-windows-x86_64/dalfox.exe",
+          "sha256": "28100d9355a1c767facd571a180d08b87d4de61167b3db99d56e4d8a6601d69a",
+          "url": "https://github.com/hahwul/dalfox/releases/download/v3.2.4/dalfox-v3.2.4-windows-x86_64.zip"
+        }
+      },
+      "source": "https://github.com/hahwul/dalfox/releases/tag/v3.2.4",
+      "version": "3.2.4",
+      "version_args": [
+        "--version"
+      ]
+    },
     "dnsx": {
       "binary": "dnsx",
       "platforms": {

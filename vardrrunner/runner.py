@@ -36,6 +36,7 @@ ALLOWED_TOOLS = {
     "katana": "katana",
     "gau": "gau",
     "ffuf": "ffuf",
+    "dalfox": "dalfox",
     # Job type "vardrgate_api_test" maps to the "vardrgate" binary on PATH.
     "vardrgate_api_test": "vardrgate",
 }
@@ -44,6 +45,23 @@ ALLOWED_TOOLS = {
 # daemon forever — the run is killed and the job marked failed. Override per run
 # (job config `timeout`) or globally via the VARDRRUNNER_TOOL_TIMEOUT env var.
 DEFAULT_TOOL_TIMEOUT = 1800  # 30 minutes
+
+# dalfox's `--workers` is per target and it scans several targets at once, so the
+# two multiply. Left at its defaults (50 and 50) a job could put 2,500 requests
+# in flight at a client's host. Pinning the target half low keeps the operator's
+# `worker` setting meaningful: the ceiling is `worker * this`.
+DALFOX_MAX_CONCURRENT_TARGETS = 5
+
+# dalfox's documented exit codes: 0 = scan completed, nothing found; 1 = scan
+# completed, findings reported; 2 = input / configuration / runtime error (which
+# also covers a run that could not finish cleanly). Only 0 and 1 are a completed
+# scan. Observed on dalfox 3.2.4, not just read from the documentation: 0 on a page
+# that reflects nothing, 1 on a reflected-XSS page, 2 on an unreachable target — which
+# still writes a valid, empty report, so the report alone can never decide success.
+# tests/test_smoke_dalfox.py (opt-in) pins all three against the real binary.
+DALFOX_EXIT_CLEAN = 0
+DALFOX_EXIT_FINDINGS = 1
+DALFOX_OK_EXIT_CODES = (DALFOX_EXIT_CLEAN, DALFOX_EXIT_FINDINGS)
 _SENSITIVE_TEMP_PREFIX = "vardrrunner-vardrgate-"
 
 
@@ -249,6 +267,26 @@ def _run_tool(cmd: list[str], temp_file: str | None, tool: str, timeout: int | N
     Raises ToolTimeout (after killing the process) if the run exceeds the limit.
     Raises ToolError on any non-zero exit code — callers must not treat failure as success.
     """
+    _run_tool_status(cmd, temp_file, tool, timeout)
+
+
+def _run_tool_status(
+    cmd: list[str],
+    temp_file: str | None,
+    tool: str,
+    timeout: int | None,
+    ok_codes: tuple[int, ...] = (0,),
+) -> int:
+    """Run an allowlisted command and return its exit code, which must be in ``ok_codes``.
+
+    ``_run_tool`` is this with ``ok_codes=(0,)``. A tool that uses its exit code to
+    *report* something rather than only to signal failure needs more than 0 here —
+    dalfox exits 1 for "scan succeeded, findings reported" — and the caller then
+    reads the returned code. Any code outside ``ok_codes`` raises ToolError, so an
+    unlisted code can never be mistaken for success.
+
+    Raises ToolTimeout (after killing the process) if the run exceeds the limit.
+    """
     seconds = _resolve_timeout(timeout)
     observer = _PROCESS_OBSERVER.get()
     try:
@@ -271,8 +309,9 @@ def _run_tool(cmd: list[str], temp_file: str | None, tool: str, timeout: int | N
     finally:
         if temp_file:
             Path(temp_file).unlink(missing_ok=True)
-    if returncode != 0:
+    if returncode not in ok_codes:
         raise ToolError(f"{tool} exited with code {returncode}")
+    return returncode
 
 
 def _executable(name: str) -> str | None:
@@ -301,6 +340,7 @@ _VERSION_ARGS: dict[str, list[str]] = {
     "katana": ["-version"],
     "gau": ["--version"],
     "ffuf": ["-V"],
+    "dalfox": ["--version"],
     "nmap": ["--version"],
 }
 
@@ -787,6 +827,69 @@ def run_gau(
         cmd += ["--providers", ",".join(providers)]
     cmd += ["--", *domains]
     return _run_tool(cmd, None, "gau", timeout)
+
+
+def run_dalfox(
+    targets: list[str],
+    output_path: Path,
+    worker: int = 10,
+    delay: int = 0,
+    mining: bool = True,
+    timeout: int | None = None,
+) -> int:
+    """Scan a list of URLs for XSS with dalfox. Output is its JSON report.
+
+    **Returns dalfox's exit code, which carries information.** dalfox documents
+    ``0`` as "success, no findings", ``1`` as "success, findings reported" and
+    ``2`` as an input, configuration or runtime error. So ``0`` and ``1`` are both
+    a completed scan and are returned for the caller to reconcile against the
+    report; anything else — ``2`` included — raises ``ToolError``. Treating every
+    non-zero exit as failure, as every other tool here rightly does, would fail a
+    job exactly when dalfox succeeds in finding something.
+
+    The exit code alone proves nothing about the report, and the report alone
+    proves nothing about the exit code: ``DalfoxHandler.execute`` requires them to
+    agree.
+
+    Load is bounded in two places, because ``--workers`` is per *target* and
+    dalfox scans several targets at once: left at its defaults (50 workers, 50
+    concurrent targets) a job could have 2,500 requests in flight at a client's
+    host. ``--max-concurrent-targets`` is therefore pinned low and the operator's
+    ``worker`` setting caps the per-target half, so the ceiling is
+    ``worker * MAX_CONCURRENT_TARGETS``. ``--delay`` (milliseconds, per worker)
+    spaces requests out further.
+
+    ``--include-all`` is deliberately never passed. It attaches the full request
+    and response to every finding, and a response body from a client's
+    application is not something to ship to the backend as a side effect of a
+    scan. The report still carries the payload and the reflected evidence.
+    """
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
+        tmp.write("\n".join(targets))
+        targets_file = tmp.name
+
+    cmd = [
+        program("dalfox"),
+        "scan",
+        "--input-type",
+        "file",
+        targets_file,
+        "--format",
+        "json",
+        "--output",
+        str(output_path),
+        "--workers",
+        str(worker),
+        "--max-concurrent-targets",
+        str(DALFOX_MAX_CONCURRENT_TARGETS),
+        "--delay",
+        str(delay),
+        "--silence",
+        "--no-color",
+    ]
+    if not mining:
+        cmd.append("--skip-mining")
+    return _run_tool_status(cmd, targets_file, "dalfox", timeout, ok_codes=DALFOX_OK_EXIT_CODES)
 
 
 def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> None:

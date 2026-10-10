@@ -508,7 +508,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         """Queue one scan job. A local VardrRunner picks it up and runs the tool.
 
         tool_type is one of: httpx, subfinder, nuclei, nmap, dnsx, naabu, katana, gau,
-        vardrgate_api_test. target_source is "scope" or "recon". Any scope/window/
+        ffuf, dalfox, vardrgate_api_test. target_source is "scope" or "recon". Any scope/window/
         authorization concerns ride back in a `warnings` array; the job still queues.
         """
         body = {"tool_type": tool_type, "target_source": target_source, "config": config or {}}

@@ -771,6 +771,48 @@ def run_ffuf(
     )
 
 
+@run_app.command("dalfox")
+def run_dalfox(
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
+    scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
+    from_recon: bool = typer.Option(
+        False, "--from-recon", help="Use live recon items from VardrMap"
+    ),
+    target: str | None = typer.Option(None, "--target", help="Single inline target URL"),
+    targets_file: Path | None = typer.Option(None, "--targets", help="Path to a targets .txt file"),
+    limit: int = typer.Option(100, "--limit", help="Max recon items to use (--from-recon only)"),
+    worker: int = typer.Option(
+        10, "--worker", min=1, max=100, help="Concurrent workers per target"
+    ),
+    delay: int = typer.Option(
+        0, "--delay", min=0, max=10_000, help="Milliseconds between requests, per worker"
+    ),
+    mining: bool = typer.Option(
+        True, "--mining/--no-mining", help="Discover extra parameters to test"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
+    ),
+):
+    """Scan URLs for XSS with dalfox and upload the candidates to VardrMap."""
+    run.run_dalfox(
+        engagement_id=engagement_id,
+        scope=scope,
+        from_recon=from_recon,
+        target=target,
+        targets_file=targets_file,
+        limit=limit,
+        worker=worker,
+        delay=delay,
+        mining=mining,
+        yes=yes,
+        max_targets=max_targets,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Pipeline
 # --------------------------------------------------------------------------- #

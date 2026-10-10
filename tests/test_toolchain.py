@@ -91,6 +91,7 @@ def test_shipped_manifest_is_valid_and_complete():
         "katana",
         "gau",
         "ffuf",
+        "dalfox",
     }
     for entry in data["tools"].values():
         assert set(entry["platforms"]) == {

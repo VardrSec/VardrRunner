@@ -39,13 +39,22 @@ MANIFEST = ROOT / "vardrrunner" / toolchain.MANIFEST_RESOURCE
 
 @dataclass(frozen=True)
 class Source:
-    """Where a tool is released and how its archives are named."""
+    """Where a tool is released, how its archives are named, and how it attests them."""
 
     repo: str
     # Manifest platform key → (OS, arch, archive suffix) as spelled in asset names.
     platforms: dict[str, tuple[str, str, str]]
     # The binary's own version flag, when it is not ``-version``.
     version_args: tuple[str, ...] = ()
+    # Asset filename pattern. ProjectDiscovery and GoReleaser agree on this one;
+    # dalfox does not, so it is a template rather than a hard-coded f-string.
+    asset_template: str = "{tool}_{version}_{os}_{arch}{suffix}"
+    # How upstream publishes the digests we cross-check against. "release-file"
+    # is a single ``*checksums.txt`` covering every asset. "per-asset" is a
+    # sibling ``<asset>.sha256`` next to each archive, which is what dalfox ships
+    # — its own ``checksum.txt`` covers only the source tarballs, so using that
+    # would attest the wrong files.
+    checksums: str = "release-file"
 
 
 # ProjectDiscovery: `{tool}_{version}_{os}_{arch}.zip`, with macOS spelled "macOS".
@@ -70,6 +79,14 @@ _FFUF = {
     "macos-amd64": ("macOS", "amd64", ".tar.gz"),
     "macos-arm64": ("macOS", "arm64", ".tar.gz"),
 }
+# dalfox (Rust): "macos", GNU-triple architectures, tar.gz except on Windows.
+_DALFOX = {
+    "windows-amd64": ("windows", "x86_64", ".zip"),
+    "linux-amd64": ("linux", "x86_64", ".tar.gz"),
+    "linux-arm64": ("linux", "aarch64", ".tar.gz"),
+    "macos-amd64": ("macos", "x86_64", ".tar.gz"),
+    "macos-arm64": ("macos", "aarch64", ".tar.gz"),
+}
 
 # Binary name is the tool name for every current entry.
 SOURCES: dict[str, Source] = {
@@ -81,6 +98,13 @@ SOURCES: dict[str, Source] = {
     "katana": Source("projectdiscovery/katana", _PD),
     "gau": Source("lc/gau", _GORELEASER, version_args=("--version",)),
     "ffuf": Source("ffuf/ffuf", _FFUF, version_args=("-V",)),
+    "dalfox": Source(
+        "hahwul/dalfox",
+        _DALFOX,
+        version_args=("--version",),
+        asset_template="{tool}-v{version}-{os}-{arch}{suffix}",
+        checksums="per-asset",
+    ),
 }
 
 
@@ -94,6 +118,16 @@ def _github(path: str) -> Any:
     return response.json()
 
 
+def _parse_sums(text: str) -> dict[str, str]:
+    """Parse ``sha256  filename`` lines into {asset name: sha256}."""
+    sums: dict[str, str] = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and re.fullmatch(r"[0-9a-f]{64}", parts[0]):
+            sums[parts[1].lstrip("*")] = parts[0]
+    return sums
+
+
 def _upstream_checksums(assets: list[dict[str, Any]], workdir: Path) -> dict[str, str]:
     """Parse the release's own ``*checksums.txt`` into {asset name: sha256}."""
     listing = [a for a in assets if a["name"].endswith("checksums.txt")]
@@ -101,12 +135,38 @@ def _upstream_checksums(assets: list[dict[str, Any]], workdir: Path) -> dict[str
         raise SystemExit("expected exactly one checksums file in the release")
     path = workdir / "checksums.txt"
     api.download_asset(listing[0]["browser_download_url"], path, max_bytes=1024 * 1024)
-    sums: dict[str, str] = {}
-    for line in path.read_text("utf-8").splitlines():
-        parts = line.split()
-        if len(parts) == 2 and re.fullmatch(r"[0-9a-f]{64}", parts[0]):
-            sums[parts[1].lstrip("*")] = parts[0]
-    return sums
+    return _parse_sums(path.read_text("utf-8"))
+
+
+def _sibling_checksum(assets: list[dict[str, Any]], wanted: str, workdir: Path) -> str:
+    """The digest from ``<wanted>.sha256``, the sibling file published beside an asset.
+
+    Required rather than optional: an archive whose digest upstream never
+    published cannot be cross-checked, and pinning it on our own hash alone
+    would attest nothing.
+
+    The layout is not consistent even within one release — dalfox's Unix files
+    are ``sha256sum`` output while its Windows one is ``certutil -hashfile``
+    prose — so the digest is located by shape rather than by position. Two
+    conditions keep that strict: the file must contain exactly one distinct
+    SHA-256, and it must name the asset it is attesting, so a digest cannot be
+    read out of a file published for some other archive.
+    """
+    name = f"{wanted}.sha256"
+    match = [a for a in assets if a["name"] == name]
+    if not match:
+        raise SystemExit(f"{wanted}: upstream publishes no {name} to cross-check against")
+    path = workdir / name
+    api.download_asset(match[0]["browser_download_url"], path, max_bytes=1024 * 1024)
+    text = path.read_text("utf-8", errors="replace")
+    digests = {d.lower() for d in re.findall(r"\b[0-9a-fA-F]{64}\b", text)}
+    if len(digests) != 1:
+        raise SystemExit(
+            f"{name} contains {len(digests)} distinct SHA-256 values; expected exactly one"
+        )
+    if wanted not in text:
+        raise SystemExit(f"{name} does not name {wanted}, so its digest attests something else")
+    return digests.pop()
 
 
 def _members(archive: Path) -> list[str]:
@@ -125,9 +185,12 @@ def pin(tool: str, version: str) -> dict[str, Any]:
     platforms: dict[str, dict[str, str]] = {}
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
-        upstream = _upstream_checksums(assets, workdir)
+        per_asset = source.checksums == "per-asset"
+        upstream = {} if per_asset else _upstream_checksums(assets, workdir)
         for key, (os_name, arch, suffix) in source.platforms.items():
-            wanted = f"{tool}_{version}_{os_name}_{arch}{suffix}"
+            wanted = source.asset_template.format(
+                tool=tool, version=version, os=os_name, arch=arch, suffix=suffix
+            )
             match = [a for a in assets if a["name"] == wanted]
             if not match:
                 print(f"  {tool} {version}: no {key} build ({wanted}); skipping")
@@ -137,13 +200,26 @@ def pin(tool: str, version: str) -> dict[str, Any]:
                 match[0]["browser_download_url"], archive, max_bytes=toolchain.MAX_ARCHIVE_BYTES
             )
             digest, _ = manifests.artifact_digest(archive)
-            if upstream.get(wanted) != digest:
-                raise SystemExit(f"{wanted}: local hash does not match the upstream checksums file")
+            expected = (
+                _sibling_checksum(assets, wanted, workdir) if per_asset else upstream.get(wanted)
+            )
+            if expected != digest:
+                raise SystemExit(
+                    f"{wanted}: local hash does not match the digest upstream published"
+                )
             member = f"{tool}.exe" if key.startswith("windows-") else tool
-            if member not in _members(archive):
-                raise SystemExit(f"{wanted} does not contain {member}")
+            # Most tools put the binary at the archive root; dalfox nests it one
+            # directory down. Record where it actually is, so the installer can
+            # keep extracting one exactly-named entry rather than guessing.
+            found = [m for m in _members(archive) if m.split("/")[-1] == member]
+            if len(found) != 1:
+                raise SystemExit(
+                    f"{wanted} contains {len(found)} entries named {member}; expected exactly one"
+                )
             platforms[key] = {"url": match[0]["browser_download_url"], "sha256": digest}
-            print(f"  {tool} {version} {key}: {digest}")
+            if found[0] != member:
+                platforms[key]["member"] = found[0]
+            print(f"  {tool} {version} {key}: {digest} ({found[0]})")
     entry: dict[str, Any] = {
         "version": version,
         "binary": tool,

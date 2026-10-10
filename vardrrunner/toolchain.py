@@ -54,6 +54,8 @@ _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 # path or whitespace can pass, which is the point of the check.
 _FLAG = re.compile(r"^-{1,2}[A-Za-z][A-Za-z-]*$")
 _ARCHIVE_SUFFIXES = (".zip", ".tar.gz")
+# A path inside an archive: relative, forward slashes, no drive, no climbing.
+_MEMBER = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._-]*(?:/[A-Za-z0-9._][A-Za-z0-9._-]*)*$")
 
 
 class ToolchainError(RuntimeError):
@@ -128,7 +130,32 @@ def validate_manifest(data: Any) -> dict[str, Any]:
                 raise ToolchainError(f"{name} {key}: asset must be a .zip or .tar.gz archive")
             if not isinstance(digest, str) or not _HEX64.match(digest):
                 raise ToolchainError(f"{name} {key}: asset sha256 is not a SHA-256 hex digest")
+            _validate_member(name, key, entry["binary"], asset)
     return data
+
+
+def _validate_member(name: str, key: str, binary: str, asset: dict[str, Any]) -> None:
+    """Check an asset's optional ``member``: where the binary sits in the archive.
+
+    Most tools ship the binary at the archive root, which is the default. dalfox
+    nests it one directory down, so the path is recorded in the manifest rather
+    than discovered at install time — extraction stays "copy exactly this named
+    entry", which is what makes traversal names elsewhere in the archive inert.
+
+    The path must be relative, must use forward slashes, must not climb, and
+    must end in the binary this entry installs, so a ``member`` cannot redirect
+    the install to some other file that happens to be in the archive.
+    """
+    member = asset.get("member")
+    if member is None:
+        return
+    expected = _member_name(binary, key)
+    if not isinstance(member, str) or not member or not _MEMBER.match(member):
+        raise ToolchainError(f"{name} {key}: member must be a relative path inside the archive")
+    if ".." in member.split("/") or member.startswith("/"):
+        raise ToolchainError(f"{name} {key}: member must not climb out of the archive")
+    if member.split("/")[-1] != expected:
+        raise ToolchainError(f"{name} {key}: member must end in {expected}")
 
 
 def manageable(name: str) -> bool:
@@ -224,8 +251,13 @@ def install(name: str, *, force: bool = False) -> InstallResult:
         raise ToolchainError(f"no pinned {name} build for this platform ({key})")
 
     version = entry["version"]
-    member = _member_name(entry["binary"], key)
-    target = config.tools_dir() / member
+    # Two different things: `filename` is what we install as, always the bare
+    # binary name, so the receipt and `resolve()` stay simple. `archive_member`
+    # is where it sits inside the archive, which for a nested layout (dalfox) is
+    # one directory down.
+    filename = _member_name(entry["binary"], key)
+    archive_member = str(asset.get("member") or filename)
+    target = config.tools_dir() / filename
 
     lock = _read_lock()
     current = lock.get(name)
@@ -249,8 +281,8 @@ def install(name: str, *, force: bool = False) -> InstallResult:
                 "nothing was installed"
             )
 
-        staged = staging / member
-        _extract_member(archive, member, staged)
+        staged = staging / filename
+        _extract_member(archive, archive_member, staged)
         _make_executable(staged)
         _check_version(staged, name, version, entry.get("version_args", ["-version"]))
         binary_sha = _sha256(staged)
@@ -265,7 +297,7 @@ def install(name: str, *, force: bool = False) -> InstallResult:
         lock[name] = {
             "version": version,
             "platform": key,
-            "binary": member,
+            "binary": filename,
             "asset_sha256": archive_sha,
             "binary_sha256": binary_sha,
             "installed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

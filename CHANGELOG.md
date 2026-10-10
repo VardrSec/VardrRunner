@@ -7,6 +7,65 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.46.0] — 2026-10-09
+
+dalfox XSS scanning. **Pairs with VardrMap v0.41.0**, which adds the job type and importer. See
+[`changelog/v0.46.0.md`](changelog/v0.46.0.md).
+
+### Added
+
+- **`vardrrunner run dalfox`** and the `dalfox` job type. Uploads dalfox's report as the tool
+  wrote it, so its tier, detection method and confidence reach VardrMap intact — nothing here
+  re-grades a match or decides what is confirmed, and the summary says "XSS candidate(s)".
+  Options: `--worker` (1–100, per target), `--delay` (0–10000 ms, per worker),
+  `--mining/--no-mining`.
+- `dalfox` pinned at **3.2.4** for all five platforms.
+- **The MCP server knows about ffuf and dalfox.** `queue_job` lists both job types, and the
+  methodology checklists suggest them: ffuf for API9 and WSTG 4.1/4.2 (content discovery), dalfox
+  for WSTG 4.7 (XSS). A suggestion says which job type can produce evidence of a *candidate*; it
+  is not coverage, and the 4.7 item still names every other injection class as manual.
+
+### Changed
+
+- **dalfox's load is bounded in two places.** `--workers` is per target and dalfox scans
+  several targets at once, so left at its defaults a job could put ~2,500 requests in flight at
+  a client's host. `--max-concurrent-targets` is pinned low and `--worker` caps the per-target
+  half, making the ceiling `worker × 5`. `--include-all`/`--include-request`/
+  `--include-response` are never passed: they attach a client's request and response bodies to
+  every finding.
+- **dalfox's exit code is read as information, not just pass/fail.** dalfox exits `0` (completed,
+  nothing found), `1` (completed, findings reported) or `2` (error). `0` and `1` are both a
+  completed scan; anything else fails the job. The first version of this change failed every
+  job in which dalfox *found* something, because it treated any non-zero exit as a failure —
+  missed by 1165 tests since they mock the subprocess, and caught by running the real binary.
+  Every other tool keeps the stricter rule. **Behaviour change** relative to the first revision of
+  this PR (never merged or released): jobs in which dalfox found XSS used to fail and now succeed.
+- **The outcome comes from the exit code and the report together; a report existing proves
+  nothing.** An unreachable target makes dalfox exit `2` while writing a valid, empty report,
+  which reads identically to a clean scan. An absent, empty, corrupt or wrong-shaped report fails
+  the job; exit `1` with no findings, or exit `0` with findings, also fails rather than guess
+  which of the two is right. A scan dalfox flags as `incomplete` still says so in the job
+  summary.
+- **Scheduled runs repeat active traffic.** A schedule queues an ordinary job, so `--worker`/
+  `--delay` (and ffuf's `--rate`) apply per execution, not across the engagement: nothing
+  aggregates traffic across runs or overlapping jobs, and an hourly schedule means active
+  scanning every hour for as long as it exists.
+
+### Testing
+
+- **Opt-in smoke test against the real dalfox** (`VARDRRUNNER_SMOKE=1`; skips otherwise and
+  when the binary is absent). Local fixture on `127.0.0.1` only, bounded traffic and runtime,
+  asserting real argv acceptance, exit behaviour and output parsing. A mutation re-introducing
+  the original exit-code handling makes it fail.
+- **The installer handles an archive that nests its binary.** An asset may record a `member`
+  (the binary's path inside the archive); extraction still copies exactly that one named entry,
+  and the path must be relative, non-climbing and end in the binary that entry installs, so it
+  cannot redirect an install. `install()` separates the archive path from the installed name.
+- **`pin_tools.py` supports per-asset checksums and a per-source asset template.** dalfox's own
+  `checksum.txt` covers only its source tarballs, so the sibling `<asset>.sha256` is used
+  instead; its format differs between Unix and Windows within one release, so the digest is
+  located by shape, requiring exactly one SHA-256 in a file that names the asset it attests.
+
 ## [0.45.0] — 2026-10-09
 
 MCP phase 6 — versioned methodology checklists, with coverage kept out of the data. See
@@ -84,6 +143,59 @@ MCP phases 4/5 — the engagement reads the prompts were missing, and case/repor
   the client. The server drafts and reads in both areas and stops where a human has to commit.
   See [ADR 0015 § Amendment (v0.44.0)](docs/adr/0015-mcp-server.md).
 
+## [0.43.0] — 2026-10-09
+
+ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queueable. See
+[`changelog/v0.43.0.md`](changelog/v0.43.0.md).
+
+### Added
+
+- **`vardrrunner run ffuf`** and the `ffuf` job type. Fuzzes each target's site root for hidden
+  paths and uploads the hits as recon. Targets collapse to unique roots first, so twenty recon
+  URLs on one host fuzz it once. Options: `--wordlist <name>`, `--extensions`, `--match-codes`,
+  `--rate`.
+- **Wordlists live in `~/.vardrmap/wordlists` and are named, never pathed.** A job sends a name
+  (`common`), which the runner resolves on the machine doing the scanning; a path or traversal is
+  refused at parse time and again before the subprocess starts. Were a path accepted, the backend
+  could name any readable file for ffuf to read and replay at a target. A symlink inside the
+  directory is honoured. No wordlists ship with VardrRunner.
+- `ffuf` pinned at **2.3.0** for all five platforms via `scripts/pin_tools.py`, so
+  `tools install ffuf` gets a hash-verified binary.
+
+### Changed
+
+- **ffuf always runs rate-limited and auto-calibrated.** `-rate` has a default of 50/s, a ceiling
+  of 1000 and no way to disable it — this is the one tool here that puts sustained load on a
+  client's host. `-ac` is always on, so a host answering every path with `200` cannot import
+  thousands of phantom endpoints into shared recon. A non-zero exit on any one target fails the
+  job rather than skipping that host, and so does a report that cannot be read: a valid empty
+  `results` array means "no matches" and succeeds, but an absent or broken report means the
+  outcome is *unknown*, and reporting those identically would finish a broken run green while
+  recording that the host has nothing on it. One malformed entry among good ones is skipped.
+- **An unreachable target no longer looks like "nothing found".** ffuf 2.3.0 exits `0` and writes a valid
+  empty report for a host that refuses the connection (with `-s`, `-se` and `-sa` alike), so the
+  handler could not tell it from a genuine empty result. Each target is now probed with one GET before
+  it is fuzzed; if nothing answers the job fails with the reason and sends no fuzzing traffic. Any HTTP
+  response counts as reachable; connection errors, timeouts and a failed TLS handshake do not, but an untrusted certificate is fine, because pinned ffuf does not verify TLS. Cost: one request
+  per target.
+- **Scheduled runs repeat active traffic.** A schedule queues an ordinary job, so `--rate`
+  applies per execution, not across the engagement; an hourly schedule means active fuzzing
+  every hour for as long as it exists.
+- **Opt-in smoke test against the real ffuf** (`VARDRRUNNER_SMOKE=1`; skips otherwise and when
+  the binary is absent): loopback fixture only, bounded traffic and runtime.
+- **ffuf config types match VardrMap's validator exactly.** `match_codes` takes a bare status
+  code as well as a string or list; `extensions` takes only strings and lists. A type one side
+  accepts and the other refuses either cannot be queued or clears queue-time validation and then
+  fails locally. Both repos carry the same table so the pair cannot drift.
+- `toolchain` accepts an uppercase `version_args` flag (ffuf's is `-V`); the check still admits
+  nothing but a bare flag.
+
+### Fixed
+
+- **`runner.base_url` no longer turns a non-web recon entry into a target.** A `mailto:` or
+  `javascript:` entry parsed as userinfo plus a host once `https://` was prefixed, and a URL
+  carrying credentials would have had them replayed at the target. Both are dropped. ffuf is the
+  first caller, so nothing shipped affected.
 ## [0.42.0] — 2026-10-09
 
 Four MCP prompts for the workflows every engagement repeats. See
