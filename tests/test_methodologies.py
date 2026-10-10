@@ -174,7 +174,9 @@ def test_bad_methodology_entries_are_refused(overrides, match):
         ({"method": None}, "method must be one of"),
         ({"suggests": "httpx"}, "must be a list"),
         ({"suggests": [3]}, "must be a list"),
-        ({"suggests": ["dalfox"]}, "unknown job type"),
+        # Deliberately not a real tool. This used to name a genuine one that was
+        # merely unreleased, so it failed the moment that tool shipped.
+        ({"suggests": ["not-a-real-tool"]}, "unknown job type"),
     ],
 )
 def test_bad_items_are_refused(item, match):
