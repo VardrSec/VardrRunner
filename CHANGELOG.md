@@ -7,6 +7,44 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.44.0] — 2026-10-09
+
+MCP phases 4/5 — the engagement reads the prompts were missing, and case/report drafting. See
+[`changelog/v0.44.0.md`](changelog/v0.44.0.md).
+
+### Added
+
+- **Four read tools**: `list_authorizations` (authorization records and testing windows; it
+  pages like the others, and raises rather than returning an empty inventory when the response
+  is not the shape it expects — "unknown" must not be read as "this engagement has no
+  authorization"),
+  `get_finding_activity` (a finding's revisions, remediation updates and completed retests),
+  `list_deliverables` and `get_deliverable_revision` (the client-facing documents and their
+  immutable revisions).
+- **`draft_test_cases`** — drafts VardrGate authorization cases from observed API operations or
+  an OpenAPI 3.x document. Exactly one source. Marked read-only: it is VardrMap's
+  `test-cases/preview` and stores and queues nothing.
+- **`draft_report`** — drafts a per-finding write-up as a guarded write. It takes no `status`
+  argument and always posts `draft`, so an agent cannot mark one final or delivered.
+
+### Changed
+
+- **`brief` and `retest` now use the tools they were missing.** `brief` reads the authorization
+  from `list_authorizations` rather than asking `get_engagement` for a field it does not return,
+  and keeps `list_reports` (per-finding write-ups) distinct from `list_deliverables`. `retest`
+  reads `get_finding_activity` to see whether a retest already happened and what it concluded,
+  instead of guessing from a status that never meant "remediated". `triage` can now hand a
+  confirmed finding to `draft_report`.
+
+### Deliberately absent
+
+- **Saving a VardrGate test case and writing a client deliverable.** Both exist in VardrMap and
+  neither gets a tool, for a different reason from the scope/auth/delete set: they are
+  assertions only a person can honestly make. Saving a case declares a human reviewed it, which
+  is the whole purpose of `--reviewed`; a deliverable revision is immutable and is what reaches
+  the client. The server drafts and reads in both areas and stops where a human has to commit.
+  See [ADR 0015 § Amendment (v0.44.0)](docs/adr/0015-mcp-server.md).
+
 ## [0.43.0] — 2026-10-09
 
 ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queueable. See

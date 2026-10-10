@@ -46,10 +46,27 @@ EXPECTED = {
     "list_jobs",
     "get_job_events",
     "list_reports",
+    "list_authorizations",
+    "list_deliverables",
+    "get_deliverable_revision",
+    "get_finding_activity",
     "preview_job",
+    "draft_test_cases",
     "queue_job",
     "queue_pipeline",
     "create_finding",
+    "draft_report",
+}
+# Writes that exist in VardrMap and are withheld on purpose. The scope/auth/delete
+# set above is withheld so an agent cannot widen what it may test or erase work;
+# these two are withheld because they are assertions only a person can make.
+FORBIDDEN_ASSERTIONS = {
+    "save_test_cases",
+    "save_reviewed_cases",
+    "create_test_case",
+    "create_deliverable",
+    "create_deliverable_revision",
+    "update_deliverable",
 }
 EXPECTED_PROMPTS = {"brief", "triage", "untested", "retest"}
 
@@ -98,6 +115,17 @@ def test_exposes_exactly_the_expected_tools():
     assert not (set(tools) & FORBIDDEN)
 
 
+def test_no_tool_makes_an_assertion_only_a_person_can_make():
+    """Saving a case declares a human reviewed it; a deliverable revision goes to the client.
+
+    Both are drafted or read here and finished by the operator, so neither has a
+    tool — distinct from the scope/delete set, which is withheld to bound what a
+    compromised agent could do.
+    """
+    tools = set(_tools(_server(MagicMock())))
+    assert not (tools & FORBIDDEN_ASSERTIONS)
+
+
 def test_read_tools_are_marked_read_only_and_writes_are_not():
     tools = _tools(_server(MagicMock()))
     read = {
@@ -111,11 +139,16 @@ def test_read_tools_are_marked_read_only_and_writes_are_not():
         "list_jobs",
         "get_job_events",
         "list_reports",
+        "list_authorizations",
+        "list_deliverables",
+        "get_deliverable_revision",
+        "get_finding_activity",
         "preview_job",  # a dry run changes nothing
+        "draft_test_cases",  # generates drafts; stores and queues nothing
     }
     for name in read:
         assert tools[name].annotations.read_only_hint is True, name
-    for name in ("queue_job", "queue_pipeline", "create_finding"):
+    for name in ("queue_job", "queue_pipeline", "create_finding", "draft_report"):
         assert tools[name].annotations.read_only_hint is False, name
         assert tools[name].annotations.destructive_hint is False, name
 
@@ -305,6 +338,165 @@ def test_create_finding_posts_body():
     )
 
 
+# ── authorizations, deliverables, finding history ─────────────────────────────
+
+
+def test_list_authorizations_caps_a_bare_list():
+    """This endpoint returns a plain array, not a paginated envelope."""
+    fake = MagicMock()
+    fake.get.return_value = [
+        {"id": "a1", "status": "active", "starts_at": "2026-01-01"},
+        {"id": "a2", "status": "expired"},
+    ]
+    out = _call(_server(fake), "list_authorizations", engagement_id="e1")
+    fake.get.assert_called_once_with("/engagements/e1/authorizations")
+    assert out["count"] == 2
+    assert out["items"][0]["id"] == "a1"
+
+
+def test_list_authorizations_pages_what_it_advertises():
+    """A next_offset the caller cannot follow is worse than no paging at all.
+
+    The last record was unreachable: the tool emitted next_offset but took no
+    offset argument.
+    """
+    fake = MagicMock()
+    fake.get.return_value = [{"id": f"a{i}"} for i in range(501)]
+    srv = _server(fake)
+    first = _call(srv, "list_authorizations", engagement_id="e1", limit=500)
+    assert (first["count"], first["shown"], first["next_offset"]) == (501, 500, 500)
+    last = _call(srv, "list_authorizations", engagement_id="e1", limit=500, offset=500)
+    assert last["items"] == [{"id": "a500"}]
+    assert last["next_offset"] is None
+
+
+def test_list_authorizations_rejects_a_negative_offset():
+    with pytest.raises(ToolError, match="offset"):
+        _call(_server(MagicMock()), "list_authorizations", engagement_id="e1", offset=-1)
+
+
+def test_list_authorizations_unknown_shape_is_not_reported_as_none():
+    """An unreadable response must not become "this engagement has no authorization"."""
+    fake = MagicMock()
+    fake.get.return_value = {"unexpected": True}
+    with pytest.raises(ToolError, match="unknown"):
+        _call(_server(fake), "list_authorizations", engagement_id="e1")
+
+
+def test_list_deliverables_pages():
+    fake = MagicMock()
+    fake.get.return_value = {"deliverables": [{"id": "d1", "latest_revision": 3}], "total": 1}
+    out = _call(_server(fake), "list_deliverables", engagement_id="e1")
+    fake.get.assert_called_once_with(
+        "/engagements/e1/deliverables", params={"limit": 50, "offset": 0}
+    )
+    assert out["items"][0]["latest_revision"] == 3
+
+
+def test_get_deliverable_revision_reads_one_immutable_revision():
+    fake = MagicMock()
+    fake.get.return_value = {"revision": 2, "markdown": "# Report", "content_hash": "abc"}
+    out = _call(
+        _server(fake),
+        "get_deliverable_revision",
+        engagement_id="e1",
+        deliverable_id="d1",
+        revision=2,
+    )
+    fake.get.assert_called_once_with("/engagements/e1/deliverables/d1/revisions/2")
+    assert out["markdown"] == "# Report"
+
+
+def test_get_finding_activity_pages_the_history():
+    fake = MagicMock()
+    fake.get.return_value = {"activities": [{"kind": "retest"}], "total": 1}
+    out = _call(_server(fake), "get_finding_activity", engagement_id="e1", finding_id="f1")
+    fake.get.assert_called_once_with(
+        "/engagements/e1/findings/f1/activity", params={"limit": 50, "offset": 0}
+    )
+    assert out["items"][0]["kind"] == "retest"
+
+
+# ── drafting ──────────────────────────────────────────────────────────────────
+
+
+def test_draft_test_cases_posts_endpoint_ids_and_stores_nothing():
+    fake = MagicMock()
+    fake.post.return_value = {"drafts": [{"name": "GET /x"}], "total": 1, "review_notes": []}
+    out = _call(_server(fake), "draft_test_cases", engagement_id="e1", endpoint_ids=["ep1", "ep2"])
+    assert fake.post.call_args[0][0] == "/engagements/e1/test-cases/preview"
+    assert fake.post.call_args.kwargs["json"] == {
+        "limit": 20,
+        "offset": 0,
+        "endpoint_ids": ["ep1", "ep2"],
+    }
+    assert out["total"] == 1
+
+
+def test_draft_test_cases_accepts_an_openapi_document():
+    fake = MagicMock()
+    fake.post.return_value = {"drafts": [], "total": 0}
+    _call(
+        _server(fake),
+        "draft_test_cases",
+        engagement_id="e1",
+        openapi={"openapi": "3.0.0"},
+        base_url="https://api.acme.test",
+    )
+    body = fake.post.call_args.kwargs["json"]
+    assert body["openapi"] == {"openapi": "3.0.0"}
+    assert body["base_url"] == "https://api.acme.test"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {},  # neither source
+        {"endpoint_ids": ["ep1"], "openapi": {"openapi": "3.0.0"}},  # both
+    ],
+)
+def test_draft_test_cases_requires_exactly_one_source(args):
+    fake = MagicMock()
+    with pytest.raises(ToolError, match="either endpoint_ids or an openapi"):
+        _call(_server(fake), "draft_test_cases", engagement_id="e1", **args)
+    fake.post.assert_not_called()
+
+
+def test_draft_test_cases_rejects_a_negative_offset():
+    with pytest.raises(ToolError, match="offset"):
+        _call(
+            _server(MagicMock()),
+            "draft_test_cases",
+            engagement_id="e1",
+            endpoint_ids=["ep1"],
+            offset=-1,
+        )
+
+
+def test_draft_report_always_posts_a_draft_status():
+    """An agent must not be able to mark a write-up final or delivered."""
+    fake = MagicMock()
+    fake.post.return_value = {"id": "r1", "status": "draft"}
+    _call(
+        _server(fake),
+        "draft_report",
+        engagement_id="e1",
+        title="IDOR on /orders",
+        finding_id="f1",
+        summary="s",
+        remediation="fix",
+    )
+    assert fake.post.call_args[0][0] == "/engagements/e1/reports"
+    body = fake.post.call_args.kwargs["json"]
+    assert body["status"] == "draft"
+    assert body["finding_id"] == "f1" and body["remediation"] == "fix"
+
+
+def test_draft_report_takes_no_status_argument():
+    tool = _tools(_server(MagicMock()))["draft_report"]
+    assert "status" not in (tool.input_schema.get("properties") or {})
+
+
 # ── prompts ───────────────────────────────────────────────────────────────────
 
 
@@ -368,7 +560,7 @@ def test_triage_does_not_claim_a_finding_edit_tool():
 def test_retest_targets_one_finding_when_given_and_otherwise_asks():
     srv = _server(MagicMock())
     assert "Retest finding f9" in _expand(srv, "retest", engagement_id="e1", finding_id="f9")
-    assert "ask which to retest" in _expand(srv, "retest", engagement_id="e1")
+    assert "ask which to take" in _expand(srv, "retest", engagement_id="e1")
 
 
 def test_retest_allows_an_inconclusive_result():
@@ -400,17 +592,17 @@ def test_prompts_only_name_tools_that_exist(name):
     assert mentioned <= set(_tools(srv)), mentioned - set(_tools(srv))
 
 
-def test_brief_does_not_promise_an_authorization_window():
-    """get_engagement returns the engagement and its scope, not its authorizations."""
+def test_brief_reads_the_authorization_from_the_right_tool():
+    """get_engagement does not return authorizations; list_authorizations does."""
     text = _expand(_server(MagicMock()), "brief", engagement_id="e1")
-    assert "authorization record" in text  # named as unavailable, not requested
-    assert "authorization window if one is set" not in text
+    assert "list_authorizations" in text
+    assert "authorization window if one is set (get_engagement)" not in text
 
 
-def test_brief_does_not_call_finding_reports_deliverables():
-    """list_reports reads per-finding reports; client deliverables are a separate API."""
+def test_brief_keeps_finding_reports_and_client_deliverables_distinct():
     text = _expand(_server(MagicMock()), "brief", engagement_id="e1")
-    assert "not the engagement's client deliverables" in text
+    assert "list_reports" in text and "list_deliverables" in text
+    assert "do not conflate them" in text
 
 
 def test_retest_does_not_invent_a_finding_status():
@@ -419,6 +611,23 @@ def test_retest_does_not_invent_a_finding_status():
     assert "remediated or awaiting verification" not in text
     for real in ("new", "candidate", "triaged", "in_progress", "closed"):
         assert real in text
+
+
+def test_retest_reads_finding_history_rather_than_guessing_from_status():
+    text = _expand(_server(MagicMock()), "retest", engagement_id="e1")
+    assert "get_finding_activity" in text
+    assert "history is the signal, not the status" in text
+
+
+def test_retest_checks_whether_a_retest_already_happened():
+    text = _expand(_server(MagicMock()), "retest", engagement_id="e1", finding_id="f1")
+    assert "already been retested" in text
+
+
+def test_triage_can_draft_a_write_up_but_not_finalise_one():
+    text = _expand(_server(MagicMock()), "triage", engagement_id="e1")
+    assert "draft_report" in text
+    assert "cannot mark anything final or delivered" in text
 
 
 def test_retest_states_that_a_job_cannot_be_scoped_to_one_asset():

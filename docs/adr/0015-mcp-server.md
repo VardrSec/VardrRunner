@@ -97,6 +97,39 @@ as the whole inventory. Every upload also now carries the producing `job_id`
 (ADR 0014's installer is unaffected), which VardrMap validates against the
 engagement.
 
+## Amendment (v0.44.0): two writes are assertions, not capabilities
+
+Phases 4/5 add the reads the prompts were missing — `list_authorizations`,
+`get_finding_activity`, `list_deliverables`, `get_deliverable_revision` — plus
+two drafting tools: `draft_test_cases` (VardrMap's `test-cases/preview`, which
+stores and queues nothing) and `draft_report` (a per-finding write-up).
+
+Two writes that exist in VardrMap stay out, for a reason distinct from the
+scope/auth/delete set above. That set is withheld to bound what a compromised
+agent could do. These are withheld because **they are assertions only a person
+can honestly make**:
+
+- **Saving a VardrGate test case** (`POST /test-cases/reviewed`). Saving declares
+  that a human reviewed the case. That declaration is the entire purpose of the
+  step — the CLI spells it `--reviewed`, writes the review file exclusively, and
+  refuses literal credentials precisely so a person has to look. An agent calling
+  it would be signing the operator's name to a review it performed itself, and a
+  case is what later drives real authorization tests against a client's API.
+- **Creating or revising a client deliverable.** A revision is immutable once
+  written and is the document handed to the client. An agent cannot unsay it, and
+  the signature on a deliverable is the operator's professional judgement, not a
+  model's.
+
+So the server drafts and reads in both areas and stops at the point where a human
+has to commit. `draft_report` takes no `status` argument and always posts `draft`,
+so it cannot mark a write-up final or delivered. A test asserts no tool by any of
+the plausible names for these operations exists, kept separate from the
+scope/delete forbidden set so the two rationales do not blur.
+
+This is a narrower surface than "expose the API", and deliberately so: the value
+of an agent here is in the drafting and the reading, which is most of the work,
+while the assertions stay where accountability already sits.
+
 ## Amendment (v0.42.0): prompts carry instructions, never fetched data
 
 The server now exposes four MCP prompts — `brief`, `triage`, `untested`,

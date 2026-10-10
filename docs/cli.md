@@ -243,8 +243,59 @@ For Claude Desktop, add to its MCP config:
 
 | Kind | Tools |
 |------|-------|
-| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_findings`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `preview_job` |
-| Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding` |
+| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_authorizations`, `list_findings`, `get_finding_activity`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `list_deliverables`, `get_deliverable_revision`, `preview_job`, `draft_test_cases` |
+| Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding`, `draft_report` |
+
+`draft_test_cases` is grouped as a read because it stores and queues nothing — it is
+VardrMap's `test-cases/preview`, which returns drafts and says so.
+
+**Two writes are withheld because they are assertions only you can make.** This is a
+different reason from the scope/delete set below, which is withheld to bound what a
+compromised agent could do:
+
+- **Saving a VardrGate test case.** Saving declares that a human reviewed the case, which is
+  the entire purpose of that step — see `test-cases save --reviewed`. The agent drafts;
+  you review and save.
+- **Creating or revising a client deliverable.** A revision is immutable and is the document
+  handed to the client. The agent reads deliverables (`list_deliverables`,
+  `get_deliverable_revision`) and can draft the per-finding write-up with `draft_report`,
+  which is always created as a `draft` — it takes no status argument, so it cannot mark
+  anything final or delivered.
+
+**Prompts (the workflows you repeat on every engagement)**
+
+In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
+`engagement_id`, and asks you which engagement to use when you leave it blank.
+
+| Prompt | What it does |
+|--------|--------------|
+| `brief` | Where the engagement stands — scope, which tools have run, findings by severity, reports — and the three things to do next. Queues nothing. |
+| `triage` | Works through the findings inventory and judges each one: real or a bare template match, whether the severity holds, what evidence exists, and the smallest check that would confirm it. Optional `severity` narrows it. |
+| `untested` | Compares the declared scope and discovered surface against the jobs actually run, names the gaps, and proposes an ordered plan with `preview_job` target counts before anything is queued. |
+| `retest` | Verifies a fix landed: restates the issue, proposes a check, follows the job, and reports fixed / still present / inconclusive. Optional `finding_id`. |
+
+**What `retest` can and cannot do.** `queue_job` takes a target *source* (scope or recon),
+not a target, so this server cannot scope a job to the single asset a retest wants. The
+prompt says so and offers two honest routes: queue the narrowest available job while stating
+it is broader than the finding, or run `vardrrunner run <tool> --engagement <id> --target
+<asset>` locally, which does take one target. It reads `get_finding_activity` to see whether
+a retest already happened and what it concluded, then judges the outcome from whether an
+equivalent finding returns in `list_findings` and from the job's events — there is no tool
+here that reads a job's scan results directly, so it names the signal it used. Recording the
+retest against the finding's history stays with you: the server reads that history but
+cannot append to it.
+
+`brief` reads the authorization behind the work from `list_authorizations` (not
+`get_engagement`, which returns the engagement's own fields and scope), and keeps the
+per-finding write-ups (`list_reports`) separate from the client-facing documents
+(`list_deliverables`) rather than conflating the two.
+
+A prompt is **instructions only** — expanding one makes no API call and embeds no
+engagement data. Prompt text arrives as the most trusted content in the agent's
+context, and finding titles, recon URLs and scanner output all come from the targets
+under test; pasting those into a prompt would put target-controlled strings in that
+trusted position. The agent gathers what it needs with the read tools instead, where
+the result is already framed as untrusted data.
 
 **Prompts (the workflows you repeat on every engagement)**
 
