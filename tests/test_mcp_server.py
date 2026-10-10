@@ -50,6 +50,8 @@ EXPECTED = {
     "list_deliverables",
     "get_deliverable_revision",
     "get_finding_activity",
+    "list_methodologies",
+    "get_methodology",
     "preview_job",
     "draft_test_cases",
     "queue_job",
@@ -68,7 +70,7 @@ FORBIDDEN_ASSERTIONS = {
     "create_deliverable_revision",
     "update_deliverable",
 }
-EXPECTED_PROMPTS = {"brief", "triage", "untested", "retest"}
+EXPECTED_PROMPTS = {"brief", "triage", "untested", "methodology", "retest"}
 
 
 def _server(fake):
@@ -143,6 +145,8 @@ def test_read_tools_are_marked_read_only_and_writes_are_not():
         "list_deliverables",
         "get_deliverable_revision",
         "get_finding_activity",
+        "list_methodologies",
+        "get_methodology",
         "preview_job",  # a dry run changes nothing
         "draft_test_cases",  # generates drafts; stores and queues nothing
     }
@@ -415,6 +419,107 @@ def test_get_finding_activity_pages_the_history():
         "/engagements/e1/findings/f1/activity", params={"limit": 50, "offset": 0}
     )
     assert out["items"][0]["kind"] == "retest"
+
+
+# ── methodologies ─────────────────────────────────────────────────────────────
+
+
+def test_list_methodologies_needs_no_api_call_and_names_the_edition():
+    """The checklists ship with the package; nothing is fetched to read them."""
+    fake = MagicMock()
+    out = _call(_server(fake), "list_methodologies")
+    assert fake.mock_calls == []
+    versions = {row["id"]: row["version"] for row in out["items"]}
+    assert versions == {"owasp-api-top10": "2023", "owasp-wstg": "4.2"}
+    assert "never coverage" in out["note"]
+    # by_method counts how items are tested, not whether they have been.
+    assert "not whether they have been" in out["note"]
+    assert set(out["items"][0]["by_method"]) == {"tooling", "manual"}
+
+
+def test_get_methodology_pages_items_and_echoes_the_version():
+    fake = MagicMock()
+    srv = _server(fake)
+    first = _call(srv, "get_methodology", methodology_id="owasp-api-top10", limit=4)
+    assert fake.mock_calls == []
+    assert (first["count"], first["shown"], first["next_offset"]) == (10, 4, 4)
+    assert first["version"] == "2023" and first["methodology"] == "owasp-api-top10"
+    assert "CC BY-SA" in first["attribution"]
+    assert first["items"][0]["id"] == "API1:2023"
+    last = _call(srv, "get_methodology", methodology_id="owasp-api-top10", offset=8)
+    assert last["next_offset"] is None
+
+
+def test_get_methodology_items_carry_a_method_and_no_status():
+    out = _call(_server(MagicMock()), "get_methodology", methodology_id="owasp-wstg")
+    for item in out["items"]:
+        assert item["method"] in {"tooling", "manual"}
+        assert not {"status", "covered", "done", "coverage", "evidence"} & set(item)
+
+
+def test_get_methodology_states_its_scope():
+    """The WSTG entry is category-level; a reader must not take it for scenarios."""
+    out = _call(_server(MagicMock()), "get_methodology", methodology_id="owasp-wstg")
+    assert "Category-level" in out["scope"]
+    assert "WSTG-v42-INFO-02" in out["scope"]
+
+
+def test_get_methodology_rejects_an_unknown_id_and_a_negative_offset():
+    srv = _server(MagicMock())
+    with pytest.raises(ToolError, match="unknown methodology"):
+        _call(srv, "get_methodology", methodology_id="owasp-top-42")
+    with pytest.raises(ToolError, match="offset"):
+        _call(srv, "get_methodology", methodology_id="owasp-wstg", offset=-1)
+
+
+def test_methodology_prompt_separates_evidenced_from_suggested():
+    text = _expand(_server(MagicMock()), "methodology", engagement_id="e1")
+    for heading in (
+        "**Evidenced**",
+        "**Not evidenced, a job would help**",
+        "**Not evidenced, needs hands-on work**",
+    ):
+        assert heading in text
+    assert "job ids or finding ids" in text
+    assert "A tool having run is not coverage" in text
+    assert "candidate, not a finding" in text
+
+
+def test_methodology_prompt_sorts_on_the_record_not_the_method():
+    """A hand-tested item that was written up is evidenced.
+
+    The first version routed every `manual` item to "requires manual testing"
+    whatever the record said, which conflated how an item is tested with whether
+    it has been.
+    """
+    text = _expand(_server(MagicMock()), "methodology", engagement_id="e1")
+    assert "how an item is tested, not whether it has been" in text
+    assert "Sort on the record, not on the method" in text
+    assert "is **evidenced**" in text
+    # And the converse: a tooling item is not evidenced just because a tool exists.
+    assert "something must actually have run" in text
+
+
+def test_methodology_prompt_does_not_cite_unassessed_wstg_scenarios():
+    text = _expand(_server(MagicMock()), "methodology", engagement_id="e1")
+    assert "twelve top-level categories" in text
+    assert "WSTG-v42-INFO-02" in text
+    assert "not actually assessed" in text
+
+
+def test_methodology_prompt_forbids_a_coverage_score():
+    """A percentage invites exactly the reading the rest of the prompt forbids."""
+    text = _expand(_server(MagicMock()), "methodology", engagement_id="e1")
+    assert "Do not report a percentage or a score" in text
+    assert "not a certification of compliance" in text
+
+
+def test_methodology_prompt_asks_which_methodology_when_none_given():
+    text = _expand(_server(MagicMock()), "methodology", engagement_id="e1")
+    assert "list_methodologies" in text and "ask which to use" in text
+    assert "Use methodology owasp-wstg" in _expand(
+        _server(MagicMock()), "methodology", engagement_id="e1", methodology_id="owasp-wstg"
+    )
 
 
 # ── drafting ──────────────────────────────────────────────────────────────────

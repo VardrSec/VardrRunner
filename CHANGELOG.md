@@ -7,6 +7,45 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.45.0] — 2026-10-09
+
+MCP phase 6 — versioned methodology checklists, with coverage kept out of the data. See
+[`changelog/v0.45.0.md`](changelog/v0.45.0.md).
+
+### Added
+
+- **Two methodology checklists ship in the package**: the OWASP API Security Top 10 (2023) and
+  the OWASP Web Security Testing Guide 4.2 (its twelve top-level categories).
+  `list_methodologies` and `get_methodology` serve them, and neither makes an API call — the
+  data is local, so a checklist cannot be influenced by anything a target says. Each is pinned
+  to an exact edition and each item carries its source URL, so a write-up can cite what it was
+  assessed against.
+- **A `methodology` prompt** that sorts every item into evidenced (naming job or finding ids),
+  not evidenced where a job would help, or not evidenced where hands-on work is needed, and is
+  told to report no percentage or score — a methodology is not something you can be 70%
+  through. It sorts on the engagement's record, not on how an item happens to be tested.
+
+### Deliberately not representable
+
+- **Coverage is not part of the checklist data.** The schema refuses `status`, `covered`,
+  `done` and `coverage` at load. A checklist that can hold a tick will get one as soon as a
+  scanner runs, and "assessed against the OWASP API Top 10" with ticks earned by a nuclei job
+  is a false claim in a client deliverable. Each item instead carries `method` — **how it is
+  tested, not whether it has been**: `tooling` (a job type can produce evidence of a
+  *candidate*) or `manual` (tested by hand, so no number of scans will cover it, though
+  recorded manual work evidences it as well as a job does). A test asserts both methodologies
+  contain items of each kind so the distinction cannot become decorative, and the field's
+  former name `evidence` is refused at load because it invited reading "tested by hand" as
+  "unevidenced". See [ADR 0015 § Amendment (v0.45.0)](docs/adr/0015-mcp-server.md).
+- **Scope is stated per methodology.** The WSTG entry is a category-level planning guide over
+  the guide's twelve top-level categories; OWASP identifies individual scenarios separately as
+  `WSTG-<version>-<category>-<number>` (e.g. `WSTG-v42-INFO-02`), and scenario-level mapping is
+  deferred rather than implied. A `scope` field says so, and the prompt is told not to cite a
+  scenario identifier it has not assessed.
+- Only OWASP identifiers, titles and source URLs are referenced; no OWASP prose ships. The
+  guides are CC BY-SA 4.0 and these repositories are AGPL-3.0, and each methodology carries an
+  `attribution` field naming its source and licence.
+
 ## [0.44.0] — 2026-10-09
 
 MCP phases 4/5 — the engagement reads the prompts were missing, and case/report drafting. See
@@ -45,59 +84,6 @@ MCP phases 4/5 — the engagement reads the prompts were missing, and case/repor
   the client. The server drafts and reads in both areas and stops where a human has to commit.
   See [ADR 0015 § Amendment (v0.44.0)](docs/adr/0015-mcp-server.md).
 
-## [0.43.0] — 2026-10-09
-
-ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queueable. See
-[`changelog/v0.43.0.md`](changelog/v0.43.0.md).
-
-### Added
-
-- **`vardrrunner run ffuf`** and the `ffuf` job type. Fuzzes each target's site root for hidden
-  paths and uploads the hits as recon. Targets collapse to unique roots first, so twenty recon
-  URLs on one host fuzz it once. Options: `--wordlist <name>`, `--extensions`, `--match-codes`,
-  `--rate`.
-- **Wordlists live in `~/.vardrmap/wordlists` and are named, never pathed.** A job sends a name
-  (`common`), which the runner resolves on the machine doing the scanning; a path or traversal is
-  refused at parse time and again before the subprocess starts. Were a path accepted, the backend
-  could name any readable file for ffuf to read and replay at a target. A symlink inside the
-  directory is honoured. No wordlists ship with VardrRunner.
-- `ffuf` pinned at **2.3.0** for all five platforms via `scripts/pin_tools.py`, so
-  `tools install ffuf` gets a hash-verified binary.
-
-### Changed
-
-- **ffuf always runs rate-limited and auto-calibrated.** `-rate` has a default of 50/s, a ceiling
-  of 1000 and no way to disable it — this is the one tool here that puts sustained load on a
-  client's host. `-ac` is always on, so a host answering every path with `200` cannot import
-  thousands of phantom endpoints into shared recon. A non-zero exit on any one target fails the
-  job rather than skipping that host, and so does a report that cannot be read: a valid empty
-  `results` array means "no matches" and succeeds, but an absent or broken report means the
-  outcome is *unknown*, and reporting those identically would finish a broken run green while
-  recording that the host has nothing on it. One malformed entry among good ones is skipped.
-- **An unreachable target no longer looks like "nothing found".** ffuf 2.3.0 exits `0` and writes a valid
-  empty report for a host that refuses the connection (with `-s`, `-se` and `-sa` alike), so the
-  handler could not tell it from a genuine empty result. Each target is now probed with one GET before
-  it is fuzzed; if nothing answers the job fails with the reason and sends no fuzzing traffic. Any HTTP
-  response counts as reachable; connection errors, timeouts and a failed TLS handshake do not, but an untrusted certificate is fine, because pinned ffuf does not verify TLS. Cost: one request
-  per target.
-- **Scheduled runs repeat active traffic.** A schedule queues an ordinary job, so `--rate`
-  applies per execution, not across the engagement; an hourly schedule means active fuzzing
-  every hour for as long as it exists.
-- **Opt-in smoke test against the real ffuf** (`VARDRRUNNER_SMOKE=1`; skips otherwise and when
-  the binary is absent): loopback fixture only, bounded traffic and runtime.
-- **ffuf config types match VardrMap's validator exactly.** `match_codes` takes a bare status
-  code as well as a string or list; `extensions` takes only strings and lists. A type one side
-  accepts and the other refuses either cannot be queued or clears queue-time validation and then
-  fails locally. Both repos carry the same table so the pair cannot drift.
-- `toolchain` accepts an uppercase `version_args` flag (ffuf's is `-V`); the check still admits
-  nothing but a bare flag.
-
-### Fixed
-
-- **`runner.base_url` no longer turns a non-web recon entry into a target.** A `mailto:` or
-  `javascript:` entry parsed as userinfo plus a host once `https://` was prefixed, and a URL
-  carrying credentials would have had them replayed at the target. Both are dropped. ffuf is the
-  first caller, so nothing shipped affected.
 ## [0.42.0] — 2026-10-09
 
 Four MCP prompts for the workflows every engagement repeats. See

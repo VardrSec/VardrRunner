@@ -22,6 +22,15 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015), plus four instruction-only prompts. `mcp` imported lazily; optional extra
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
   - `commands/test_cases.py` — `test-cases draft|save`; review file is created exclusively (never overwritten), literal credentials refused, save needs `--reviewed`
+  - `methodologies.py` — versioned checklists from `methodologies.json` (OWASP API Top 10
+    2023, WSTG 4.2). **Coverage is not representable**: a `status`/`covered`/`done`/`coverage`
+    key is refused at load, because a checklist that can hold a tick gets one as soon as a
+    scanner runs. Items carry `method: tooling|manual` — **how** an item is tested, never
+    whether it has been, so recorded manual work evidences a `manual` item as well as a job
+    does; the old name `evidence` is refused to stop the two re-conflating. Coverage is
+    derived per engagement from its own jobs and findings. Every `suggests` entry must be a
+    real job type. WSTG is category-level; OWASP's scenario ids (`WSTG-v42-INFO-02`) are
+    deferred, and each methodology says so in `scope`
   - `toolchain.py` — pinned, verified tool installs into `~/.vardrmap/tools` from `tool_manifest.json`; re-hashes managed binaries before use (ADR 0014)
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)

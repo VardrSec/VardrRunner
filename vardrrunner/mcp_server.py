@@ -5,9 +5,10 @@ It gives an agent read access to an engagement — its scope, authorizations,
 findings and their history, assets, API surface, recon, jobs, reports and client
 deliverables — and a small set of guarded write tools: queue a scan job or
 pipeline, preview what a job would target, draft a finding, and draft a
-per-finding write-up. Four prompts package the workflows an operator repeats on
-every engagement (brief, triage, untested, retest). The agent brings its own
-model; this server only adapts VardrMap's HTTP API to MCP tools.
+per-finding write-up. It also serves the versioned methodology checklists that
+ship with the package. Five prompts package the workflows an operator repeats on
+every engagement (brief, triage, untested, methodology, retest). The agent brings
+its own model; this server only adapts VardrMap's HTTP API to MCP tools.
 
 Deliberately NOT exposed, so an agent can neither widen what it may test nor
 erase work: editing scope, authorizations, members, API keys or settings;
@@ -55,10 +56,15 @@ MAX_LIMIT = 500
 INSTRUCTIONS = (
     "Operate a VardrMap security engagement. Read tools report an engagement's scope, "
     "authorizations, findings and their history, assets, API surface, recon, jobs, reports "
-    "and client deliverables. Write tools queue scan jobs or pipelines and draft findings "
-    "and write-ups; the client asks the operator to approve each one. The prompts (brief, "
-    "triage, untested, retest) are the common workflows; each one gathers what it needs "
-    "through the read tools.\n\n"
+    "and client deliverables, plus versioned methodology checklists. Write tools queue scan "
+    "jobs or pipelines and draft findings and write-ups; the client asks the operator to "
+    "approve each one. The prompts (brief, triage, untested, methodology, retest) are the "
+    "common workflows; each one gathers what it needs through the read tools.\n\n"
+    "A methodology checklist is a planning aid, never a coverage claim. An item's `method` "
+    "field says how it is tested — by a job type, or by hand — not whether it has been. "
+    "Whether this engagement has covered it comes only from its own jobs and findings, cited "
+    "by id, and a recorded manual test counts. A tool having run is not coverage, and a "
+    "scanner match is a candidate, not a finding.\n\n"
     "Two things you can draft but not finish, because they are assertions only the operator "
     "can make: a VardrGate test case can be drafted, never saved (saving declares a human "
     "reviewed it), and a client deliverable can be read, never written (a revision is "
@@ -421,6 +427,62 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
             max_limit=200,
         )
 
+    @mcp.tool(annotations=read)
+    def list_methodologies() -> dict[str, Any]:
+        """The methodology checklists available, each pinned to an exact edition.
+
+        Cite the version in anything you write: "OWASP API Security Top 10 (2023)"
+        is a claim a reader can check, "the OWASP Top 10" is not.
+        """
+        from vardrrunner import methodologies
+
+        rows = methodologies.summaries()
+        return {
+            "count": len(rows),
+            "items": rows,
+            "note": (
+                "A checklist item is a suggestion, never coverage. by_method counts how items "
+                "are tested, not whether they have been: a 'manual' item is established by "
+                "hand rather than by a job type, and recorded manual work evidences it just as "
+                "a job does. Coverage comes from this engagement's own jobs and findings."
+            ),
+        }
+
+    @mcp.tool(annotations=read)
+    def get_methodology(
+        methodology_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0
+    ) -> dict[str, Any]:
+        """One methodology's items: what to look at, and which job types relate.
+
+        Each item carries `method` — how it is tested, **not** whether it has
+        been. "tooling" means a job type here can produce evidence bearing on it;
+        "manual" means it is established by hand instead, so no number of scans
+        will cover it, though recorded manual work evidences it as well as a job
+        does. No item carries a status: whether this engagement has covered it
+        comes from its own jobs and findings, never from this list.
+        """
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        from vardrrunner import methodologies
+
+        if offset < 0:
+            raise ToolError("offset must be zero or greater")
+        try:
+            entry = methodologies.get(methodology_id)
+        except methodologies.MethodologyError as exc:
+            raise ToolError(str(exc)) from exc
+        items = entry["items"]
+        page = _cap(items[offset:], limit, len(items), offset)
+        page.update(
+            methodology=methodology_id,
+            title=entry["title"],
+            version=entry["version"],
+            source=entry["source"],
+            scope=entry["scope"],
+            attribution=entry["attribution"],
+        )
+        return page
+
     # ── write (operator approves each call in the MCP client) ────────────────
 
     @mcp.tool(annotations=read)
@@ -663,6 +725,66 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
                 "an upper bound rather than the exact set — ffuf, for one, collapses its "
                 "targets to site roots on the runner afterwards. Quote the count as the "
                 "ceiling it is, not as a promise.",
+                _WRITES,
+                _UNTRUSTED,
+            ]
+        )
+
+    @mcp.prompt(
+        title="Methodology coverage",
+        description="Walk a methodology against the engagement, separating suggested from evidenced.",
+    )
+    def methodology(engagement_id: str = "", methodology_id: str = "") -> str:
+        """Map a recognised methodology onto what this engagement has actually done."""
+        subject = (
+            f"Use methodology {methodology_id.strip()}."
+            if methodology_id.strip()
+            else (
+                "No methodology was named. Call list_methodologies, show the operator what "
+                "is available with its edition, and ask which to use."
+            )
+        )
+        return "\n\n".join(
+            [
+                _target(engagement_id),
+                subject,
+                "Read the checklist (get_methodology) and the engagement's own record "
+                "(list_jobs, list_findings, list_api_endpoints, list_recon, and "
+                "get_finding_activity where a finding matters). Then give the operator one "
+                "row per checklist item under exactly three headings:",
+                "- **Evidenced** — the engagement's record bears on the item. Name the job "
+                "ids or finding ids. No ids means it does not belong here.\n"
+                "- **Not evidenced, a job would help** — nothing in the record bears on it "
+                "yet and its `method` is `tooling`. Say which job would change that.\n"
+                "- **Not evidenced, needs hands-on work** — nothing in the record bears on it "
+                "yet and its `method` is `manual`, so queueing scans will not move it. Say "
+                "what the operator would have to do.",
+                "**`method` tells you how an item is tested, not whether it has been.** Sort "
+                "on the record, not on the method: a `manual` item that was tested by hand "
+                "and written up — a finding, an entry in its activity history — is "
+                "**evidenced**, and belongs under the first heading with those ids cited. "
+                "Only an item with nothing in the record goes under one of the other two. "
+                "Equally, a `tooling` item is not evidenced merely because its suggested job "
+                "type exists; something must actually have run.",
+                "Three rules about what you may claim, because this is the kind of output "
+                "that ends up in front of a client:\n"
+                "- **A tool having run is not coverage.** A nuclei job that matched nothing "
+                "is evidence that those templates did not match, not that the item is clean. "
+                "Say which, and never silently upgrade one to the other.\n"
+                "- **A scanner match is a candidate, not a finding.** Treat it as something "
+                "to verify, and point the operator at the triage prompt rather than "
+                "concluding.\n"
+                "- **Do not report a percentage or a score.** A methodology is not a "
+                "checklist you can be 70% of the way through, and a number invites exactly "
+                "the reading the two rules above forbid. Counts per heading are fine.",
+                "Cite the methodology's title and version in anything you write, and say "
+                "plainly that this is a planning aid against a published methodology, not a "
+                "certification of compliance with it. For the WSTG, note that this covers its "
+                "twelve top-level categories rather than the individual scenarios beneath "
+                "them, which OWASP identifies separately (`WSTG-v42-INFO-02` and the like); "
+                "do not cite a scenario identifier you have not actually assessed. Close with "
+                "the next few jobs worth queueing, and the hands-on work only the operator "
+                "can do.",
                 _WRITES,
                 _UNTRUSTED,
             ]
