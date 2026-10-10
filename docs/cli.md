@@ -456,6 +456,22 @@ not discard a long scan.
 applied, so 100 recon URLs that all live on one host consume the default limit and fuzz a
 single root. Raise `--limit`, or use `--scope`, when a recon table is dense on few hosts.
 
+**Known limitation: an unreachable target looks like "nothing found".** Observed on ffuf
+2.3.0: for a host that refuses the connection, ffuf exits `0` and writes a valid, empty
+report — with `-s`, `-se` and `-sa` alike — so neither the exit code nor the report can tell
+"there was nothing there" from "it could not look". The job succeeds with no results. Treat an
+empty `run ffuf` result as unconfirmed until you know the host was reachable (a `run httpx`
+beforehand is the usual check). This is recorded as a strict `xfail` in
+`tests/test_smoke_ffuf.py`, which will start failing — prompting removal of the marker — the
+day the handler can distinguish the two.
+
+**These limits apply per execution, not across the engagement.** A job queued by a schedule
+is an ordinary job: each run is a fresh ffuf process with its own full `--rate`, and nothing
+aggregates traffic across runs or across jobs that overlap. An hourly schedule therefore means
+active fuzzing traffic every hour, indefinitely, for as long as the schedule exists. `--rate`
+bounds how hard one run pushes; it does not bound how often runs happen. The same is true of
+`run dalfox` and its `--worker`/`--delay`.
+
 ### Target classification and local deny rules
 
 Every resolved target is classified before any tool runs. Loopback, link-local and **cloud

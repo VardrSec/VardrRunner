@@ -36,6 +36,16 @@ ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queu
   `results` array means "no matches" and succeeds, but an absent or broken report means the
   outcome is *unknown*, and reporting those identically would finish a broken run green while
   recording that the host has nothing on it. One malformed entry among good ones is skipped.
+- **Known limitation, not fixed here: an unreachable target looks like "nothing found".** ffuf
+  2.3.0 exits `0` and writes a valid empty report for a host that refuses the connection (with
+  `-s`, `-se` and `-sa` alike), so the handler cannot tell it from a genuine empty result. An
+  empty `run ffuf` result is therefore unconfirmed. Recorded as a strict `xfail` in the new
+  smoke test; documented in `docs/cli.md`.
+- **Scheduled runs repeat active traffic.** A schedule queues an ordinary job, so `--rate`
+  applies per execution, not across the engagement; an hourly schedule means active fuzzing
+  every hour for as long as it exists.
+- **Opt-in smoke test against the real ffuf** (`VARDRRUNNER_SMOKE=1`; skips otherwise and when
+  the binary is absent): loopback fixture only, bounded traffic and runtime.
 - **ffuf config types match VardrMap's validator exactly.** `match_codes` takes a bare status
   code as well as a string or list; `extensions` takes only strings and lists. A type one side
   accepts and the other refuses either cannot be queued or clears queue-time validation and then
