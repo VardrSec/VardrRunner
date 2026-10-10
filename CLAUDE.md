@@ -19,7 +19,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `redaction.py` — the single sanitization layer in front of every trust boundary (ADR 0008)
   - `handlers.py` — one `ToolHandler` per job type + `REGISTRY`; add new tools here (see ADR 0002). Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
-  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015). `mcp` imported lazily; optional extra
+  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015), plus four instruction-only prompts. `mcp` imported lazily; optional extra
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
   - `commands/test_cases.py` — `test-cases draft|save`; review file is created exclusively (never overwritten), literal credentials refused, save needs `--reviewed`
   - `toolchain.py` — pinned, verified tool installs into `~/.vardrmap/tools` from `tool_manifest.json`; re-hashes managed binaries before use (ADR 0014)
@@ -111,7 +111,9 @@ vardrrunner daemon start
 - `doctor` — deep preflight for unattended use; exits non-zero on failures (`--json`)
 - `update check` — cached opt-in release discovery; never installs automatically
 - `test-cases draft|save` — draft VardrGate cases from observed operations/OpenAPI into a review file, save only with `--reviewed`
-- `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra
+- `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra.
+  Prompts (`brief`/`triage`/`untested`/`retest`) are instruction text only — never pre-fetch
+  engagement data into one, or target-controlled strings land in the trusted prompt position
 
 Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
 back-compat aliases.
