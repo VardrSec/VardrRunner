@@ -52,6 +52,8 @@ dev = [
     "mypy>=1.11",
     "types-requests>=2.31",
     "bandit>=1.7",
+    # Test-only: generates the throwaway untrusted certificates the ffuf tests serve.
+    "cryptography>=42",
     # The MCP server is an optional runtime feature, but CI must install it so its
     # tests run, mypy can resolve its (lazy) `mcp` imports, and coverage counts the
     # module. Keeping it here means no change to the CI workflow is needed.
@@ -98,3 +100,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+    "smoke: opt-in tests that run real external binaries against a local fixture (set VARDRRUNNER_SMOKE=1)",
+]
