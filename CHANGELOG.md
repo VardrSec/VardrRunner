@@ -7,6 +7,36 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.42.0] — 2026-10-09
+
+Four MCP prompts for the workflows every engagement repeats. See
+[`changelog/v0.42.0.md`](changelog/v0.42.0.md).
+
+### Added
+
+- **MCP prompts — `brief`, `triage`, `untested`, `retest`.** The slash commands an MCP client
+  surfaces (`/mcp__vardr__brief`). `brief` reports where an engagement stands and what to do next;
+  `triage` pages the whole findings inventory and judges each finding's validity, severity and
+  evidence; `untested` compares scope and discovered surface against the jobs actually run and
+  proposes an ordered plan; `retest` verifies a fix against the one affected asset and may report
+  "inconclusive". Each takes an optional `engagement_id` and asks which engagement to use when it is
+  blank. `severity` narrows `triage`; `finding_id` targets `retest`.
+- **Each prompt states its own limits rather than implying a capability.** `retest` says that
+  `queue_job` takes a target source and so cannot be scoped to one asset, offers
+  `vardrrunner run <tool> --target <asset>` as the route that can, names the real finding
+  statuses instead of guessing which are "remediated", and admits there is no scan-results
+  tool — so it judges by whether an equivalent finding returns and keeps "inconclusive"
+  available. `brief` omits the authorization window and the client deliverable, which this
+  server cannot read, and labels `list_reports` as the per-finding write-ups. A test requires
+  every tool a prompt names to exist, because expansion tests prove phrasing, not feasibility.
+- **Prompts are instruction text and fetch nothing when expanded.** A prompt is the most trusted
+  content in the agent's context, while findings, recon URLs and scanner output come from the
+  targets under test, so none of that is embedded; the agent gathers it through the read tools,
+  where it is already framed as untrusted data. A test asserts expansion never touches the API
+  client. See [ADR 0015 § Amendment (v0.42.0)](docs/adr/0015-mcp-server.md).
+
+No tool, endpoint or backend change: the prompts drive the tools v0.40.0 already exposed.
+
 ## [0.41.0] — 2026-10-09
 
 Every upload names its job, authorization cases can be drafted for review, and the MCP reads page

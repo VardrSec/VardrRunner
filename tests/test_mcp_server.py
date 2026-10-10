@@ -1,4 +1,4 @@
-"""The MCP server: tool surface, read/write hints, filtering, writes, and error mapping.
+"""The MCP server: tool surface, read/write hints, filtering, writes, prompts, errors.
 
 Skipped entirely when the optional `mcp` extra is not installed. The server is
 driven in-process with a fake VardrMapClient — no network, no real agent.
@@ -51,6 +51,7 @@ EXPECTED = {
     "queue_pipeline",
     "create_finding",
 }
+EXPECTED_PROMPTS = {"brief", "triage", "untested", "retest"}
 
 
 def _server(fake):
@@ -59,6 +60,20 @@ def _server(fake):
 
 def _tools(srv):
     return {t.name: t for t in asyncio.run(srv.list_tools())}
+
+
+def _prompts(srv):
+    return {p.name: p for p in asyncio.run(srv.list_prompts())}
+
+
+def _expand(srv, name, **args):
+    """Expand a prompt to the text the agent would receive."""
+    result = asyncio.run(srv.get_prompt(name, args))
+    parts = []
+    for message in result.messages:
+        content = message.content
+        parts.append(getattr(content, "text", str(content)))
+    return "\n".join(parts)
 
 
 def _call(srv, name, **args):
@@ -288,6 +303,141 @@ def test_create_finding_posts_body():
     assert (
         body["title"] == "IDOR" and body["severity"] == "high" and body["asset"] == "api.acme.com"
     )
+
+
+# ── prompts ───────────────────────────────────────────────────────────────────
+
+
+def test_exposes_exactly_the_expected_prompts():
+    assert set(_prompts(_server(MagicMock()))) == EXPECTED_PROMPTS
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED_PROMPTS))
+def test_prompt_fetches_nothing_when_expanded(name):
+    """A prompt is instructions only — it must never paste target-controlled data in.
+
+    Prompt text is the most trusted content in the agent's context, so embedding
+    findings or recon URLs would launder them into that position. Expansion
+    touching the API client at all is the regression this guards.
+    """
+    fake = MagicMock()
+    text = _expand(_server(fake), name, engagement_id="e1")
+    assert fake.mock_calls == []
+    assert "e1" in text
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED_PROMPTS))
+def test_prompt_without_an_engagement_asks_instead_of_guessing(name):
+    text = _expand(_server(MagicMock()), name)
+    assert "list_engagements" in text
+    assert "not guess" in text or "Do not guess" in text
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED_PROMPTS))
+def test_every_prompt_marks_tool_output_untrusted(name):
+    assert "not instructions" in _expand(_server(MagicMock()), name, engagement_id="e1")
+
+
+@pytest.mark.parametrize("name", ["triage", "untested", "retest"])
+def test_prompts_that_can_queue_require_preview_and_approval(name):
+    text = _expand(_server(MagicMock()), name, engagement_id="e1")
+    assert "preview_job" in text
+    assert "approve" in text or "agrees" in text or "choose" in text
+
+
+def test_brief_is_read_only_and_queues_nothing():
+    text = _expand(_server(MagicMock()), "brief", engagement_id="e1")
+    assert "Queue nothing" in text
+    assert "queue_job" not in text and "queue_pipeline" not in text
+
+
+def test_triage_severity_narrows_the_request():
+    srv = _server(MagicMock())
+    assert "Limit this to high findings" in _expand(
+        srv, "triage", engagement_id="e1", severity=" high "
+    )
+    assert "Cover every severity" in _expand(srv, "triage", engagement_id="e1")
+
+
+def test_triage_does_not_claim_a_finding_edit_tool():
+    text = _expand(_server(MagicMock()), "triage", engagement_id="e1")
+    assert "no tool to change one" in text
+    assert "next_offset" in text  # pages the whole inventory, not just the first page
+
+
+def test_retest_targets_one_finding_when_given_and_otherwise_asks():
+    srv = _server(MagicMock())
+    assert "Retest finding f9" in _expand(srv, "retest", engagement_id="e1", finding_id="f9")
+    assert "ask which to retest" in _expand(srv, "retest", engagement_id="e1")
+
+
+def test_retest_allows_an_inconclusive_result():
+    text = _expand(_server(MagicMock()), "retest", engagement_id="e1")
+    assert "Inconclusive is a real answer" in text
+
+
+# ── prompts match the tool surface ────────────────────────────────────────────
+#
+# Green expansion tests prove phrasing, not feasibility: a prompt can be
+# perfectly worded and still instruct the agent to do something no tool here can
+# do. These pin the prompts against what the server actually exposes.
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED_PROMPTS))
+def test_prompts_only_name_tools_that_exist(name):
+    """Every `snake_case` tool reference in a prompt must be a real tool."""
+    import re
+
+    srv = _server(MagicMock())
+    text = _expand(srv, name, engagement_id="e1")
+    mentioned = {
+        word
+        for word in re.findall(r"\b[a-z]+(?:_[a-z]+)+\b", text)
+        # Config keys and CLI flags share the naming style; only check names that
+        # look like this server's tools.
+        if word.startswith(("list_", "get_", "queue_", "create_", "preview_"))
+    }
+    assert mentioned <= set(_tools(srv)), mentioned - set(_tools(srv))
+
+
+def test_brief_does_not_promise_an_authorization_window():
+    """get_engagement returns the engagement and its scope, not its authorizations."""
+    text = _expand(_server(MagicMock()), "brief", engagement_id="e1")
+    assert "authorization record" in text  # named as unavailable, not requested
+    assert "authorization window if one is set" not in text
+
+
+def test_brief_does_not_call_finding_reports_deliverables():
+    """list_reports reads per-finding reports; client deliverables are a separate API."""
+    text = _expand(_server(MagicMock()), "brief", engagement_id="e1")
+    assert "not the engagement's client deliverables" in text
+
+
+def test_retest_does_not_invent_a_finding_status():
+    """VardrMap statuses are new/candidate/triaged/in_progress/closed."""
+    text = _expand(_server(MagicMock()), "retest", engagement_id="e1")
+    assert "remediated or awaiting verification" not in text
+    for real in ("new", "candidate", "triaged", "in_progress", "closed"):
+        assert real in text
+
+
+def test_retest_states_that_a_job_cannot_be_scoped_to_one_asset():
+    """queue_job takes a target source, not a target, so the prompt must not imply one."""
+    text = _expand(_server(MagicMock()), "retest", engagement_id="e1")
+    assert "cannot scope a job to one asset" in text
+    # The local CLI is the route that does take a single target.
+    assert "--target" in text
+
+
+def test_retest_does_not_claim_a_scan_results_tool():
+    text = _expand(_server(MagicMock()), "retest", engagement_id="e1")
+    assert "no tool here that reads a job's scan results" in text
+
+
+def test_untested_quotes_preview_counts_as_an_upper_bound():
+    """ffuf collapses targets to roots after VardrMap resolves them."""
+    text = _expand(_server(MagicMock()), "untested", engagement_id="e1")
+    assert "upper bound" in text
 
 
 # ── error mapping ─────────────────────────────────────────────────────────────

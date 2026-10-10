@@ -246,6 +246,39 @@ For Claude Desktop, add to its MCP config:
 | Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_findings`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `preview_job` |
 | Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding` |
 
+**Prompts (the workflows you repeat on every engagement)**
+
+In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
+`engagement_id`, and asks you which engagement to use when you leave it blank.
+
+| Prompt | What it does |
+|--------|--------------|
+| `brief` | Where the engagement stands — scope, which tools have run, findings by severity, reports — and the three things to do next. Queues nothing. |
+| `triage` | Works through the findings inventory and judges each one: real or a bare template match, whether the severity holds, what evidence exists, and the smallest check that would confirm it. Optional `severity` narrows it. |
+| `untested` | Compares the declared scope and discovered surface against the jobs actually run, names the gaps, and proposes an ordered plan with `preview_job` target counts before anything is queued. |
+| `retest` | Verifies a fix landed: restates the issue, proposes a check, follows the job, and reports fixed / still present / inconclusive. Optional `finding_id`. |
+
+**What `retest` can and cannot do.** `queue_job` takes a target *source* (scope or recon),
+not a target, so this server cannot scope a job to the single asset a retest wants. The
+prompt says so and offers two honest routes: queue the narrowest available job while stating
+it is broader than the finding, or run `vardrrunner run <tool> --engagement <id> --target
+<asset>` locally, which does take one target. It judges the outcome from whether an
+equivalent finding returns in `list_findings` and from the job's events — there is no tool
+here that reads a job's scan results directly — and it will not infer which findings are due
+a retest, because remediation notes and retest history are not fields it can read.
+
+`brief` likewise leaves out two things an operator expects and this server cannot reach: the
+authorization record and its testing window (`get_engagement` returns the engagement's own
+fields and scope, not its authorizations), and the client deliverable and its revisions.
+`list_reports` reads the **per-finding** write-ups, not those deliverables.
+
+A prompt is **instructions only** — expanding one makes no API call and embeds no
+engagement data. Prompt text arrives as the most trusted content in the agent's
+context, and finding titles, recon URLs and scanner output all come from the targets
+under test; pasting those into a prompt would put target-controlled strings in that
+trusted position. The agent gathers what it needs with the read tools instead, where
+the result is already framed as untrusted data.
+
 **Not exposed, by design:** editing scope or authorization, stop-work, any delete, and
 member/API-key/settings management — do those in the UI. Withholding a scope-editing tool is
 the main guard against prompt injection: the agent reads target-controlled text (response
