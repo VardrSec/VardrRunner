@@ -9,17 +9,20 @@ import os
 import re
 import shutil
 import signal
+import ssl
 import stat
 import subprocess
 import tempfile
+import urllib.error
 import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
-from vardrrunner import config, toolchain
+from vardrrunner import config, configs, toolchain
 
 # Allowlist maps subcommand names to their executable names.
 # Add new tools here only — never allow arbitrary executables.
@@ -32,6 +35,7 @@ ALLOWED_TOOLS = {
     "naabu": "naabu",
     "katana": "katana",
     "gau": "gau",
+    "ffuf": "ffuf",
     "dalfox": "dalfox",
     # Job type "vardrgate_api_test" maps to the "vardrgate" binary on PATH.
     "vardrgate_api_test": "vardrgate",
@@ -335,6 +339,7 @@ _VERSION_ARGS: dict[str, list[str]] = {
     "naabu": ["-version"],
     "katana": ["-version"],
     "gau": ["--version"],
+    "ffuf": ["-V"],
     "dalfox": ["--version"],
     "nmap": ["--version"],
 }
@@ -395,6 +400,178 @@ def strip_url_to_host(url: str) -> str:
     parsed = urllib.parse.urlparse(stripped)
     # hostname attribute lowercases and strips brackets from IPv6
     return parsed.hostname or stripped
+
+
+def base_url(target: str) -> str:
+    """Reduce a target to the site root ffuf fuzzes under, or "" if it is unusable.
+
+    Content discovery starts at the root, so a recon URL's path is dropped:
+    "https://app.example.com/login" → "https://app.example.com". A bare host gets
+    https, matching how the rest of the runner treats scope entries.
+
+        "app.example.com"                → "https://app.example.com"
+        "http://10.0.0.1:8080/a/b"       → "http://10.0.0.1:8080"
+        "*.example.com"                  → ""   (a wildcard is not a host)
+        "mailto:a@b.com"                 → ""   (not a web target)
+
+    Anything that does not reduce to a plain http(s) host — and optional port —
+    returns "" and is dropped by the caller. Two cases are worth naming, because
+    both arrive in real recon and both survive a naive scheme prefix: a
+    `mailto:`/`javascript:` entry parses as userinfo plus a host once "https://"
+    is prepended, and a URL carrying credentials would otherwise have them
+    replayed at the target. Neither is fuzzed.
+    """
+    stripped = target.strip().rstrip("/")
+    if not stripped or "*" in stripped:
+        return ""
+    if "://" not in stripped:
+        stripped = f"https://{stripped}"
+    try:
+        parsed = urllib.parse.urlparse(stripped)
+        port = parsed.port  # raises ValueError on a non-numeric port
+    except ValueError:
+        return ""
+    host = parsed.hostname
+    if parsed.scheme not in ("http", "https") or not host:
+        return ""
+    if parsed.username or parsed.password:
+        return ""
+    if ":" in host:  # hostname drops IPv6 brackets; put them back
+        host = f"[{host}]"
+    return f"{parsed.scheme}://{host}:{port}" if port else f"{parsed.scheme}://{host}"
+
+
+def resolve_wordlist(name: str) -> Path:
+    """The local file for a wordlist *name*, under ~/.vardrmap/wordlists.
+
+    A job names a wordlist; it never supplies a path. The name's shape admits no
+    separator (``configs.WORDLIST_NAME``), so it cannot climb out of this
+    directory, and the parent is re-checked here as defence in depth. A symlink
+    *inside* the directory is honoured — pointing `common.txt` at a SecLists file
+    elsewhere is the operator's own decision, made on their own machine, and is
+    not something the backend can influence.
+    """
+    if not configs.WORDLIST_NAME.match(name or ""):
+        raise ToolError(f"{name!r} is not a valid wordlist name")
+    directory = config.wordlists_dir()
+    path = directory / f"{name}.txt"
+    if path.parent != directory:
+        raise ToolError(f"wordlist {name!r} would resolve outside {directory}")
+    if not path.is_file():
+        raise ToolError(
+            f"wordlist {name!r} is not installed: expected {path}. Put a wordlist there "
+            f"(a symlink to an existing one is fine) and queue the job again."
+        )
+    if path.stat().st_size == 0:
+        raise ToolError(f"wordlist {name!r} is empty: {path}")
+    return path
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Treat a redirect as an answer. ffuf does not follow redirects by default, so a
+    3xx proves the host is up, and following it could fail on an unrelated second host."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def _unverified_tls() -> ssl.SSLContext:
+    """A TLS context that does not verify the server's certificate.
+
+    **Matches pinned ffuf, which does not verify either** — checked against the real
+    binary 2.3.0 with a self-signed certificate, an expired one and a hostname-
+    mismatched one: it scanned all three and found the same paths. This probe asks
+    "would ffuf be able to look?", so it must succeed wherever ffuf does. A verifying
+    probe failed jobs on exactly the self-signed hosts pentests are full of, and an
+    earlier revision of this code did so on the strength of an untested assumption.
+
+    Safe here: the probe sends one GET with a fixed User-Agent and no credentials,
+    cookies or request body, and trusts nothing it receives. A protocol-level failure
+    (not speaking TLS at all, a failed handshake) still counts as unreachable.
+    """
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+def probe_reachable(url: str, timeout: float = 10.0) -> str | None:
+    """Return None if ``url`` answers over HTTP, else a short reason it could not be reached.
+
+    **Why this exists.** ffuf exits 0 and writes a valid, empty report for a host that
+    refuses the connection — with ``-s``, ``-se`` and ``-sa`` alike — so neither the exit
+    code nor the report can tell "there was nothing there" from "it could not look". A
+    false "found nothing" in an engagement's record is worse than a failed job, so each
+    target is checked once before it is fuzzed.
+
+    **Any HTTP response counts as reachable**, including 404, 403, 500 and redirects: the
+    question is only whether something answered. A connection error, timeout or failed
+    TLS *handshake* is "unreachable". An untrusted certificate is not — see
+    ``_unverified_tls``. Cost: one GET per target, identified by its User-Agent. It does
+    not close the window between the probe and the fuzz, only the common case.
+    """
+    request = urllib.request.Request(
+        url, method="GET", headers={"User-Agent": "VardrRunner-reachability-probe"}
+    )
+    opener = urllib.request.build_opener(
+        _NoRedirect, urllib.request.HTTPSHandler(context=_unverified_tls())
+    )
+    try:
+        with opener.open(request, timeout=timeout):
+            return None
+    except urllib.error.HTTPError:
+        return None  # the server answered; the status is not our concern here
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        return f"{reason.__class__.__name__}: {reason}"
+    except (TimeoutError, OSError) as exc:
+        return f"{exc.__class__.__name__}: {exc}"
+
+
+def run_ffuf(
+    target: str,
+    output_path: Path,
+    wordlist: Path,
+    extensions: tuple[str, ...] = (),
+    match_codes: str | None = None,
+    rate: int = 50,
+    timeout: int | None = None,
+) -> None:
+    """Fuzz one site root for content with ffuf. Output is ffuf's JSON report.
+
+    One target per call, deliberately. ffuf can fuzz many hosts in a single run
+    via its ``-w path:KEYWORD`` syntax, but a Windows wordlist path already
+    contains a colon (``C:\\...``) and ffuf's own documentation does not say
+    which colon separates the keyword. A bare ``-w <path>`` with ffuf's default
+    ``FUZZ`` keyword is the canonical form and has no such ambiguity, so the
+    handler loops instead. ``timeout`` therefore bounds each target, not the job.
+
+    ``-ac`` (auto-calibration) is always on: a site that answers every path with
+    200 would otherwise import thousands of phantom endpoints into shared recon.
+    ``-rate`` is always passed — this is the one tool here that puts sustained
+    load on a client's host, so its request rate is never left unbounded.
+    """
+    cmd = [
+        program("ffuf"),
+        "-w",
+        str(wordlist),
+        "-u",
+        f"{target}/FUZZ",
+        "-of",
+        "json",
+        "-o",
+        str(output_path),
+        "-rate",
+        str(rate),
+        "-ac",
+        "-s",
+        "-noninteractive",
+    ]
+    if extensions:
+        cmd += ["-e", ",".join(extensions)]
+    if match_codes:
+        cmd += ["-mc", match_codes]
+    return _run_tool(cmd, None, "ffuf", timeout)
 
 
 def run_httpx(targets: list[str], output_path: Path, timeout: int | None = None) -> None:

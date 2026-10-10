@@ -11,6 +11,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from vardrrunner import configs
 from vardrrunner import runner as process_runner
 from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run, tools
 from vardrrunner.commands import credentials as credentials_cmd
@@ -715,6 +716,56 @@ def run_gau(
         engagement_id=engagement_id,
         subs=subs,
         providers=providers,
+        yes=yes,
+        max_targets=max_targets,
+    )
+
+
+@run_app.command("ffuf")
+def run_ffuf(
+    engagement_id: str = typer.Option(
+        ..., "--engagement", "--program", "-p", help="Engagement UUID"
+    ),
+    scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
+    from_recon: bool = typer.Option(
+        False, "--from-recon", help="Use live recon items from VardrMap"
+    ),
+    target: str | None = typer.Option(None, "--target", help="Single inline target URL"),
+    targets_file: Path | None = typer.Option(None, "--targets", help="Path to a targets .txt file"),
+    limit: int = typer.Option(100, "--limit", help="Max recon items to use (--from-recon only)"),
+    wordlist: str = typer.Option(
+        "common", "--wordlist", help="Wordlist name in ~/.vardrmap/wordlists (not a path)"
+    ),
+    extensions: str | None = typer.Option(
+        None, "--extensions", help="Comma list of extensions to append, e.g. .php,.bak"
+    ),
+    match_codes: str | None = typer.Option(
+        None, "--match-codes", help="Statuses to keep, e.g. 200,301,403 (default: ffuf's own)"
+    ),
+    rate: int = typer.Option(
+        configs.FFUF_DEFAULT_RATE,
+        "--rate",
+        min=1,
+        max=configs.FFUF_MAX_RATE,
+        help="Requests per second, per target",
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    max_targets: int = typer.Option(
+        run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
+    ),
+):
+    """Fuzz site roots for hidden content with ffuf and upload what it finds to VardrMap."""
+    run.run_ffuf(
+        engagement_id=engagement_id,
+        scope=scope,
+        from_recon=from_recon,
+        target=target,
+        targets_file=targets_file,
+        limit=limit,
+        wordlist=wordlist,
+        extensions=extensions,
+        match_codes=match_codes,
+        rate=rate,
         yes=yes,
         max_targets=max_targets,
     )

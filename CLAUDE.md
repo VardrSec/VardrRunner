@@ -8,7 +8,9 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `api.py` — thin HTTP client (`requests.Session`); **only** thing that talks to backend
   - `config.py` — resolves credentials (env > keychain > `~/.vardrmap/config.json`); enforces HTTPS
   - `keychain.py` — OS keychain wrapper (`keyring`); degrades gracefully
-  - `configs.py` — typed, validated tool configs + `JobEnvelope`; bad payload → `ConfigError`
+  - `configs.py` — typed, validated tool configs + `JobEnvelope`; bad payload → `ConfigError`.
+    A wordlist is a **name**, never a path: the backend must not be able to name a local file
+    for ffuf to read (`runner.resolve_wordlist` confines it to `~/.vardrmap/wordlists`)
   - `targets.py` — target resolution (scope/recon/inline/file)
   - `target_safety.py` — classifies resolved targets (loopback / link-local / cloud metadata) and evaluates local deny rules; warnings never block (§16, v0.36.0)
   - `errors.py` — `FailureCategory` + `RunnerError` hierarchy; the one place a status becomes a domain meaning (ADR 0008)
@@ -20,9 +22,18 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
     nothing here re-grades a match, renames a tier or decides what is confirmed, so the tier,
     detection method and confidence reach VardrMap intact. Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
-  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015). `mcp` imported lazily; optional extra
+  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015), plus four instruction-only prompts. `mcp` imported lazily; optional extra
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
   - `commands/test_cases.py` — `test-cases draft|save`; review file is created exclusively (never overwritten), literal credentials refused, save needs `--reviewed`
+  - `methodologies.py` — versioned checklists from `methodologies.json` (OWASP API Top 10
+    2023, WSTG 4.2). **Coverage is not representable**: a `status`/`covered`/`done`/`coverage`
+    key is refused at load, because a checklist that can hold a tick gets one as soon as a
+    scanner runs. Items carry `method: tooling|manual` — **how** an item is tested, never
+    whether it has been, so recorded manual work evidences a `manual` item as well as a job
+    does; the old name `evidence` is refused to stop the two re-conflating. Coverage is
+    derived per engagement from its own jobs and findings. Every `suggests` entry must be a
+    real job type. WSTG is category-level; OWASP's scenario ids (`WSTG-v42-INFO-02`) are
+    deferred, and each methodology says so in `scope`
   - `toolchain.py` — pinned, verified tool installs into `~/.vardrmap/tools` from `tool_manifest.json`; re-hashes managed binaries before use (ADR 0014)
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
@@ -98,7 +109,7 @@ vardrrunner daemon start
 - `credentials` — credential source/posture; never shows the key
 - `engagements` — list engagements (`programs` kept as a hidden alias)
 - `scope <engagement-id>` — show in/out-of-scope items
-- `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau|dalfox` — run tool locally, upload results
+- `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau|ffuf|dalfox` — run tool locally, upload results
 - `pipeline list|run <name>` — chain tools (`recon`, `quick`, `deep`, `ports`, `content`)
 - `import nuclei|httpx` — import existing output file
 - `jobs list|run` — inspect and execute backend job queue (one-shot)
@@ -112,7 +123,13 @@ vardrrunner daemon start
 - `doctor` — deep preflight for unattended use; exits non-zero on failures (`--json`)
 - `update check` — cached opt-in release discovery; never installs automatically
 - `test-cases draft|save` — draft VardrGate cases from observed operations/OpenAPI into a review file, save only with `--reviewed`
-- `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra
+- `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra.
+  Prompts (`brief`/`triage`/`untested`/`retest`) are instruction text only — never pre-fetch
+  engagement data into one, or target-controlled strings land in the trusted prompt position.
+  A prompt may only name tools that exist; a test enforces it. **Never add a tool that saves a
+  VardrGate case or writes a client deliverable** — both are assertions only the operator can
+  make (human review; an immutable client-facing document), unlike the scope/delete set, which
+  is withheld to bound a compromised agent. Draft and read; stop where a human commits
 
 Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
 back-compat aliases.

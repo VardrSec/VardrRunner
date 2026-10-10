@@ -11,6 +11,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
+from vardrrunner import configs
 from vardrrunner.cli import app
 from vardrrunner.commands import run as run_cmd
 
@@ -408,6 +409,67 @@ class TestRunCommands:
             yes=True,
             max_targets=run_cmd.MAX_TARGETS_DEFAULT,
         )
+
+    def test_run_ffuf_defaults(self):
+        with patch("vardrrunner.commands.run.run_ffuf") as mock:
+            invoke("run", "ffuf", "--engagement", "p1", "--scope")
+        mock.assert_called_once_with(
+            engagement_id="p1",
+            scope=True,
+            from_recon=False,
+            target=None,
+            targets_file=None,
+            limit=100,
+            wordlist="common",
+            extensions=None,
+            match_codes=None,
+            rate=configs.FFUF_DEFAULT_RATE,
+            yes=False,
+            max_targets=run_cmd.MAX_TARGETS_DEFAULT,
+        )
+
+    def test_run_ffuf_options(self):
+        with patch("vardrrunner.commands.run.run_ffuf") as mock:
+            invoke(
+                "run",
+                "ffuf",
+                "-p",
+                "p1",
+                "--from-recon",
+                "--limit",
+                "20",
+                "--wordlist",
+                "api-paths",
+                "--extensions",
+                ".php,.bak",
+                "--match-codes",
+                "200,403",
+                "--rate",
+                "15",
+                "-y",
+            )
+        mock.assert_called_once_with(
+            engagement_id="p1",
+            scope=False,
+            from_recon=True,
+            target=None,
+            targets_file=None,
+            limit=20,
+            wordlist="api-paths",
+            extensions=".php,.bak",
+            match_codes="200,403",
+            rate=15,
+            yes=True,
+            max_targets=run_cmd.MAX_TARGETS_DEFAULT,
+        )
+
+    @pytest.mark.parametrize("rate", ["0", "-5", str(configs.FFUF_MAX_RATE + 1)])
+    def test_run_ffuf_rejects_an_out_of_range_rate(self, rate):
+        """The rate cap is a safety control, so its bounds are enforced at the CLI."""
+        with patch("vardrrunner.commands.run.run_ffuf") as mock:
+            result = invoke("run", "ffuf", "-p", "p1", "--scope", "--rate", rate)
+        assert result.exit_code != 0
+        mock.assert_not_called()
 
     def test_run_dalfox_defaults(self):
         with patch("vardrrunner.commands.run.run_dalfox") as mock:
