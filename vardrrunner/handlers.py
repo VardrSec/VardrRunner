@@ -998,8 +998,14 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         # Resolve credential references to real values locally, keeping secrets
         # out of the backend. Raises ConfigError if a referenced secret is missing.
         test_case = _resolve_identity_secrets(config.test_case)
-        job = {"config": {"test_case": test_case, "execution": config.execution}}
-        timeout = config.execution.get("timeout_seconds")
+        execution = dict(config.execution)
+        # Network access is a choice of the operator running this worker.
+        # A backend-supplied config cannot grant private-network access.
+        execution["allow_private_targets"] = (
+            os.environ.get("VARDRRUNNER_ALLOW_PRIVATE_TARGETS") == "1"
+        )
+        job = {"config": {"test_case": test_case, "execution": execution}}
+        timeout = execution.get("timeout_seconds")
         runner.run_vardrgate(job, output, timeout=timeout if isinstance(timeout, int) else None)
         return output
 

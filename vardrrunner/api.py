@@ -187,7 +187,15 @@ class VardrMapClient:
 
     def pending_jobs(self) -> list[dict]:
         """Return all pending jobs owned by the authenticated user."""
-        return self.get("/jobs/pending").get("jobs", [])
+        jobs = self.get("/jobs/pending").get("jobs", [])
+        # The backend retains program_id on the wire for existing clients.
+        # Keep both fields so envelope validation can reject conflicting IDs.
+        return [
+            {**job, "engagement_id": job["program_id"]}
+            if not job.get("engagement_id") and job.get("program_id")
+            else dict(job)
+            for job in jobs
+        ]
 
     def _classified(self, response: requests.Response) -> dict:
         """Return parsed JSON, or raise a classified domain error on non-2xx.
