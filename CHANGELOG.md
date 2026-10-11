@@ -7,6 +7,16 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Normalize queued `program_id` to `engagement_id`; reject conflicting IDs.
+- Apply queued VardrGate `timeout` to execution and reject conflicting timeouts.
+
+### Added
+
+- Local `VARDRRUNNER_ALLOW_PRIVATE_TARGETS=1` opt-in for VardrGate jobs. Private
+  targets remain blocked by default, including when job config requests access.
+
 ## [0.46.0] — 2026-10-09
 
 dalfox XSS scanning. **Pairs with VardrMap v0.41.0**, which adds the job type and importer. See

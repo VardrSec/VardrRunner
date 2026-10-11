@@ -49,6 +49,9 @@ class JobEnvelope:
 
     @classmethod
     def from_dict(cls, job: dict) -> "JobEnvelope":
+        if job.get("program_id") and job.get("engagement_id"):
+            if str(job["program_id"]) != str(job["engagement_id"]):
+                raise ConfigError("conflicting program_id and engagement_id")
         required = ("id", "tool_type", "target_source", "engagement_id")
         missing = [k for k in required if not job.get(k)]
         if missing:
@@ -423,9 +426,18 @@ class VardrGateConfig:
         test_case = cfg.get("test_case")
         if not isinstance(test_case, dict) or not test_case:
             raise ConfigError("'test_case' is required and must be an object")
-        execution = cfg.get("execution") or {}
+        execution = cfg.get("execution", {})
         if not isinstance(execution, dict):
             raise ConfigError("'execution' must be an object")
+        execution = dict(execution)
+        timeout = cfg.get("timeout", execution.get("timeout_seconds"))
+        if timeout is not None:
+            if type(timeout) is not int or not 1 <= timeout <= 86_400:
+                raise ConfigError("'timeout' must be an integer between 1 and 86400")
+            if "timeout" in cfg and "timeout_seconds" in execution:
+                if cfg["timeout"] != execution["timeout_seconds"]:
+                    raise ConfigError("conflicting timeout and execution.timeout_seconds")
+            execution["timeout_seconds"] = timeout
         policy_id = cfg.get("policy_id")
         return cls(
             test_case=test_case,

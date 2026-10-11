@@ -885,3 +885,18 @@ not change that host policy; it prints the administrator command
   message when no config is present.
 - A missing or failing tool marks the corresponding job **failed** with a reason — the
   runner never silently skips work.
+
+### Queued VardrGate integration
+
+Queued jobs accept the backend's legacy `program_id` as the engagement ID.
+Conflicting `program_id` and `engagement_id` fail before execution.
+`config.timeout` is an integer from 1 to 86400 seconds and supplies Gate's
+`execution.timeout_seconds` and the runner subprocess timeout. Conflicting
+explicit timeouts are rejected.
+
+For an internal API engagement, set `VARDRRUNNER_ALLOW_PRIVATE_TARGETS=1` on
+the machine running the worker before starting `vardrrunner jobs run` or the worker daemon. This opts
+that worker into Gate's private-target mode, including loopback, for all Gate
+jobs it executes. Unset it when finished. Only the exact value `1` enables it;
+backend job config cannot enable it. This changes Gate's network safeguard,
+not VardrMap's advisory scope policy or its enforced stop-work switch.
