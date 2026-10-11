@@ -14,6 +14,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ### Added
 
+- Shared original API playbooks, filtered execution evidence and the instruction-only
+  api_playbook MCP prompt. No coverage is inferred. [Detail](changelog/unreleased-api-playbooks.md).
+- Bind Gate artifacts to the unresolved case spec using a canonical SHA-256 retained
+  for recovery; refuse execution if the case changes between polling and claim.
+
 - Local `VARDRRUNNER_ALLOW_PRIVATE_TARGETS=1` opt-in for VardrGate jobs. Private
   targets remain blocked by default, including when job config requests access.
 

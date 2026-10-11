@@ -269,3 +269,20 @@ in depth—in a successful response's warning array.
   the backend claim remains the cross-host ownership authority.
 - **No backend coupling.** The runner must build, test, and run without the backend present
   (tests mock every HTTP and subprocess call).
+
+## API playbooks and result binding (unreleased)
+
+Map is the single source for original versioned API playbooks. MCP reads its
+engagement-scoped catalog and individual guide over `api.py`, plus filtered
+redacted evidence. The api_playbook prompt expands to instructions only and makes
+no API call; fetched guidance and target-controlled content stay in tool results.
+Human review, evidence linking/retest recording and client deliverable commits
+remain operator actions. No methodology coverage is inferred from a guide.
+
+Map captures the unresolved spec at claim. Runner compares it with the spec it
+validated, resolved and showed before claim, failing before execution if changed.
+The Gate handler adds SHA-256 of sorted compact JSON (default ensure_ascii=True,
+UTF-8) of the unresolved spec to its result artifact after binary execution.
+Credential resolution does not affect the binding; the hash survives recovery
+without storing resolved secrets. This is correlation, not a signed attestation.
+Old artifacts remain uploadable, but Map treats an absent binding as inconclusive.

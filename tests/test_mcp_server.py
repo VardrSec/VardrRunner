@@ -50,6 +50,9 @@ EXPECTED = {
     "list_deliverables",
     "get_deliverable_revision",
     "get_finding_activity",
+    "list_api_playbooks",
+    "get_api_playbook",
+    "list_evidence",
     "list_methodologies",
     "get_methodology",
     "preview_job",
@@ -70,7 +73,7 @@ FORBIDDEN_ASSERTIONS = {
     "create_deliverable_revision",
     "update_deliverable",
 }
-EXPECTED_PROMPTS = {"brief", "triage", "untested", "methodology", "retest"}
+EXPECTED_PROMPTS = {"api_playbook", "brief", "triage", "untested", "methodology", "retest"}
 
 
 def _server(fake):
@@ -145,6 +148,9 @@ def test_read_tools_are_marked_read_only_and_writes_are_not():
         "list_deliverables",
         "get_deliverable_revision",
         "get_finding_activity",
+        "list_api_playbooks",
+        "get_api_playbook",
+        "list_evidence",
         "list_methodologies",
         "get_methodology",
         "preview_job",  # a dry run changes nothing

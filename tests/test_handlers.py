@@ -159,6 +159,13 @@ def test_vardrgate_execute_writes_result(tmp_path):
     # The envelope handed to the binary carries the test case and execution block.
     assert captured["job"]["config"]["test_case"]["id"] == "profile-check"
     assert captured["timeout"] == 10
+    import hashlib
+    import json
+
+    expected = hashlib.sha256(
+        json.dumps(_vardrgate_cfg().test_case, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert json.loads(out.read_text(encoding="utf-8"))["case_hash"] == expected
 
 
 def test_vardrgate_upload_posts_result_to_job(tmp_path):
@@ -274,6 +281,15 @@ def test_vardrgate_execute_resolves_env_secret(monkeypatch, tmp_path):
 
     cred = captured["job"]["config"]["test_case"]["identities"][0]["credential"]
     assert cred["value"] == "resolved-token" and "value_env" not in cred
+    retained = (tmp_path / "vardrgate_result.json").read_text(encoding="utf-8")
+    assert "resolved-token" not in retained
+    import hashlib
+    import json
+
+    expected = hashlib.sha256(
+        json.dumps(cfg.test_case, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert json.loads(retained)["case_hash"] == expected
 
 
 def test_httpx_upload_summary(tmp_path):

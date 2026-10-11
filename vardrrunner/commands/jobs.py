@@ -324,6 +324,16 @@ def _execute_one(
     if journal_store is not None and record is not None:
         record = journal_store.transition(record.run_id, Phase.CLAIMED, claimed_at=utc_now())
 
+    if tool_type == "vardrgate_api_test" and isinstance(claimed, dict):
+        claimed_config = claimed.get("config")
+        if isinstance(claimed_config, dict) and "test_case" in claimed_config:
+            if claimed_config["test_case"] != cfg.get("test_case"):
+                fail(
+                    errors.FailureCategory.INVALID_CONFIG,
+                    "test case changed between polling and claim; review and queue a new job",
+                )
+                return
+
     # Advisory findings from the backend's policy evaluation. Shown before any
     # tool runs so the operator sees them while they can still intervene; they
     # do not block, by design (ADR 0001 amendment).

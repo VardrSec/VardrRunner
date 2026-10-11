@@ -11,6 +11,7 @@ Adding a tool is a one-file change: write a handler and register it below.
 """
 
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -1007,12 +1008,21 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         job = {"config": {"test_case": test_case, "execution": execution}}
         timeout = execution.get("timeout_seconds")
         runner.run_vardrgate(job, output, timeout=timeout if isinstance(timeout, int) else None)
+        # Bind the result to the reviewed spec, before local secrets were resolved.
+        # Keep it in the artifact so crash recovery uploads the same binding.
+        result = json.loads(output.read_text(encoding="utf-8"))
+        if not isinstance(result, dict):
+            raise runner.ToolError("VardrGate returned an unexpected result shape")
+        result["case_hash"] = hashlib.sha256(
+            json.dumps(config.test_case, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        output.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         return output
 
     def upload(
         self, client: api.VardrMapClient, engagement_id: str, output: Path, job_id: str = ""
     ) -> str:
-        result = json.loads(output.read_text())
+        result = json.loads(output.read_text(encoding="utf-8"))
         if job_id:
             client.post(f"/jobs/{job_id}/upload", json=result)
         findings = result.get("findings") or []

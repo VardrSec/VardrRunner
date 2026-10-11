@@ -240,3 +240,15 @@ intends, and let the operator approve. The prompts also state plainly where no
 tool exists: `triage` cannot edit a finding and `retest` cannot record itself
 against a finding's history, so both hand the operator what to enter in the UI
 rather than inventing a capability.
+
+## Amendment (unreleased): shared API playbooks
+
+Serve original versioned guidance from Map, not a second bundled catalog. MCP
+adds catalog/detail read tools and bounded filtered evidence reads; api_playbook
+is instruction-only. Expanding any prompt leaves the API client untouched, and
+fetched text remains an untrusted tool result. Reading guidance cannot earn a
+completion tick or coverage percentage. Case saving, evidence linking/retest
+recording and immutable client revisions still require the operator. Narrate
+major findings, blockers and decisions, keeping routine steps quiet. Claim/hash
+binding lets guidance cite the run's expectations; it does not turn a reported
+outcome into professional sign-off.
