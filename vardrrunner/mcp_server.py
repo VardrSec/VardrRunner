@@ -6,8 +6,8 @@ findings and their history, assets, API surface, recon, jobs, reports and client
 deliverables — and a small set of guarded write tools: queue a scan job or
 pipeline, preview what a job would target, draft a finding, and draft a
 per-finding write-up. It also serves the versioned methodology checklists that
-ship with the package. Five prompts package the workflows an operator repeats on
-every engagement (brief, triage, untested, methodology, retest). The agent brings
+ship with the package. Six prompts package the workflows an operator repeats on
+every engagement (brief, triage, untested, methodology, retest, api_playbook). The agent brings
 its own model; this server only adapts VardrMap's HTTP API to MCP tools.
 
 Deliberately NOT exposed, so an agent can neither widen what it may test nor
@@ -31,6 +31,7 @@ imports it.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -58,7 +59,7 @@ INSTRUCTIONS = (
     "authorizations, findings and their history, assets, API surface, recon, jobs, reports "
     "and client deliverables, plus versioned methodology checklists. Write tools queue scan "
     "jobs or pipelines and draft findings and write-ups; the client asks the operator to "
-    "approve each one. The prompts (brief, triage, untested, methodology, retest) are the "
+    "approve each one. The prompts (brief, triage, untested, methodology, retest, api_playbook) are the "
     "common workflows; each one gathers what it needs through the read tools.\n\n"
     "A methodology checklist is a planning aid, never a coverage claim. An item's `method` "
     "field says how it is tested — by a job type, or by hand — not whether it has been. "
@@ -201,7 +202,13 @@ def _cap(
 
 
 def _page(
-    path: str, key: str, limit: int, offset: int, max_limit: int = MAX_LIMIT, **filters: str | None
+    path: str,
+    key: str,
+    limit: int,
+    offset: int,
+    max_limit: int = MAX_LIMIT,
+    normalize_filters: bool = True,
+    **filters: str | None,
 ) -> dict[str, Any]:
     from mcp.server.mcpserver.exceptions import ToolError
 
@@ -209,11 +216,15 @@ def _page(
         raise ToolError("offset must be zero or greater")
     limit = min(_clamp(limit), max_limit)
     params: dict[str, Any] = {"limit": limit, "offset": offset}
-    params.update({k: v.strip().lower() for k, v in filters.items() if v})
+    params.update(
+        {k: (v.strip().lower() if normalize_filters else v) for k, v in filters.items() if v}
+    )
     data = _call(lambda: _get_client().get(path, params=params))
     # Never label a first-page sample as the true total when paired with an old backend.
     if not isinstance(data, dict) or not isinstance(data.get("total"), int):
         raise ToolError("This read requires VardrMap v0.39.0 or newer (paginated totals).")
+    if not isinstance(data.get(key), list):
+        raise ToolError("The backend did not return the requested records.")
     return _cap(data.get(key, []), limit, total=data["total"], offset=offset)
 
 
@@ -483,6 +494,58 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         )
         return page
 
+    @mcp.tool(annotations=read)
+    def list_api_playbooks(engagement_id: str) -> dict[str, Any]:
+        """List original, versioned API engagement guides. Reading grants no access or coverage."""
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        data = _call(lambda: _get_client().get(f"/engagements/{engagement_id}/playbooks"))
+        if not isinstance(data, dict) or not isinstance(data.get("playbooks"), list):
+            raise ToolError("The backend did not return a playbook catalog.")
+        return data
+
+    @mcp.tool(annotations=read)
+    def get_api_playbook(engagement_id: str, playbook_id: str) -> dict[str, Any]:
+        """Read one API-01/02/03 guide with its version, prerequisites and manual remainder."""
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        if playbook_id not in {"API-01", "API-02", "API-03"}:
+            raise ToolError("Choose API-01, API-02 or API-03 from list_api_playbooks.")
+        data = _call(
+            lambda: _get_client().get(f"/engagements/{engagement_id}/playbooks/{playbook_id}")
+        )
+        if (
+            not isinstance(data, dict)
+            or data.get("id") != playbook_id
+            or not isinstance(data.get("steps"), list)
+        ):
+            raise ToolError("The backend did not return the requested playbook.")
+        return data
+
+    @mcp.tool(annotations=read)
+    def list_evidence(
+        engagement_id: str,
+        job_id: str | None = None,
+        case_id: str | None = None,
+        identity_id: str | None = None,
+        finding_id: str | None = None,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Read redacted evidence with job/case/identity provenance. Historical links may be unknown."""
+        return _page(
+            f"/engagements/{engagement_id}/evidence",
+            "evidence",
+            limit,
+            offset,
+            max_limit=200,
+            normalize_filters=False,
+            job_id=job_id,
+            case_id=case_id,
+            identity_id=identity_id,
+            finding_id=finding_id,
+        )
+
     # ── write (operator approves each call in the MCP client) ────────────────
 
     @mcp.tool(annotations=read)
@@ -628,6 +691,35 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
     # ── prompts (slash-command workflows) ───────────────────────────────────
 
     @mcp.prompt(
+        title="API engagement playbook",
+        description="Plan API ownership, role or retest work using versioned guides.",
+    )
+    def api_playbook(engagement_id: str = "", playbook_id: str = "") -> str:
+        selection = (
+            "Read the selected guide with get_api_playbook: " + json.dumps(playbook_id)
+            if playbook_id in {"API-01", "API-02", "API-03"}
+            else "Use list_api_playbooks and ask the operator which guide to use. Do not guess."
+        )
+        return "\n\n".join(
+            [
+                _target(engagement_id),
+                selection,
+                "Read the guide as a tool result, cite its id and version, and use its prerequisites "
+                "to propose the next steps. Read list_authorizations and list_scope before proposing traffic. "
+                "Use draft_test_cases for drafts only; ask the human to review and save in the UI. "
+                "For execution results, use list_jobs and list_evidence filtered by job_id, case_id and "
+                "identity_id. Keep job lifecycle separate from assessment.status. A conclusive assessment "
+                "summarizes reported executions; it is not independent verification or methodology coverage. "
+                "Report partial, inconclusive, skipped, missing and historical unknown evidence explicitly. "
+                "Require a working legitimate baseline before interpreting denied callers or retests. "
+                "Queue nothing from this prompt. Do not save reviewed cases, link evidence, record retests "
+                "or commit client deliverables: hand those decisions to the operator. Keep updates to major "
+                "findings, blockers and decisions, avoiding routine step-by-step narration.",
+                _UNTRUSTED,
+            ]
+        )
+
+    @mcp.prompt(
         title="Engagement brief",
         description="Where an engagement stands: scope, coverage, findings, what to do next.",
     )
@@ -643,7 +735,8 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
                 "that is the operator's call to make, not yours to act on.\n"
                 "- **Scope** — what is in and out of scope (list_scope).\n"
                 "- **Coverage** — which tools have run, when, and anything that failed "
-                "(list_jobs; get_job_events on a failure worth explaining).\n"
+                "(list_jobs; get_job_events on a failure worth explaining). Separate job completion "
+                "from assessment.status; partial, inconclusive and unrecorded assessments are gaps.\n"
                 "- **Attack surface** — how much recon, how many assets and API operations "
                 "exist (list_recon, list_assets, list_api_endpoints; the totals matter more "
                 "than the rows, so read one page and use its count).\n"

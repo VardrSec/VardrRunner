@@ -23,7 +23,7 @@ results, and heartbeats so the backend always knows which machines are online.
   each capturing output into an atomically unique run directory, every run bounded by a
   timeout that terminates the complete child-process tree
 - **Pinned, verified tool installs** — `tools install --all` downloads exact versions of
-  httpx, subfinder, nuclei, dnsx, naabu, katana, and gau into one folder, `~/.vardrmap/tools`, after
+  httpx, subfinder, nuclei, dnsx, naabu, katana, gau, ffuf and dalfox into one folder, `~/.vardrmap/tools`, after
   checking each against a SHA-256 pinned in this package. The runner re-checks every
   managed binary before use and refuses to run one that has changed
 - **Recon pipelines** — chain tools in one command: `recon` (subfinder → httpx → nuclei),
@@ -48,6 +48,8 @@ results, and heartbeats so the backend always knows which machines are online.
 - **Reviewed authorization-case authoring** — `test-cases draft` turns observed API operations or an
   OpenAPI file into VardrGate drafts in a review file that is never overwritten; `test-cases save
   --reviewed` stores them. Drafts never contain credentials and never guess who should have access
+- **Shared API playbooks and execution evidence** — MCP reads Map's original versioned API guides and filtered job/case/identity evidence. Six instruction-only prompts guide the work without fetching data during expansion; they do not save reviewed cases or commit client deliverables
+- **Gate result binding** — refuse a case changed between polling and claim, and retain a hash of the unresolved case with the result artifact. Map uses it to distinguish bound assessments from legacy or unknown results; a completed command does not certify a secure API
 - **Guided verified setup** — one idempotent `init` command for interactive onboarding or
   non-interactive host provisioning, ending in a doctor acceptance gate
 - **Bounded execution** — schema/capability negotiation, target and artifact ceilings,
@@ -63,9 +65,15 @@ results, and heartbeats so the backend always knows which machines are online.
 
 ## Requirements
 - Python **3.10+**
-- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, and `gau`; `nmap` comes from your OS installer or package manager, and `vardrgate` (for `vardrgate_api_test` jobs) from its repository. Tools already on your `PATH` still work and are reported as unverified
+- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `gau`, `ffuf` and `dalfox`; `nmap` comes from your OS installer or package manager, and `vardrgate` (for `vardrgate_api_test` jobs) from its repository. Tools already on your `PATH` still work and are reported as unverified
+- For ffuf, supply a named wordlist in `~/.vardrmap/wordlists` (for example `common.txt` for `--wordlist common`); none ship with the runner
 - A VardrSec backend URL and an API key (`vmap_…` for VardrMap)
 - VardrMap **≥ v0.22.0** as the backend — the runner calls `/engagements/*` (see [CHANGELOG](CHANGELOG.md) v0.27.0)
+
+That is the baseline API requirement, not support for every newer feature. Shared
+playbooks, evidence reads and bound assessments require the matching Map endpoints
+and migration; deploy that backend first. See [API assessment guidance](docs/cli.md#api-assessment-guidance-unreleased).
+These additions are **Unreleased** until the corresponding release is published.
 
 ## Install
 
@@ -194,16 +202,17 @@ pip install -e ".[dev]"   # editable install + dev tools (pytest, ruff, mypy)
 ruff check vardrrunner tests           # lint
 ruff format --check vardrrunner tests  # formatting
 mypy vardrrunner                       # type check
-pytest tests              # 888 tests; all subprocess + HTTP calls are mocked
+pytest tests                          # scanner smoke tests skip unless explicitly enabled
 ```
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
 95% coverage floor on Python 3.10–3.14 (Linux) plus Python 3.14 on Windows and macOS,
 and a `pip-audit` dependency audit — on every push and PR to `main`.
 Contributions follow the **Engineering Charter** in [CLAUDE.md](CLAUDE.md): clean code,
-tests in the same commit, docs updated, and the suite always green.
+tests with behavior changes, documentation updated, and the relevant checks green.
+Docs-only changes require a diff and Markdown-link check.
 
 ## License
 [MIT](LICENSE) © 2026 Jorge Aquino.
 
 ---
-*Part of the VardrSec product family — [VardrMap](https://github.com/VardrSec/VardrMap) · VardrRunner · VardrVault.*
+*Part of the VardrSec product family — [VardrMap](https://github.com/VardrSec/VardrMap) · VardrRunner · [VardrGate](https://github.com/VardrSec/VardrGate).*

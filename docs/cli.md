@@ -243,7 +243,7 @@ For Claude Desktop, add to its MCP config:
 
 | Kind | Tools |
 |------|-------|
-| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_authorizations`, `list_findings`, `get_finding_activity`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `list_deliverables`, `get_deliverable_revision`, `list_methodologies`, `get_methodology`, `preview_job`, `draft_test_cases` |
+| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_authorizations`, `list_findings`, `get_finding_activity`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `list_deliverables`, `get_deliverable_revision`, `list_methodologies`, `get_methodology`, `list_api_playbooks`, `get_api_playbook`, `list_evidence`, `preview_job`, `draft_test_cases` |
 | Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding`, `draft_report` |
 
 `draft_test_cases` is grouped as a read because it stores and queues nothing — it is
@@ -272,6 +272,7 @@ In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
 | `brief` | Where the engagement stands — scope, which tools have run, findings by severity, reports — and the three things to do next. Queues nothing. |
 | `triage` | Works through the findings inventory and judges each one: real or a bare template match, whether the severity holds, what evidence exists, and the smallest check that would confirm it. Optional `severity` narrows it. |
 | `untested` | Compares the declared scope and discovered surface against the jobs actually run, names the gaps, and proposes an ordered plan with `preview_job` target counts before anything is queued. |
+| `api_playbook` | Reads a versioned API-01/02/03 guide from Map and plans the next steps. Optional `playbook_id`; asks when blank. Queues nothing, makes no API call at expansion and keeps routine updates concise. |
 | `methodology` | Walks a published methodology against the engagement and sorts every item into evidenced (with job or finding ids), not evidenced where a job would help, or not evidenced where hands-on work is needed. Optional `methodology_id`. |
 | `retest` | Verifies a fix landed: restates the issue, proposes a check, follows the job, and reports fixed / still present / inconclusive. Optional `finding_id`. |
 
@@ -331,39 +332,6 @@ published under CC BY-SA 4.0 and credited per methodology in an `attribution` fi
 `get_engagement`, which returns the engagement's own fields and scope), and keeps the
 per-finding write-ups (`list_reports`) separate from the client-facing documents
 (`list_deliverables`) rather than conflating the two.
-
-A prompt is **instructions only** — expanding one makes no API call and embeds no
-engagement data. Prompt text arrives as the most trusted content in the agent's
-context, and finding titles, recon URLs and scanner output all come from the targets
-under test; pasting those into a prompt would put target-controlled strings in that
-trusted position. The agent gathers what it needs with the read tools instead, where
-the result is already framed as untrusted data.
-
-**Prompts (the workflows you repeat on every engagement)**
-
-In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
-`engagement_id`, and asks you which engagement to use when you leave it blank.
-
-| Prompt | What it does |
-|--------|--------------|
-| `brief` | Where the engagement stands — scope, which tools have run, findings by severity, reports — and the three things to do next. Queues nothing. |
-| `triage` | Works through the findings inventory and judges each one: real or a bare template match, whether the severity holds, what evidence exists, and the smallest check that would confirm it. Optional `severity` narrows it. |
-| `untested` | Compares the declared scope and discovered surface against the jobs actually run, names the gaps, and proposes an ordered plan with `preview_job` target counts before anything is queued. |
-| `retest` | Verifies a fix landed: restates the issue, proposes a check, follows the job, and reports fixed / still present / inconclusive. Optional `finding_id`. |
-
-**What `retest` can and cannot do.** `queue_job` takes a target *source* (scope or recon),
-not a target, so this server cannot scope a job to the single asset a retest wants. The
-prompt says so and offers two honest routes: queue the narrowest available job while stating
-it is broader than the finding, or run `vardrrunner run <tool> --engagement <id> --target
-<asset>` locally, which does take one target. It judges the outcome from whether an
-equivalent finding returns in `list_findings` and from the job's events — there is no tool
-here that reads a job's scan results directly — and it will not infer which findings are due
-a retest, because remediation notes and retest history are not fields it can read.
-
-`brief` likewise leaves out two things an operator expects and this server cannot reach: the
-authorization record and its testing window (`get_engagement` returns the engagement's own
-fields and scope, not its authorizations), and the client deliverable and its revisions.
-`list_reports` reads the **per-finding** write-ups, not those deliverables.
 
 A prompt is **instructions only** — expanding one makes no API call and embeds no
 engagement data. Prompt text arrives as the most trusted content in the agent's
@@ -900,3 +868,23 @@ that worker into Gate's private-target mode, including loopback, for all Gate
 jobs it executes. Unset it when finished. Only the exact value `1` enables it;
 backend job config cannot enable it. This changes Gate's network safeguard,
 not VardrMap's advisory scope policy or its enforced stop-work switch.
+
+## API assessment guidance (unreleased)
+
+`list_api_playbooks(engagement_id)` returns a compact catalog; request one guide
+with `get_api_playbook(engagement_id, playbook_id)`. The original v1.0 guides cover
+ownership/tenant separation, privileged functions and evidence/retest/handoff.
+Map must have the matching endpoints deployed and MCP needs a full-scope key.
+A runner-only key intentionally cannot read engagement evidence or playbooks.
+Malformed backend guidance raises an error rather than pretending it is empty.
+
+`list_evidence` accepts optional job_id, case_id, identity_id (case-sensitive),
+finding_id, limit (max 200) and offset. Use structured provenance, not similar
+titles. Historical/manual provenance may be unknown. Lifecycle done is separate
+from assessment.status; a conclusive assessment can contain violation candidates
+and establishes neither independent verification nor full coverage.
+
+The worker refuses a case changed at claim: review it and queue a new job. New
+Gate artifacts include case_hash for Map's binding. Deploy the matching Map
+backend before publishing this Runner release; old artifacts upload with
+inconclusive assessments. Local private-target opt-in remains required.

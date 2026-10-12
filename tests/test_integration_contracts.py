@@ -73,7 +73,12 @@ def test_private_targets_require_local_opt_in(monkeypatch, tmp_path, local, requ
             "execution": {"allow_private_targets": requested},
         }
     )
-    with patch("vardrrunner.runner.run_vardrgate") as run:
+    with patch(
+        "vardrrunner.runner.run_vardrgate",
+        side_effect=lambda job, output, timeout=None: output.write_text(
+            '{"executions":[],"findings":[]}'
+        ),
+    ) as run:
         VardrGateHandler().execute([], tmp_path, cfg)
     execution = run.call_args.args[0]["config"]["execution"]
     assert execution["allow_private_targets"] is allowed
