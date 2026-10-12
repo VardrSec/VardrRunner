@@ -7,8 +7,8 @@
   pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `gau`,
   `ffuf` and `dalfox` into
   `~/.vardrmap/tools`; `nmap` and `vardrgate` (only for `vardrgate_api_test` jobs) still
-  come from your OS or `PATH`. None are needed to run the test suite — every subprocess
-  call is mocked.
+  come from your OS or `PATH`. None are needed for the default tests; real scanners
+  are used only by the explicitly enabled smoke tests below.
 - (Optional, for real `ffuf` runs) at least one wordlist in `~/.vardrmap/wordlists`, named
   without the extension — `common.txt` backs `--wordlist common`. A symlink to an existing
   list (SecLists, dirb) is fine. None ship with VardrRunner, and a job names a wordlist
@@ -33,13 +33,14 @@ pip install -e ".[dev]"  # editable install + dev tools (pytest, ruff, mypy)
 pytest tests                                          # quick run
 pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as CI runs it)
 ```
-- **1122 tests** at ~96.0% coverage (CI floor: 95%), all hermetic: no network, no real
-  subprocesses, no real filesystem state outside temp dirs.
-- The suite must be **green before every commit** (Engineering Charter §3).
+- Default tests mock backend/scanner calls and isolate filesystem state in temporary
+  directories. The CI coverage floor is 95%; test counts live in CI output, not this guide.
+- Code changes require green relevant suites, lint and type checks before review.
+  Docs-only changes require a diff and Markdown-link check.
 - Add tests in the **same commit** as any behavior change.
 
 ### Smoke tests against the real binaries (opt-in)
-The one exception to "hermetic" above. Mocked subprocesses cannot show that a flag is
+Mocked subprocesses cannot show that a flag is
 accepted or what a tool's exit code means — dalfox exits `1` when it *finds* something, which
 mocked tests could never have revealed — so `tests/test_smoke_*.py` run the actual pinned
 binaries through the real handlers.
@@ -58,6 +59,17 @@ VARDRRUNNER_SMOKE=1 VARDRRUNNER_SMOKE_BIN_DIR=/path/to/bins pytest tests -m smok
   under a request ceiling, and every run has a 60-second timeout.
 - They assert the real **argv** (the tool accepts every flag we pass), the real **exit
   behaviour** (clean, findings, unreachable) and the real **output parsing**.
+
+### Combined platform acceptance
+
+VardrMap's [three-repository harness](https://github.com/VardrSec/VardrMap/blob/main/scripts/integration/README.md)
+builds the actual Gate binary, starts a disposable Map backend, and executes the real
+Runner worker against bounded loopback fixtures. It supports SQLite or a freshly
+migrated disposable PostgreSQL database. It checks assessment completeness, case
+binding, evidence provenance and reporting; it does not verify hosted GitHub OAuth.
+Use matching companion commits and deploy Map's assessment migration/endpoints before
+publishing Runner's corresponding features. No new Runner environment variable is
+required for shared playbook reads or case binding.
 
 ### What the tests cover
 | File | Area |

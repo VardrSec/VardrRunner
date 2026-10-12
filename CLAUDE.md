@@ -22,7 +22,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
     nothing here re-grades a match, renames a tier or decides what is confirmed, so the tier,
     detection method and confidence reach VardrMap intact. Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
-  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015), plus four instruction-only prompts. `mcp` imported lazily; optional extra
+  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015), plus six instruction-only prompts. Reads shared API playbooks and filtered evidence from Map; `mcp` imported lazily, optional extra
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
   - `commands/test_cases.py` — `test-cases draft|save`; review file is created exclusively (never overwritten), literal credentials refused, save needs `--reviewed`
   - `methodologies.py` — versioned checklists from `methodologies.json` (OWASP API Top 10
@@ -39,7 +39,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
   - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
   - `compatibility.py` / `resources.py` / `updates.py` — wire negotiation, bounded local policy, and cached release checks (ADR 0012)
   - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `tools`, `updates`, `engagements`, `run`, `status`
-- `tests/` — pytest suite (1122 tests, ~95% coverage, CI floor 95%); all subprocess and HTTP calls mocked — no network or real tool calls
+- `tests/` — pytest suite with a 95% coverage floor. Default tests mock backend/scanner calls; opt-in real-binary smoke tests use bounded loopback fixtures. The real three-repository acceptance harness lives in VardrMap; see its `scripts/integration/README.md`
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `scripts/pin_tools.py` — the only way tool pins change: downloads, hashes, cross-checks upstream checksums (`--check` for drift)
 - `changelog/` — per-version notes; `CHANGELOG.md` at root is the index
@@ -48,7 +48,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
 
 ## Hard rules
 - No "Co-Authored-By: Claude" in commits
-- Run full test suite + linter before every commit
+- Use focused tests while editing code, then run the full relevant suite, lint and type checks before review. Docs-only changes require a diff and Markdown-link check, not another application test run
 - Every behavior-changing change updates docs **and** `CHANGELOG.md` in the same commit
 - All backend communication through `api.py` — no scattered HTTP calls
 - Never log, print, or commit the API key; it lives in the OS keychain
@@ -78,7 +78,7 @@ Behavior-changing = adds, removes, or modifies a command, flag, config key, back
 - New module, data flow, or backend interaction → `docs/architecture.md`
 - New setup step, env var, or dependency → `docs/development.md`
 - Non-trivial design decision → ADR in `docs/adr/`
-- Any feature/fix/behavior change → `CHANGELOG.md` + `changelog/vX.Y.Z.md`
+- Any feature/fix/behavior change → `CHANGELOG.md` + detail notes in `changelog/`. Use an unreleased note until a release version is assigned; do not invent a release or renumber shipped notes
 
 Docs-only, test-only, pure-refactor commits may note "No user-facing docs change needed."
 
@@ -124,7 +124,7 @@ vardrrunner daemon start
 - `update check` — cached opt-in release discovery; never installs automatically
 - `test-cases draft|save` — draft VardrGate cases from observed operations/OpenAPI into a review file, save only with `--reviewed`
 - `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra.
-  Prompts (`brief`/`triage`/`untested`/`retest`) are instruction text only — never pre-fetch
+  Prompts (`brief`/`triage`/`untested`/`methodology`/`retest`/`api_playbook`) are instruction text only — never pre-fetch
   engagement data into one, or target-controlled strings land in the trusted prompt position.
   A prompt may only name tools that exist; a test enforces it. **Never add a tool that saves a
   VardrGate case or writes a client deliverable** — both are assertions only the operator can
@@ -137,12 +137,41 @@ back-compat aliases.
 ## Real-binary smoke tests
 `tests/test_smoke_*.py` run the actual pinned tools against a `127.0.0.1` fixture and are
 **opt-in** (`VARDRRUNNER_SMOKE=1`; they skip otherwise, and skip with instructions if the
-binary is absent). The whole suite mocks the subprocess, which is how dalfox's exit code `1`
+binary is absent). The default scanner tests mock the subprocess, which is how dalfox's exit code `1`
 ("findings reported") shipped as a job failure through 1165 green tests. When adding or
 changing a tool's argv, exit-code handling or output parsing, run its smoke test. A tool's
 exit code is documentation until you have seen it from the real binary — and **a report file
 existing is never evidence a run succeeded** (dalfox writes a valid empty report on an
 unreachable target).
+
+## API assessment and shared guidance contracts
+
+- Map owns the versioned API-01/02/03 playbook catalog; MCP reads it on demand.
+  `list_api_playbooks`, `get_api_playbook` and `list_evidence` require full-scope
+  credentials. A runner-only key cannot read them. Malformed reads raise errors,
+  never render unknown data as an empty inventory.
+- Preserve case-sensitive identity filters and bounded evidence pagination. Use
+  job/case/identity metadata rather than similar titles to associate proof.
+- Compare the polled spec with the spec returned by claim before execution. A
+  changed case fails for operator review and a new job; older backends may omit
+  the claim spec for compatibility.
+- Gate result artifacts carry `case_hash`: SHA-256 of the unresolved reviewed spec
+  serialized as sorted compact Python JSON with default ASCII escaping. Never
+  include resolved credentials in this hash, and preserve it during recovery.
+- Job completion and Map's assessment completeness are separate. Legacy unbound
+  results stay inconclusive; conclusive results can contain violation candidates
+  and establish neither independent verification nor full coverage.
+- Deploy the matching Map migration/endpoints before publishing these Runner
+  features. Case binding is correlation, not signed execution attestation.
+- ffuf probes each target before scanning because an unreachable target can yield
+  an exit-0 empty report. dalfox needs both a valid report and consistent exit
+  code: 0 with no findings, 1 with findings; other codes or disagreement fail.
+
+## Communication
+
+Report major results, blockers and required decisions; omit routine command-by-command
+updates to conserve tokens. Refresh the ars0n comparison when platform changes warrant
+it, using inspected code and dated evidence. No weekly review is requested.
 
 ## Wiring tests
 `tests/test_cli.py` is the only thing that checks Typer wiring, and asserting
