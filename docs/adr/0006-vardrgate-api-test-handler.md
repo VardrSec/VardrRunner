@@ -52,3 +52,25 @@ execution path.
 - **Importing VardrGate as a library** — rejected; it is a Go program, and the
   binary/JSON contract keeps the two products decoupled and independently
   releasable.
+
+## Amendment: identity preflight (Unreleased, 2026-10-12)
+
+Cases may declare reviewed identity preflight checks. Runner resolves credential
+references locally as before and passes `--require-identity-preflight` so an older
+Gate binary rejects the flag before sending target traffic. Gate's safe report
+contains one bounded diagnostic per configured identity; it contains no session
+response body, headers, matched values or raw network errors. Runner validates
+the diagnostics and exit code together before binding the artifact to the
+unresolved case hash.
+
+Exit 3 with failed preflight and empty executions/findings is retained and
+uploaded, then the job is marked failed. It must not become a successful empty
+scan. The handler exposes a completion error for this prerequisite failure;
+the execution journal persists that failure during finalization, and recovery
+retries failed finalization rather than converting it to done. Missing or
+contradictory reports fail without treating the prerequisite as satisfied.
+
+Cases without preflight retain the existing binary contract. This feature
+checks a session at one moment; it adds no login, refresh or automatic retries.
+The matching Map backend and both companion binaries must be deployed/upgraded
+before operators author these cases. See [CLI reference](../cli.md).

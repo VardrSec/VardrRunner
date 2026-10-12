@@ -158,6 +158,11 @@ unreachable target).
 - Gate result artifacts carry `case_hash`: SHA-256 of the unresolved reviewed spec
   serialized as sorted compact Python JSON with default ASCII escaping. Never
   include resolved credentials in this hash, and preserve it during recovery.
+- Declared identity preflight requires Gate's `--require-identity-preflight` flag.
+  Inspect exit 3 only with complete consistent diagnostics and no resource
+  executions/findings; upload the safe artifact, then fail the job. Preserve the
+  failed finalization intent during crash recovery. Probes are not resource
+  authorization evidence. Older Runner versions lack this capability guard.
 - Job completion and Map's assessment completeness are separate. Legacy unbound
   results stay inconclusive; conclusive results can contain violation candidates
   and establish neither independent verification nor full coverage.

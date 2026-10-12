@@ -1,5 +1,16 @@
 # VardrRunner — Architecture
 
+## Identity/session preflight
+
+The optional reviewed Gate identity `preflight` remains in the unresolved case and
+its hash. Credentials resolve locally as before. Runner requires the Gate CLI flag
+before execution so a legacy binary cannot silently ignore the check. A preflight
+failure (exit 3) is accepted only with a consistent safe report; artifacts upload
+before failed finalization. The journal records the failure intent, so recovery
+cannot convert a failed prerequisite into `done`. Map computes session completeness
+against its claim snapshot and retains probe evidence with unknown resource
+decisions. Cases without preflight retain the existing binary contract.
+
 ## Role in the VardrSec system
 VardrRunner is a **durable local execution client**. A VardrSec backend (VardrMap today) owns the
 queue, the database, and the UI. The runner owns *execution*: it runs tools on the

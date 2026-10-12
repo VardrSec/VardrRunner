@@ -14,6 +14,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ### Added
 
+- Support reviewed identity preflight with the matching Gate binary. Require its
+  CLI capability before target traffic, validate diagnostics against the case,
+  upload failed session results and keep jobs failed across crash recovery.
+  [Detail](changelog/unreleased-identity-preflight.md).
+
 - Refresh installation lists, MCP workflow documentation and contributor instructions;
   remove stale prompt/test counts and document real-binary and combined-platform
   verification boundaries. Documentation only; no runtime behavior changed.

@@ -132,6 +132,7 @@ def _resume_artifact(
     )
     try:
         handler.upload(client, current.engagement_id, artifact, job_id=current.job_id)
+        completion_error = handler.completion_error(artifact)
     except Exception as exc:
         # The request may have reached the backend. Keep the ambiguous UPLOADING
         # phase so the next pass refuses to duplicate it.
@@ -147,7 +148,17 @@ def _resume_artifact(
         Phase.FINALIZING,
         upload_state="succeeded",
         last_event="reconciliation upload succeeded",
+        failure_reason=completion_error,
+        failure_category=errors.FailureCategory.TOOL_FAILED.value if completion_error else None,
     )
+    if completion_error:
+        return _fail_claimed(
+            store,
+            client,
+            store.get(current.run_id) or current,
+            errors.FailureCategory.TOOL_FAILED,
+            completion_error,
+        )
     try:
         client.complete_job(current.job_id, "done")
     except Exception as exc:
@@ -211,6 +222,14 @@ def reconcile(
                 counts["deferred"] += 1
             continue
         if record.phase == Phase.FINALIZING:
+            if record.failure_reason:
+                if _fail_claimed(
+                    store, client, record, errors.FailureCategory.TOOL_FAILED, record.failure_reason
+                ):
+                    counts["failed"] += 1
+                else:
+                    counts["deferred"] += 1
+                continue
             try:
                 client.complete_job(record.job_id, "done")
             except Exception as exc:

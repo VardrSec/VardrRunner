@@ -1,5 +1,10 @@
 # VardrRunner — Development
 
+Identity preflight requires the matching Gate/Map feature builds before use.
+Run `tests/test_identity_preflight.py` during edits, then the normal full suite and
+the Map three-repository acceptance harness against disposable loopback fixtures.
+No new dependency, setup secret or environment variable is required.
+
 ## Prerequisites
 - Python **3.10+**
 - `git`
