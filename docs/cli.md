@@ -1,5 +1,14 @@
 # VardrRunner — CLI Reference
 
+For `vardrgate_api_test` jobs, reviewed identities can additionally declare
+`preflight: {url, expected_status, json_fields}`. The matching Gate build checks a
+same-origin GET session endpoint against public principal metadata before resource
+testing. Runner requires Gate's `--require-identity-preflight` capability and
+refuses missing/inconsistent diagnostics. Failed checks upload safe case-bound
+evidence and fail the job; they are not a zero-findings success. No new Runner
+flag or environment variable is required. Upgrade Gate/Runner and the Map backend
+before using these cases; older Runner builds lack the capability guard.
+
 All commands are sub-commands of `vardrrunner`. Run any command with `--help` for its
 exact flags. Commands that talk to the backend require a prior `login` (they exit with a
 helpful message otherwise).

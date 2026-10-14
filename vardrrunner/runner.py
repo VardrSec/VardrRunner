@@ -892,7 +892,7 @@ def run_dalfox(
     return _run_tool_status(cmd, targets_file, "dalfox", timeout, ok_codes=DALFOX_OK_EXIT_CODES)
 
 
-def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> None:
+def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> int:
     """Run a VardrGate API authorization test job locally.
 
     ``job`` is the VardrGate job envelope (``{"config": {"test_case": ..., "execution": ...}}``).
@@ -909,9 +909,20 @@ def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> N
         "--out",
         str(output_path),
     ]
+    preflight = any(
+        identity.get("preflight") is not None
+        for identity in job.get("config", {}).get("test_case", {}).get("identities", [])
+        if isinstance(identity, dict)
+    )
+    if preflight:
+        # Older binaries reject the flag before making any target request.
+        cmd.append("--require-identity-preflight")
     active_error: BaseException | None = None
     try:
-        return _run_tool(cmd, None, "vardrgate", timeout)
+        if preflight:
+            return _run_tool_status(cmd, None, "vardrgate", timeout, ok_codes=(0, 3))
+        _run_tool(cmd, None, "vardrgate", timeout)
+        return 0
     except BaseException as exc:
         active_error = exc
         raise

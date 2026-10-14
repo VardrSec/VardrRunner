@@ -433,8 +433,10 @@ def _execute_one(
             )
             stage = Phase.UPLOADING
         summary = handler.upload(client, engagement_id, output, job_id=job_id)
+        completion_error = handler.completion_error(output)
         safe_summary = redaction.redact_text(str(summary))
-        con.print(f"[green]Done.[/green] {redaction.redact_rich_text(safe_summary)}")
+        if not completion_error:
+            con.print(f"[green]Done.[/green] {redaction.redact_rich_text(safe_summary)}")
         _emit(client, job_id, "uploaded", safe_summary)
         if journal_store is not None and record is not None:
             record = journal_store.transition(
@@ -442,8 +444,16 @@ def _execute_one(
                 Phase.FINALIZING,
                 upload_state="succeeded",
                 last_event=safe_summary,
+                failure_reason=completion_error,
+                failure_category=errors.FailureCategory.TOOL_FAILED.value
+                if completion_error
+                else None,
             )
             stage = Phase.FINALIZING
+        if completion_error:
+            _fail_job(client, con, job_id, completion_error)
+            finish(Phase.FAILED, "failed", errors.FailureCategory.TOOL_FAILED, completion_error)
+            return
         _complete_done(client, job_id)
         finish(Phase.DONE, "done")
     except runner.ToolTimeout as e:

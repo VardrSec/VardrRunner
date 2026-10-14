@@ -225,6 +225,10 @@ class ToolHandler(Generic[C]):
         """
         return []
 
+    def completion_error(self, output: Path) -> str | None:
+        """A completed artifact may retain diagnostics for a failed prerequisite."""
+        return None
+
     def normalize_handoff_targets(self, targets: list[str]) -> list[str]:
         """Normalize targets read from a handoff file before passing to execute().
 
@@ -1007,12 +1011,21 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         )
         job = {"config": {"test_case": test_case, "execution": execution}}
         timeout = execution.get("timeout_seconds")
-        runner.run_vardrgate(job, output, timeout=timeout if isinstance(timeout, int) else None)
+        exit_code = runner.run_vardrgate(
+            job, output, timeout=timeout if isinstance(timeout, int) else None
+        )
         # Bind the result to the reviewed spec, before local secrets were resolved.
         # Keep it in the artifact so crash recovery uploads the same binding.
         result = json.loads(output.read_text(encoding="utf-8"))
         if not isinstance(result, dict):
             raise runner.ToolError("VardrGate returned an unexpected result shape")
+        declared = {
+            identity["id"]: identity["preflight"]
+            for identity in config.test_case.get("identities", [])
+            if isinstance(identity, dict) and identity.get("preflight") is not None
+        }
+        if declared:
+            _validate_preflight_result(result, declared, exit_code)
         result["case_hash"] = hashlib.sha256(
             json.dumps(config.test_case, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -1026,7 +1039,67 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         if job_id:
             client.post(f"/jobs/{job_id}/upload", json=result)
         findings = result.get("findings") or []
+        if self.completion_error(output):
+            return "Identity preflight failed; authorization requests were not executed"
         return f"{len(findings)} finding(s)"
+
+    def completion_error(self, output: Path) -> str | None:
+        result = json.loads(output.read_text(encoding="utf-8"))
+        if any(p.get("status") != "passed" for p in result.get("preflight", [])):
+            return "Identity preflight failed; review credentials and principal metadata before a new job"
+        return None
+
+
+def _validate_preflight_result(result: dict, declared: dict, exit_code: int) -> None:
+    """Refuse missing/contradictory diagnostics instead of silently skipping preflight."""
+    rows = result.get("preflight")
+    valid = isinstance(rows, list) and len(rows) == len(declared)
+    seen: set[str] = set()
+    failed = False
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict) or set(row) != {
+            "identity_id",
+            "status",
+            "reason",
+            "status_code",
+        }:
+            valid = False
+            continue
+        identity = row["identity_id"]
+        if not isinstance(identity, str) or identity not in declared or identity in seen:
+            valid = False
+            continue
+        seen.add(identity)
+        code = row["status_code"]
+        if type(code) is not int or not 0 <= code <= 599:
+            valid = False
+        if row["status"] == "passed":
+            valid = (
+                valid
+                and row["reason"] == "identity_verified"
+                and code == declared[identity]["expected_status"]
+            )
+        elif row["status"] == "failed":
+            failed = True
+            valid = valid and row["reason"] in {
+                "credential_rejected",
+                "identity_mismatch",
+                "unexpected_status",
+                "execution_error",
+            }
+        else:
+            valid = False
+    if failed:
+        valid = (
+            valid
+            and exit_code == 3
+            and result.get("executions") == []
+            and result.get("findings") == []
+        )
+    else:
+        valid = valid and exit_code == 0
+    if not valid:
+        raise runner.ToolError("VardrGate identity preflight result was missing or inconsistent")
 
 
 # Registry: job type → handler. Add a tool by adding a handler here.
