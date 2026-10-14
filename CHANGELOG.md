@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.47.0] — 2026-10-14
+
+API assessment binding, shared guidance and identity/session preflight. Gate
+preflight requires **VardrGate ≥ v0.1.0** and the matching deployed Map endpoints.
+See [`changelog/v0.47.0.md`](changelog/v0.47.0.md).
+
 ### Fixed
 
 - Normalize queued `program_id` to `engagement_id`; reject conflicting IDs.
@@ -17,14 +23,13 @@ Per-version detail notes live in [`changelog/`](changelog/).
 - Support reviewed identity preflight with the matching Gate binary. Require its
   CLI capability before target traffic, validate diagnostics against the case,
   upload failed session results and keep jobs failed across crash recovery.
-  [Detail](changelog/unreleased-identity-preflight.md).
 
 - Refresh installation lists, MCP workflow documentation and contributor instructions;
   remove stale prompt/test counts and document real-binary and combined-platform
   verification boundaries. Documentation only; no runtime behavior changed.
 
 - Shared original API playbooks, filtered execution evidence and the instruction-only
-  api_playbook MCP prompt. No coverage is inferred. [Detail](changelog/unreleased-api-playbooks.md).
+  api_playbook MCP prompt. No coverage is inferred.
 - Bind Gate artifacts to the unresolved case spec using a canonical SHA-256 retained
   for recovery; refuse execution if the case changes between polling and claim.
 

@@ -241,7 +241,7 @@ tool exists: `triage` cannot edit a finding and `retest` cannot record itself
 against a finding's history, so both hand the operator what to enter in the UI
 rather than inventing a capability.
 
-## Amendment (unreleased): shared API playbooks
+## Amendment (v0.47.0): shared API playbooks
 
 Serve original versioned guidance from Map, not a second bundled catalog. MCP
 adds catalog/detail read tools and bounded filtered evidence reads; api_playbook

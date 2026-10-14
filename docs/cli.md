@@ -878,7 +878,10 @@ jobs it executes. Unset it when finished. Only the exact value `1` enables it;
 backend job config cannot enable it. This changes Gate's network safeguard,
 not VardrMap's advisory scope policy or its enforced stop-work switch.
 
-## API assessment guidance (unreleased)
+## API assessment guidance
+
+Available in Runner 0.47.0. Reviewed identity preflight requires Gate v0.1.0 or
+newer on the worker's `PATH`; install it from its checksummed GitHub release.
 
 `list_api_playbooks(engagement_id)` returns a compact catalog; request one guide
 with `get_api_playbook(engagement_id, playbook_id)`. The original v1.0 guides cover
