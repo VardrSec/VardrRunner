@@ -281,7 +281,7 @@ in depth—in a successful response's warning array.
 - **No backend coupling.** The runner must build, test, and run without the backend present
   (tests mock every HTTP and subprocess call).
 
-## API playbooks and result binding (unreleased)
+## API playbooks and result binding (v0.47.0)
 
 Map is the single source for original versioned API playbooks. MCP reads its
 engagement-scoped catalog and individual guide over `api.py`, plus filtered

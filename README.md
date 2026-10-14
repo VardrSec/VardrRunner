@@ -72,8 +72,10 @@ results, and heartbeats so the backend always knows which machines are online.
 
 That is the baseline API requirement, not support for every newer feature. Shared
 playbooks, evidence reads and bound assessments require the matching Map endpoints
-and migration; deploy that backend first. See [API assessment guidance](docs/cli.md#api-assessment-guidance-unreleased).
-These additions are **Unreleased** until the corresponding release is published.
+and migration; deploy that backend first. These features ship in Runner 0.47.0.
+Identity preflight additionally requires [VardrGate v0.1.0 or newer](https://github.com/VardrSec/VardrGate/releases).
+Install its verified binary on your `PATH` before enabling preflight cases.
+See [API assessment guidance](docs/cli.md#api-assessment-guidance).
 
 ## Install
 

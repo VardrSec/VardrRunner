@@ -53,7 +53,7 @@ execution path.
   binary/JSON contract keeps the two products decoupled and independently
   releasable.
 
-## Amendment: identity preflight (Unreleased, 2026-10-12)
+## Amendment: identity preflight (v0.47.0, decided 2026-10-12)
 
 Cases may declare reviewed identity preflight checks. Runner resolves credential
 references locally as before and passes `--require-identity-preflight` so an older
