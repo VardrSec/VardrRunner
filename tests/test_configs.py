@@ -171,3 +171,74 @@ def test_vardrgate_config_requires_test_case():
 def test_vardrgate_config_rejects_non_object_execution():
     with pytest.raises(ConfigError):
         configs.VardrGateConfig.from_dict({"test_case": {"id": "x"}, "execution": "nope"})
+
+
+# ── rate limiting (httpx / nuclei / katana) ──────────────────────────────────
+
+
+@pytest.mark.parametrize("ctor", [configs.HttpxConfig, configs.NucleiConfig, configs.KatanaConfig])
+def test_rate_defaults_to_none_and_parses(ctor):
+    assert ctor.from_dict({}).rate is None
+    assert ctor.from_dict({"rate": "100"}).rate == 100
+
+
+@pytest.mark.parametrize("ctor", [configs.HttpxConfig, configs.NucleiConfig, configs.KatanaConfig])
+@pytest.mark.parametrize("bad", [0, configs.RATE_MAX + 1])
+def test_rate_out_of_range_rejected(ctor, bad):
+    with pytest.raises(ConfigError):
+        ctor.from_dict({"rate": bad})
+
+
+# ── custom headers ───────────────────────────────────────────────────────────
+
+
+def test_headers_from_dict_and_list():
+    want = ("X-Bug-Bounty: alice", "X-Trace: 1")
+    assert (
+        configs.HttpxConfig.from_dict(
+            {"headers": {"X-Bug-Bounty": "alice", "X-Trace": "1"}}
+        ).headers
+        == want
+    )
+    assert (
+        configs.HttpxConfig.from_dict({"headers": ["X-Bug-Bounty: alice", "X-Trace: 1"]}).headers
+        == want
+    )
+
+
+def test_headers_default_empty_and_reach_every_http_tool():
+    for ctor in (
+        configs.HttpxConfig,
+        configs.NucleiConfig,
+        configs.KatanaConfig,
+        configs.FfufConfig,
+        configs.DalfoxConfig,
+    ):
+        assert ctor.from_dict({}).headers == ()
+        assert ctor.from_dict({"headers": ["X-A: b"]}).headers == ("X-A: b",)
+
+
+@pytest.mark.parametrize("value", ["bad\r\nInjected: 1", "line\nfeed", "ctrl\x00byte"])
+def test_header_value_with_control_characters_rejected(value):
+    with pytest.raises(ConfigError):
+        configs.HttpxConfig.from_dict({"headers": {"X-Test": value}})
+
+
+def test_header_name_must_be_a_token():
+    with pytest.raises(ConfigError):
+        configs.HttpxConfig.from_dict({"headers": {"Bad Name": "v"}})
+    with pytest.raises(ConfigError):
+        configs.HttpxConfig.from_dict({"headers": ["no-colon-here"]})
+
+
+def test_header_count_and_duplicates_bounded():
+    too_many = {f"X-H{i}": "v" for i in range(configs.MAX_HEADERS + 1)}
+    with pytest.raises(ConfigError):
+        configs.HttpxConfig.from_dict({"headers": too_many})
+    with pytest.raises(ConfigError):
+        configs.HttpxConfig.from_dict({"headers": ["X-A: 1", "x-a: 2"]})
+
+
+def test_header_length_bounded():
+    with pytest.raises(ConfigError):
+        configs.HttpxConfig.from_dict({"headers": {"X-Long": "v" * configs.MAX_HEADER_LEN}})

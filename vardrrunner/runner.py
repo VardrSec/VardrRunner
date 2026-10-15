@@ -536,6 +536,7 @@ def run_ffuf(
     match_codes: str | None = None,
     rate: int = 50,
     timeout: int | None = None,
+    headers: tuple[str, ...] = (),
 ) -> None:
     """Fuzz one site root for content with ffuf. Output is ffuf's JSON report.
 
@@ -571,11 +572,23 @@ def run_ffuf(
         cmd += ["-e", ",".join(extensions)]
     if match_codes:
         cmd += ["-mc", match_codes]
+    for header in headers:
+        cmd += ["-H", header]
     return _run_tool(cmd, None, "ffuf", timeout)
 
 
-def run_httpx(targets: list[str], output_path: Path, timeout: int | None = None) -> None:
-    """Run httpx against a list of targets. Output is JSONL written to output_path."""
+def run_httpx(
+    targets: list[str],
+    output_path: Path,
+    timeout: int | None = None,
+    rate: int | None = None,
+    headers: tuple[str, ...] = (),
+) -> None:
+    """Run httpx against a list of targets. Output is JSONL written to output_path.
+
+    ``rate`` caps requests per second (httpx ``-rate-limit``); left unset, httpx
+    uses its own default. ``headers`` are added one per ``-H``.
+    """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
         tmp.write("\n".join(targets))
         targets_file = tmp.name
@@ -589,6 +602,10 @@ def run_httpx(targets: list[str], output_path: Path, timeout: int | None = None)
         str(output_path),
         "-silent",
     ]
+    if rate is not None:
+        cmd += ["-rate-limit", str(rate)]
+    for header in headers:
+        cmd += ["-H", header]
     return _run_tool(cmd, targets_file, "httpx", timeout)
 
 
@@ -598,8 +615,14 @@ def run_nuclei(
     severity: str | None = None,
     templates: str | None = None,
     timeout: int | None = None,
+    rate: int | None = None,
+    headers: tuple[str, ...] = (),
 ) -> None:
-    """Run nuclei against a list of targets. Output is JSONL written to output_path."""
+    """Run nuclei against a list of targets. Output is JSONL written to output_path.
+
+    ``rate`` caps requests per second (nuclei ``-rate-limit``); left unset, nuclei
+    uses its own default. ``headers`` are added one per ``-H``.
+    """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
         tmp.write("\n".join(targets))
         targets_file = tmp.name
@@ -613,6 +636,10 @@ def run_nuclei(
         str(output_path),
         "-silent",
     ]
+    if rate is not None:
+        cmd += ["-rate-limit", str(rate)]
+    for header in headers:
+        cmd += ["-H", header]
     # For a managed nuclei, keep its templates under ~/.vardrmap/data so the whole
     # install lives in one place the operator can find and delete. A PATH nuclei is
     # left alone: it already has templates wherever the operator installed them, and
@@ -778,11 +805,15 @@ def run_katana(
     depth: int = 3,
     js_crawl: bool = False,
     timeout: int | None = None,
+    rate: int | None = None,
+    headers: tuple[str, ...] = (),
 ) -> None:
     """Crawl a list of URLs with katana. Output is JSON lines.
 
     katana's default field scope keeps the crawl on each target's root domain, so
-    a crawl does not wander onto third-party sites a page links to.
+    a crawl does not wander onto third-party sites a page links to. ``rate`` caps
+    requests per second (katana ``-rate-limit``); left unset, katana uses its own
+    default. ``headers`` are added one per ``-H``.
     """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
         tmp.write("\n".join(targets))
@@ -801,6 +832,10 @@ def run_katana(
         "-no-color",
         "-disable-update-check",
     ]
+    if rate is not None:
+        cmd += ["-rate-limit", str(rate)]
+    for header in headers:
+        cmd += ["-H", header]
     if js_crawl:
         cmd.append("-js-crawl")
     return _run_tool(cmd, targets_file, "katana", timeout)
@@ -836,6 +871,7 @@ def run_dalfox(
     delay: int = 0,
     mining: bool = True,
     timeout: int | None = None,
+    headers: tuple[str, ...] = (),
 ) -> int:
     """Scan a list of URLs for XSS with dalfox. Output is its JSON report.
 
@@ -887,6 +923,8 @@ def run_dalfox(
         "--silence",
         "--no-color",
     ]
+    for header in headers:
+        cmd += ["-H", header]
     if not mining:
         cmd.append("--skip-mining")
     return _run_tool_status(cmd, targets_file, "dalfox", timeout, ok_codes=DALFOX_OK_EXIT_CODES)

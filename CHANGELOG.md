@@ -7,6 +7,19 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+
+- Queued jobs accept a `rate` key for `httpx`, `nuclei` and `katana` (1–1000 requests per
+  second, passed as `-rate-limit`), to honor a program's request-rate limit. Left unset, each
+  tool keeps its own default; `ffuf` keeps its separate always-on rate cap. **Pairs with
+  VardrMap**, which validates the key and applies a per-engagement ceiling when the job is
+  queued.
+- Queued jobs accept a `headers` key for `httpx`, `nuclei`, `katana`, `ffuf` and `dalfox` —
+  custom request headers as an object or a list, each passed as its own `-H`, e.g. the
+  identification header some bug bounty programs ask researchers to send. Header names must be
+  HTTP tokens and values may not contain control characters, so a value cannot inject a second
+  header or a request line; up to 20 per job.
+
 ### Changed
 
 - `tools install` reports what each tool needed: already up to date (no download),
