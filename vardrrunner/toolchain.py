@@ -237,6 +237,12 @@ class InstallResult:
     version: str
     path: Path
     already_installed: bool
+    # Why install did (or skipped) work: "current" (verified, pinned version; nothing
+    # downloaded), "installed" (new), "updated" (an older pinned version was replaced),
+    # "repaired" (the receipt's binary was missing or changed, or a binary sat in the
+    # tools directory without a receipt), or "reinstalled" (--force on a good install).
+    action: str = "installed"
+    previous_version: str | None = None
 
 
 def install(name: str, *, force: bool = False) -> InstallResult:
@@ -261,9 +267,22 @@ def install(name: str, *, force: bool = False) -> InstallResult:
 
     lock = _read_lock()
     current = lock.get(name)
-    if not force and current and current.get("version") == version and target.exists():
-        if _matches(_sha256(target), str(current.get("binary_sha256", ""))):
-            return InstallResult(name, version, target, already_installed=True)
+    previous_version: str | None = None
+    intact = (
+        current is not None
+        and target.exists()
+        and _matches(_sha256(target), str(current.get("binary_sha256", "")))
+    )
+    if current and current.get("version") == version and intact:
+        if not force:
+            return InstallResult(name, version, target, already_installed=True, action="current")
+        action = "reinstalled"
+    elif current and current.get("version") != version:
+        action, previous_version = "updated", str(current.get("version") or "unknown")
+    elif current or target.exists():
+        action = "repaired"
+    else:
+        action = "installed"
 
     config.tools_dir().mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=config.tools_dir()))
@@ -304,7 +323,14 @@ def install(name: str, *, force: bool = False) -> InstallResult:
         }
         _write_lock(lock)
         _verified.pop(str(target), None)
-        return InstallResult(name, version, target, already_installed=False)
+        return InstallResult(
+            name,
+            version,
+            target,
+            already_installed=False,
+            action=action,
+            previous_version=previous_version,
+        )
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 

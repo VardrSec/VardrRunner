@@ -178,8 +178,38 @@ def test_install_is_idempotent_without_downloading(fake):
 
 def test_force_reinstalls(fake):
     toolchain.install("faketool")
-    toolchain.install("faketool", force=True)
+    result = toolchain.install("faketool", force=True)
     assert fake.downloads == 2
+    assert result.action == "reinstalled"
+
+
+def test_install_actions_new_and_current(fake):
+    assert toolchain.install("faketool").action == "installed"
+    assert toolchain.install("faketool").action == "current"
+
+
+def test_older_pinned_version_is_reported_as_updated(fake):
+    toolchain.install("faketool")
+    lock = json.loads(toolchain.lock_path().read_text())
+    lock["tools"]["faketool"]["version"] = "1.0.0"
+    toolchain.lock_path().write_text(json.dumps(lock))
+    result = toolchain.install("faketool")
+    assert (result.action, result.previous_version) == ("updated", "1.0.0")
+    assert _lock()["faketool"]["version"] == VERSION
+
+
+def test_missing_binary_with_receipt_is_repaired(fake):
+    toolchain.install("faketool")
+    _installed().unlink()
+    assert toolchain.install("faketool").action == "repaired"
+    assert _installed().read_bytes() == b"binary-v1"
+
+
+def test_binary_without_receipt_is_repaired(fake):
+    config.tools_dir().mkdir(parents=True, exist_ok=True)
+    _installed().write_bytes(b"leftover")
+    assert toolchain.install("faketool").action == "repaired"
+    assert _lock()["faketool"]["version"] == VERSION
 
 
 def test_tampered_install_is_replaced_rather_than_trusted(fake):
@@ -187,6 +217,7 @@ def test_tampered_install_is_replaced_rather_than_trusted(fake):
     _installed().write_bytes(b"evil")
     result = toolchain.install("faketool")
     assert not result.already_installed
+    assert result.action == "repaired"
     assert _installed().read_bytes() == b"binary-v1"
 
 

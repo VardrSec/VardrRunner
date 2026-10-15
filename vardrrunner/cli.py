@@ -252,7 +252,7 @@ def tools_install(
     all_tools: bool = typer.Option(False, "--all", help="Install every tool VardrRunner pins"),
     force: bool = typer.Option(False, "--force", help="Reinstall even if already verified"),
 ):
-    """Download, verify, and install pinned tool builds."""
+    """Install, update, or repair pinned tools; skip ones already up to date."""
     tools.install(names or [], all_tools=all_tools, force=force)
 
 

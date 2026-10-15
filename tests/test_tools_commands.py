@@ -116,8 +116,44 @@ def test_check_tool_hint_names_the_install_command(monkeypatch):
 # ── tools commands ──────────────────────────────────────────────────────────
 
 
-def _result(name, already=False):
-    return toolchain.InstallResult(name, "1.0.0", config.tools_dir() / name, already)
+def _result(name, already=False, action=None, previous=None):
+    return toolchain.InstallResult(
+        name,
+        "1.0.0",
+        config.tools_dir() / name,
+        already,
+        action or ("current" if already else "installed"),
+        previous,
+    )
+
+
+def test_install_reports_what_each_tool_needed_and_a_summary(monkeypatch, capsys):
+    results = {
+        "httpx": _result("httpx", already=True),
+        "dnsx": _result("dnsx"),
+        "katana": _result("katana", action="updated", previous="0.9.0"),
+        "gau": _result("gau", action="repaired"),
+    }
+    monkeypatch.setattr(toolchain, "install", lambda n, force: results[n])
+    tools_cmd.install(list(results), all_tools=False, force=False)
+    out = capsys.readouterr().out
+    assert "already installed and up to date" in out
+    assert "updated from 0.9.0" in out
+    assert "repaired" in out
+    assert "Summary: 1 up to date, 1 installed, 1 updated, 1 repaired" in out
+
+
+def test_install_all_reports_external_tools_without_failing(monkeypatch, capsys):
+    monkeypatch.setattr(toolchain, "install", lambda n, force: _result(n, already=True))
+    monkeypatch.setattr(tools_cmd, "pcap_available", lambda: True)
+    paths = {"nmap": "/usr/bin/nmap", "vardrgate_api_test": None}
+    monkeypatch.setattr(
+        toolchain, "status", lambda n, b: _status("system", None, "", path=paths.get(n))
+    )
+    tools_cmd.install([], all_tools=True, force=False)  # a missing optional tool never exits 1
+    out = capsys.readouterr().out
+    assert "OK nmap" in out and "found on PATH" in out
+    assert "MISSING vardrgate" in out and "VardrGate/releases" in out
 
 
 def test_install_requires_names_or_all():
