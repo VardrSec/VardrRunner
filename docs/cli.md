@@ -418,7 +418,7 @@ journal remains the recovery source of truth; manifests are portable run evidenc
 ## `tools` — pinned, verified tool installs
 
 ```bash
-vardrrunner tools install --all            # every tool VardrRunner pins
+vardrrunner tools install --all            # install, update or repair every pinned tool; safe to rerun
 vardrrunner tools install httpx nuclei     # or name them
 vardrrunner tools install httpx --force    # reinstall even if already verified
 vardrrunner tools list                     # source, version, location of every tool
@@ -432,6 +432,21 @@ Each tool is pinned in the package to an exact version and, per platform, a rele
 and its SHA-256. `install` downloads the archive over HTTPS, refuses it unless the hash
 matches the pin, extracts only the expected binary, requires it to report the pinned
 version, and moves it into place in one step. Anything that fails installs nothing.
+
+`install` is safe to rerun and reports what each tool needed:
+
+| Result | Meaning |
+|---|---|
+| already installed and up to date | verified against its receipt at the pinned version; nothing downloaded |
+| installed and verified | was not installed |
+| updated from *x* | an older pinned version was replaced |
+| repaired | the receipt's binary was missing or changed (antivirus, a partial copy), or a binary sat in the tools directory without a receipt |
+| reinstalled and verified | `--force` on an install that was already good |
+
+It ends with a one-line summary. With `--all` it also checks the tools it cannot install:
+nmap and vardrgate are reported as found on `PATH` or `MISSING` with where to get them. A
+missing external tool is a warning, not a failure, because it only limits which job types
+the runner can execute. Only a tool that fails to install makes the command exit 1.
 
 | Tool | Managed | Notes |
 |---|---|---|

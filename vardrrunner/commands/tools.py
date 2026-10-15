@@ -37,15 +37,38 @@ def pcap_hint() -> str:
     return "naabu needs libpcap: e.g. `sudo apt install libpcap0.8` or `brew install libpcap`"
 
 
+_ACTION_TEXT = {
+    "current": "already installed and up to date",
+    "installed": "installed and verified",
+    "repaired": "repaired: the installed copy was missing, changed or untracked",
+    "reinstalled": "reinstalled and verified",
+}
+
+# Tools VardrRunner runs but cannot install itself, keyed by tool name, with how to get them.
+_EXTERNAL_HINTS = {
+    "nmap": "needed for nmap jobs; install it from https://nmap.org/download or your package manager",
+    "vardrgate_api_test": (
+        "needed only for API assessment jobs; download it from "
+        "https://github.com/VardrSec/VardrGate/releases/latest and put it on PATH"
+    ),
+}
+
+
 def install(names: list[str], all_tools: bool, force: bool) -> None:
+    """Install, update or repair pinned tools, then report what each one needed.
+
+    Safe to rerun: a verified tool at its pinned version is left alone without a download.
+    With ``--all`` it also reports the tools VardrRunner cannot install for you.
+    """
     if all_tools:
         names = toolchain.manageable_tools()
     if not names:
         console.print("[red]Name the tools to install, or pass --all.[/red]")
         raise typer.Exit(1)
 
+    counts = {"current": 0, "installed": 0, "updated": 0, "repaired": 0, "reinstalled": 0}
     failed = 0
-    console.print(f"Installing into {redaction.redact_rich_text(str(config.tools_dir()))}")
+    console.print(f"Checking tools in {redaction.redact_rich_text(str(config.tools_dir()))}")
     for name in names:
         try:
             result = toolchain.install(name, force=force)
@@ -53,12 +76,46 @@ def install(names: list[str], all_tools: bool, force: bool) -> None:
             failed += 1
             console.print(f"[red]FAIL {name}:[/red] {redaction.redact_rich_exception(exc)}")
             continue
-        verb = "already installed" if result.already_installed else "installed and verified"
-        console.print(f"[green]OK {name} {result.version}[/green] {verb}")
+        counts[result.action] = counts.get(result.action, 0) + 1
+        if result.action == "updated":
+            text = f"updated from {result.previous_version}"
+        else:
+            text = _ACTION_TEXT.get(result.action, "installed and verified")
+        console.print(f"[green]OK {name} {result.version}[/green] {text}")
         if name == "naabu" and not pcap_available():
             console.print(f"  [yellow]WARN[/yellow] {pcap_hint()}")
+
+    if all_tools:
+        _report_external_tools()
+
+    summary = ", ".join(
+        f"{n} {label}"
+        for label, n in (
+            ("up to date", counts["current"]),
+            ("installed", counts["installed"]),
+            ("updated", counts["updated"]),
+            ("repaired", counts["repaired"]),
+            ("reinstalled", counts["reinstalled"]),
+            ("failed", failed),
+        )
+        if n
+    )
+    console.print(f"Summary: {summary or 'nothing to do'}")
     if failed:
         raise typer.Exit(1)
+
+
+def _report_external_tools() -> None:
+    """Missing external tools only limit which job types run, so they warn, never fail."""
+    for name, binary in runner.ALLOWED_TOOLS.items():
+        if toolchain.manageable(name):
+            continue
+        st = toolchain.status(name, binary)
+        if st.path:
+            console.print(f"[green]OK {binary}[/green] found on PATH (not managed by VardrRunner)")
+        else:
+            hint = _EXTERNAL_HINTS.get(name, "install it and make sure it is on PATH")
+            console.print(f"[yellow]MISSING {binary}[/yellow] {hint}")
 
 
 def list_tools() -> None:

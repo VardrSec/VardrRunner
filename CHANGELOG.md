@@ -7,6 +7,14 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Changed
+
+- `tools install` reports what each tool needed: already up to date (no download),
+  installed, updated from an older pinned version, repaired (missing or changed binary,
+  or one without a receipt), or reinstalled with `--force`, followed by a summary line.
+  `--all` also checks nmap and vardrgate, which it cannot install, and says where to
+  get them; a missing external tool warns rather than failing the command.
+
 ## [0.47.0] — 2026-10-14
 
 API assessment binding, shared guidance and identity/session preflight. Gate
