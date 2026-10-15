@@ -31,6 +31,21 @@ _STATUS_CODE = re.compile(r"^\d{3}$")
 FFUF_DEFAULT_RATE = 50
 FFUF_MAX_RATE = 1000
 
+# Request-rate ceiling for the tools that send live traffic to a target (httpx,
+# nuclei, katana). Left unset, each tool keeps its own default; when a program's
+# rules cap request rate, the operator sets it, and the backend's per-engagement
+# ceiling bounds how high it can go.
+RATE_MIN = 1
+RATE_MAX = 1000
+
+# Custom request headers a job may add — e.g. the identification header some bug
+# bounty programs ask researchers to send. Bounded in count and length, and any
+# value containing a control character is rejected so one header cannot inject
+# another or a new request line.
+MAX_HEADERS = 20
+MAX_HEADER_LEN = 2000
+_HEADER_NAME = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$")
+
 
 class ConfigError(ValueError):
     """A job config value is missing, the wrong type, or out of range."""
@@ -153,11 +168,58 @@ def _parse_templates(raw) -> str | None:
     return str(raw)
 
 
+def _parse_headers(raw) -> tuple[str, ...]:
+    """Normalize custom request headers to validated ``"Name: value"`` strings.
+
+    Accepts a dict ``{"Name": "value"}`` or a list of ``"Name: value"`` strings.
+    A header name must be an HTTP token and a value may not contain a control
+    character, which closes off header- and request-line injection through a job
+    config. Returns a tuple ready to pass one-per-``-H`` to a tool.
+    """
+    if raw is None or raw == "":
+        return ()
+    pairs: list[tuple[str, str]] = []
+    if isinstance(raw, dict):
+        pairs = [(str(k), str(v)) for k, v in raw.items()]
+    elif isinstance(raw, (list, tuple)):
+        for item in raw:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                pairs.append((str(item[0]), str(item[1])))
+            elif isinstance(item, str):
+                name, sep, value = item.partition(":")
+                if not sep:
+                    raise ConfigError(f"header {item!r} must be in 'Name: value' form")
+                pairs.append((name.strip(), value.strip()))
+            else:
+                raise ConfigError(f"invalid header entry {item!r}")
+    else:
+        raise ConfigError(f"'headers' must be an object or list, got {type(raw).__name__}")
+    if len(pairs) > MAX_HEADERS:
+        raise ConfigError(f"too many headers ({len(pairs)}); the limit is {MAX_HEADERS}")
+    out: list[str] = []
+    seen: set[str] = set()
+    for name, value in pairs:
+        if not _HEADER_NAME.match(name):
+            raise ConfigError(f"invalid header name {name!r}")
+        if any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ConfigError(f"header {name!r} has an invalid value (control character)")
+        if len(name) + len(value) + 2 > MAX_HEADER_LEN:
+            raise ConfigError(f"header {name!r} is too long")
+        key = name.lower()
+        if key in seen:
+            raise ConfigError(f"duplicate header {name!r}")
+        seen.add(key)
+        out.append(f"{name}: {value}")
+    return tuple(out)
+
+
 @dataclass(frozen=True)
 class HttpxConfig:
     limit: int = 100
     status_code: int | None = None
     timeout: int | None = None
+    rate: int | None = None
+    headers: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, cfg: dict) -> "HttpxConfig":
@@ -165,6 +227,8 @@ class HttpxConfig:
             limit=_req_int(cfg, "limit", 100, minimum=1),
             status_code=_opt_int(cfg, "status_code"),
             timeout=_opt_int(cfg, "timeout", minimum=1),
+            rate=_opt_int(cfg, "rate", minimum=RATE_MIN, maximum=RATE_MAX),
+            headers=_parse_headers(cfg.get("headers")),
         )
 
 
@@ -175,6 +239,8 @@ class NucleiConfig:
     severity: str | None = None
     templates: str | None = None
     timeout: int | None = None
+    rate: int | None = None
+    headers: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, cfg: dict) -> "NucleiConfig":
@@ -184,6 +250,8 @@ class NucleiConfig:
             severity=_parse_severity(cfg.get("severity")),
             templates=_parse_templates(cfg.get("templates")),
             timeout=_opt_int(cfg, "timeout", minimum=1),
+            rate=_opt_int(cfg, "rate", minimum=RATE_MIN, maximum=RATE_MAX),
+            headers=_parse_headers(cfg.get("headers")),
         )
 
 
@@ -248,6 +316,8 @@ class KatanaConfig:
     depth: int = 3
     js_crawl: bool = False
     timeout: int | None = None
+    rate: int | None = None
+    headers: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, cfg: dict) -> "KatanaConfig":
@@ -257,6 +327,8 @@ class KatanaConfig:
             depth=_req_int(cfg, "depth", 3, minimum=1, maximum=10),
             js_crawl=_opt_bool(cfg, "js_crawl", False),
             timeout=_opt_int(cfg, "timeout", minimum=1),
+            rate=_opt_int(cfg, "rate", minimum=RATE_MIN, maximum=RATE_MAX),
+            headers=_parse_headers(cfg.get("headers")),
         )
 
 
@@ -366,6 +438,7 @@ class FfufConfig:
     rate: int = FFUF_DEFAULT_RATE
     limit: int = 100
     timeout: int | None = None
+    headers: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, cfg: dict) -> "FfufConfig":
@@ -376,6 +449,7 @@ class FfufConfig:
             rate=_req_int(cfg, "rate", FFUF_DEFAULT_RATE, minimum=1, maximum=FFUF_MAX_RATE),
             limit=_req_int(cfg, "limit", 100, minimum=1),
             timeout=_opt_int(cfg, "timeout", minimum=1),
+            headers=_parse_headers(cfg.get("headers")),
         )
 
 
@@ -394,6 +468,7 @@ class DalfoxConfig:
     delay: int = 0
     mining: bool = True
     timeout: int | None = None
+    headers: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, cfg: dict) -> "DalfoxConfig":
@@ -404,6 +479,7 @@ class DalfoxConfig:
             delay=_req_int(cfg, "delay", 0, minimum=0, maximum=10_000),
             mining=_opt_bool(cfg, "mining", True),
             timeout=_opt_int(cfg, "timeout", minimum=1),
+            headers=_parse_headers(cfg.get("headers")),
         )
 
 

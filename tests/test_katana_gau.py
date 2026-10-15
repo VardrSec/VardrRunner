@@ -125,7 +125,7 @@ def test_run_gau_argv_ends_options_before_domains(monkeypatch, tmp_path):
 
 
 def _katana_execute(tmp_path, lines, config=None):
-    def fake_run(targets, out, depth=3, js_crawl=False, timeout=None):
+    def fake_run(targets, out, depth=3, js_crawl=False, timeout=None, rate=None, headers=()):
         out.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     with patch("vardrrunner.runner.run_katana", side_effect=fake_run):

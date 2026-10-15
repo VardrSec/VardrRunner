@@ -563,6 +563,19 @@ limited to 10 MiB. The same validation applies to backend data and pipeline hand
 
 `--yes`/`-y` skips the confirmation prompt on any of them.
 
+**Rate and headers in queued jobs.** Jobs sent from VardrMap carry a config object, and two
+keys there apply to the tools that send live traffic:
+
+- `rate` — maximum requests per second, for `httpx`, `nuclei` and `katana` (1–1000). Left
+  unset, each tool keeps its own default; `ffuf` keeps its separate always-on `rate` cap.
+  Passed as `-rate-limit`. Use it when a program's rules cap request rate; VardrMap also
+  applies a per-engagement ceiling when the job is queued.
+- `headers` — custom request headers for `httpx`, `nuclei`, `katana`, `ffuf` and `dalfox`,
+  as `{"Name": "value"}` or `["Name: value", …]` (e.g. an identification header a program
+  asks researchers to send). Each is passed as its own `-H`. A header name must be an HTTP
+  token and a value may not contain a control character, so a value cannot inject a second
+  header or a request line. Up to 20 headers.
+
 **ffuf's request rate is always capped.** It is the one tool here that puts sustained load on
 a client's host, so `--rate` has a modest default and a ceiling of 1000, and there is no value
 that disables it. The rate applies per target. ffuf also always runs with auto-calibration

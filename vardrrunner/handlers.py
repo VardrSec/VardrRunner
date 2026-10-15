@@ -274,7 +274,9 @@ class HttpxHandler(ToolHandler[configs.HttpxConfig]):
         self, targets: list[str], run_dir: Path, config: configs.HttpxConfig
     ) -> Path | None:
         output = run_dir / "httpx.jsonl"
-        runner.run_httpx(targets, output, timeout=config.timeout)
+        runner.run_httpx(
+            targets, output, timeout=config.timeout, rate=config.rate, headers=config.headers
+        )
         return output
 
     def upload(
@@ -319,6 +321,8 @@ class NucleiHandler(ToolHandler[configs.NucleiConfig]):
             severity=config.severity,
             templates=config.templates,
             timeout=config.timeout,
+            rate=config.rate,
+            headers=config.headers,
         )
         return output
 
@@ -599,6 +603,8 @@ class KatanaHandler(ToolHandler[configs.KatanaConfig]):
             depth=config.depth,
             js_crawl=config.js_crawl,
             timeout=config.timeout,
+            rate=config.rate,
+            headers=config.headers,
         )
         seen: set[tuple[str, str]] = set()
         records = []
@@ -801,6 +807,7 @@ class FfufHandler(ToolHandler[configs.FfufConfig]):
                 match_codes=config.match_codes,
                 rate=config.rate,
                 timeout=config.timeout,
+                headers=config.headers,
             )
             for record in _ffuf_records(report):
                 if record["url"] not in seen:
@@ -884,6 +891,7 @@ class DalfoxHandler(ToolHandler[configs.DalfoxConfig]):
             delay=config.delay,
             mining=config.mining,
             timeout=config.timeout,
+            headers=config.headers,
         )
         findings = _read_dalfox_findings(output)
         if code == runner.DALFOX_EXIT_FINDINGS and not findings:

@@ -198,6 +198,56 @@ def test_run_nuclei_uses_arg_list(tmp_path):
         assert "high,critical" in args
 
 
+def _argv_for(fn, tmp_path, **kwargs):
+    process = _mock_tool_process()
+    with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
+        fn(["https://example.com"], tmp_path / "out.jsonl", **kwargs)
+        return mock_spawn.call_args[0][0]
+
+
+def _flag_value(args, flag):
+    return args[args.index(flag) + 1]
+
+
+def test_rate_and_headers_reach_httpx_nuclei_katana(tmp_path):
+    for fn in (runner.run_httpx, runner.run_nuclei, runner.run_katana):
+        args = _argv_for(fn, tmp_path, rate=25, headers=("X-Bug-Bounty: me", "X-Trace: 1"))
+        assert _flag_value(args, "-rate-limit") == "25", fn.__name__
+        # Each header is passed as its own -H occurrence, not merged.
+        h_values = [args[i + 1] for i, a in enumerate(args) if a == "-H"]
+        assert h_values == ["X-Bug-Bounty: me", "X-Trace: 1"], fn.__name__
+
+
+def test_rate_limit_is_omitted_when_unset(tmp_path):
+    for fn in (runner.run_httpx, runner.run_nuclei, runner.run_katana):
+        args = _argv_for(fn, tmp_path)
+        assert "-rate-limit" not in args and "-H" not in args, fn.__name__
+
+
+def test_headers_reach_ffuf(tmp_path):
+    process = _mock_tool_process()
+    with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
+        runner.run_ffuf(
+            "https://example.com",
+            tmp_path / "o.json",
+            tmp_path / "w.txt",
+            headers=("X-Bug-Bounty: me",),
+        )
+        args = mock_spawn.call_args[0][0]
+    assert _flag_value(args, "-H") == "X-Bug-Bounty: me"
+    assert _flag_value(args, "-rate") == "50"  # ffuf's rate cap is still always present
+
+
+def test_headers_reach_dalfox(tmp_path):
+    process = _mock_tool_process()
+    with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
+        runner.run_dalfox(
+            ["https://example.com/?q=1"], tmp_path / "o.json", headers=("X-Bug-Bounty: me",)
+        )
+        args = mock_spawn.call_args[0][0]
+    assert _flag_value(args, "-H") == "X-Bug-Bounty: me"
+
+
 def test_run_dnsx_uses_arg_list(tmp_path):
     process = _mock_tool_process()
     with patch("vardrrunner.runner._spawn_tool", return_value=process) as mock_spawn:
