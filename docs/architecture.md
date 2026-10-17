@@ -88,7 +88,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/updates.py` | `update check` — inspect public release metadata; never installs automatically. |
 | `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, optional service installation, and doctor into one idempotent guided/provisioning workflow. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
-| `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — continuous worker (poll + heartbeat) with PID file and graceful shutdown. |
+| `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — heartbeats by default; `--run-jobs` enables polling and recovery, with PID file and graceful shutdown. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
 | `vardrrunner/commands/status.py` | `status` — local config, version, and each tool's source (managed / PATH / missing) (quick glance). |
 | `vardrrunner/commands/test_cases.py` | `test-cases draft|save` - draft VardrGate cases from observed operations or OpenAPI into a never-overwritten review file, refuse literal credentials, and save only with `--reviewed`. |
@@ -134,8 +134,13 @@ runner **online** if `last_seen` is within 5 minutes. Heartbeats are upserted pe
 `(owner, hostname)`, so multiple machines show up independently in the backend's Bridge.
 
 ## Daemon model
-`daemon start` launches a dedicated worker thread that interleaves job polling (5 s) and
-heartbeats (60 s). `--detach` spawns a `DETACHED_PROCESS` and writes a PID file; `stop`
+`daemon start` sends heartbeats (60 s) on a dedicated thread. The main loop only polls
+jobs (5 s) and reconciles interrupted runs when `--run-jobs` is explicitly passed.
+Without it, no queue client is constructed and `/jobs/pending` is never called: that
+endpoint can materialize due schedules, so even polling is an execution-side effect.
+Service plans omit the flag by default on all platforms; existing service commands
+therefore become heartbeat-only after upgrading and restarting. No backend change is
+required. `--detach` preserves the opt-in, spawns a detached process, and writes a PID file; `stop`
 removes the PID file as a cooperative shutdown signal and the daemon exits gracefully.
 Windows liveness is checked via a ctypes probe (plain `os.kill` on Windows is
 `TerminateProcess` and would kill the daemon it was meant to check).

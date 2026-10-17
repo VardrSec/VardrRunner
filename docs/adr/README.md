@@ -27,3 +27,4 @@ the way it does.
 | [0013](0013-guided-setup-and-host-lifecycle.md) | Guided setup and verified host lifecycle | Accepted |
 | [0014](0014-pinned-verified-tool-installs.md) | Pinned, verified tool installs in one managed directory | Accepted |
 | [0015](0015-mcp-server.md) | MCP server for agent-driven engagements | Accepted |
+| [0016](0016-explicit-daemon-execution.md) | Require explicit daemon scan execution opt-in | Accepted |

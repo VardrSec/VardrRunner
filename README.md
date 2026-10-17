@@ -16,8 +16,9 @@ results, and heartbeats so the backend always knows which machines are online.
 
 ## Features
 - **Job queue worker** — poll, atomically claim, execute, and report scan jobs
-- **Daemon mode** — `daemon start` runs a continuous background worker (poll every 5 s,
-  heartbeat every 60 s) with detached mode, PID file, and graceful shutdown
+- **Daemon mode** — `daemon start` sends heartbeats every 60 s; `--run-jobs` explicitly
+  enables automatic scan polling every 5 s and interrupted-job recovery. Includes
+  detached mode, PID file, and graceful shutdown
 - **Tool runners** — `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu`, `katana`
   (crawler), `gau` (archived URLs),
   each capturing output into an atomically unique run directory, every run bounded by a
@@ -135,8 +136,13 @@ vardrrunner init               # guided auth, runner name, optional service, and
 vardrrunner tools install --all   # pinned, verified tools into ~/.vardrmap/tools
 ```
 
-For an unattended host, use `vardrrunner init --production --install-service`. Existing
-individual `login`, `identity`, `doctor`, and `service` commands remain available when you
+Setup and service installation do not enable automatic scans. `daemon start` and the
+sign-in service send heartbeats only; use `vardrrunner jobs run` to run queued jobs manually.
+For an unattended host, use `vardrrunner init --production --install-service`, then
+explicitly opt in with `vardrrunner service install --run-jobs` after stopping any running
+daemon. This enables queued and scheduled scans whenever the service starts, including
+at sign-in. See the [upgrade instructions](docs/cli.md#service--native-unattended-startup).
+Existing individual `login`, `identity`, `doctor`, and `service` commands remain available when you
 want to control each step separately.
 
 ### One-shot usage

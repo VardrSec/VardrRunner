@@ -295,9 +295,14 @@ def service_install(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Print the plan without changing host state"
     ),
+    run_jobs: bool = typer.Option(
+        False,
+        "--run-jobs",
+        help="Opt in to automatic scans and job recovery whenever the service starts",
+    ),
 ):
     """Install a systemd user unit, launchd agent, or Windows scheduled task."""
-    service_cmd.install(env_file=env_file, start=start, dry_run=dry_run)
+    service_cmd.install(env_file=env_file, start=start, dry_run=dry_run, run_jobs=run_jobs)
 
 
 @service_app.command("uninstall")
@@ -392,7 +397,7 @@ def import_httpx(
 # --------------------------------------------------------------------------- #
 
 daemon_app = typer.Typer(
-    help="Long-running background worker: polls jobs and sends heartbeats.", no_args_is_help=True
+    help="Send heartbeats; automatic scan execution requires --run-jobs.", no_args_is_help=True
 )
 app.add_typer(daemon_app, name="daemon")
 
@@ -416,6 +421,9 @@ def daemon_start(
         "--log-format",
         help="Log encoding: text or newline-delimited JSON",
     ),
+    run_jobs: bool = typer.Option(
+        False, "--run-jobs", help="Opt in to polling, executing, and recovering scan jobs"
+    ),
 ):
     """Start the daemon (foreground by default, use --detach for background)."""
     daemon_cmd.start(
@@ -424,6 +432,7 @@ def daemon_start(
         heartbeat_interval=heartbeat_interval,
         log_file=log_file,
         log_format=log_format,
+        run_jobs=run_jobs,
     )
 
 

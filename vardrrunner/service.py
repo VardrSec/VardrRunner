@@ -51,6 +51,7 @@ def build_plan(
     home: Path | None = None,
     log_file: Path | None = None,
     env_file: Path | None = None,
+    run_jobs: bool = False,
 ) -> ServicePlan:
     """Build a deterministic service plan without changing the host."""
     system = system or platform.system()
@@ -60,7 +61,7 @@ def build_plan(
         raise ServiceError("vardrrunner executable is not on PATH")
     exe = _clean_path(Path(found))
     log = _clean_path(log_file or (config.config_dir() / "daemon.jsonl"))
-    daemon_args = (
+    daemon_args: tuple[str, ...] = (
         str(exe),
         "daemon",
         "start",
@@ -69,6 +70,8 @@ def build_plan(
         "--log-format",
         "json",
     )
+    if run_jobs:
+        daemon_args += ("--run-jobs",)
     environment = _clean_path(env_file) if env_file else None
     if environment and system != "Linux":
         raise ServiceError("--env-file is currently supported only by systemd on Linux")

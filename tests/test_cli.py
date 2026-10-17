@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from vardrrunner import configs
 from vardrrunner.cli import app
+from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import run as run_cmd
 
 runner = CliRunner()
@@ -201,7 +202,13 @@ class TestServiceCommands:
                 "--no-start",
                 "--dry-run",
             )
-        mock.assert_called_once_with(env_file=env_file, start=False, dry_run=True)
+        mock.assert_called_once_with(env_file=env_file, start=False, dry_run=True, run_jobs=False)
+
+    @pytest.mark.parametrize("flags, expected", [([], False), (["--run-jobs"], True)])
+    def test_service_scan_opt_in(self, flags, expected):
+        with patch("vardrrunner.commands.service.install") as mock:
+            invoke("service", "install", *flags)
+        mock.assert_called_once_with(env_file=None, start=True, dry_run=False, run_jobs=expected)
 
     def test_status_and_uninstall(self):
         with patch("vardrrunner.commands.service.show_status") as status:
@@ -305,10 +312,18 @@ class TestImportCommands:
 
 
 class TestDaemonCommands:
-    def test_daemon_start(self):
+    @pytest.mark.parametrize("flags, expected", [([], False), (["--run-jobs"], True)])
+    def test_daemon_start(self, flags, expected):
         with patch("vardrrunner.commands.daemon.start") as mock:
-            invoke("daemon", "start")
-        mock.assert_called_once()
+            invoke("daemon", "start", *flags)
+        mock.assert_called_once_with(
+            detach=False,
+            poll_interval=5,
+            heartbeat_interval=60,
+            log_file=None,
+            log_format=daemon_cmd.LogFormat.TEXT,
+            run_jobs=expected,
+        )
 
     def test_daemon_stop(self):
         with patch("vardrrunner.commands.daemon.stop") as mock:

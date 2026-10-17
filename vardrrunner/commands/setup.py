@@ -144,7 +144,7 @@ def initialize(
     should_install = install_service or env_file is not None
     if not non_interactive and not should_install:
         should_install = typer.confirm(
-            "Install the native per-user background service?", default=production
+            "Install a heartbeat-only service at sign-in (no automatic scans)?", default=False
         )
     if should_install:
         service_command.install(env_file=env_file, start=start_service, dry_run=False)
@@ -158,4 +158,7 @@ def initialize(
 
     console.print("\n[bold green]VardrRunner setup complete.[/bold green]")
     if not should_install:
-        console.print("Start work with `vardrrunner jobs run` or `vardrrunner daemon start`.")
+        console.print(
+            "Start work with `vardrrunner jobs run`. For unattended scans, explicitly use "
+            "`vardrrunner daemon start --run-jobs`."
+        )

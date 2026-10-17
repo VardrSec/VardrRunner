@@ -106,21 +106,25 @@ def test_supplied_auth_and_service_options_are_forwarded(monkeypatch):
     doctor.assert_called_once_with(as_json=False, production=True)
 
 
-def test_production_interactive_defaults_to_service_install(monkeypatch):
+def test_production_interactive_defaults_to_no_service(monkeypatch):
     monkeypatch.setenv(config.ENV_API_URL, "https://api.example.com")
     monkeypatch.setenv(config.ENV_API_KEY, "vmap_secret")
     with (
         patch(
             "vardrrunner.commands.setup.typer.prompt", side_effect=lambda *_a, **kw: kw["default"]
         ),
-        patch("vardrrunner.commands.setup.typer.confirm", return_value=True) as confirm,
+        patch(
+            "vardrrunner.commands.setup.typer.confirm", side_effect=lambda *_a, **kw: kw["default"]
+        ) as confirm,
         patch("vardrrunner.commands.setup.tools_command.install") as tools_install,
         patch("vardrrunner.commands.setup.service_command.install") as install,
         patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
     ):
         setup.initialize(production=True)
-    confirm.assert_any_call("Install the native per-user background service?", default=True)
-    install.assert_called_once()
+    confirm.assert_any_call(
+        "Install a heartbeat-only service at sign-in (no automatic scans)?", default=False
+    )
+    install.assert_not_called()
     tools_install.assert_called_once_with([], all_tools=True, force=False)
 
 

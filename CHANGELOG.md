@@ -22,6 +22,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ### Changed
 
+- **Automatic scans are now opt-in.** `daemon start` and newly installed services send
+  heartbeats only. Pass `--run-jobs` to `daemon start` or `service install` to enable queue
+  polling, scan execution, and interrupted-job recovery. Existing sign-in services without
+  the flag become heartbeat-only after an upgrade and restart; already-running processes
+  must be stopped. Setup's service prompt defaults to No even in production mode.
+  Manual `jobs run` is unchanged. See [migration notes](changelog/unreleased-startup-safety.md).
 - `tools install` reports what each tool needed: already up to date (no download),
   installed, updated from an older pinned version, repaired (missing or changed binary,
   or one without a receipt), or reinstalled with `--force`, followed by a summary line.
