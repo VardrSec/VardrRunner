@@ -13,9 +13,9 @@ from vardrrunner.journal import Journal
 console = Console()
 
 
-def _plan(env_file: Path | None = None):
+def _plan(env_file: Path | None = None, *, run_jobs: bool = False):
     try:
-        return service.build_plan(env_file=env_file)
+        return service.build_plan(env_file=env_file, run_jobs=run_jobs)
     except service.ServiceError as exc:
         console.print(f"[red]Service unavailable:[/red] {redaction.redact_rich_exception(exc)}")
         raise typer.Exit(1) from exc
@@ -40,8 +40,19 @@ def _preflight(plan: service.ServicePlan) -> None:
         raise typer.Exit(1) from exc
 
 
-def install(env_file: Path | None = None, start: bool = True, dry_run: bool = False) -> None:
-    plan = _plan(env_file)
+def install(
+    env_file: Path | None = None,
+    start: bool = True,
+    dry_run: bool = False,
+    run_jobs: bool = False,
+) -> None:
+    plan = _plan(env_file, run_jobs=run_jobs)
+    console.print(
+        "[yellow]Automatic scans enabled: queued and scheduled jobs will run at sign-in "
+        "or service startup; interrupted work will be reconciled.[/yellow]"
+        if run_jobs
+        else "Heartbeat only: this service will not execute or recover scan jobs."
+    )
     if dry_run:
         console.print(f"Service kind: {plan.kind}")
         if plan.definition_path:

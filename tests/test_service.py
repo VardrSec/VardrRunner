@@ -11,6 +11,26 @@ from vardrrunner import service
 from vardrrunner.commands import service as service_cmd
 
 
+@pytest.mark.parametrize("system", ["Linux", "Darwin", "Windows"])
+@pytest.mark.parametrize("run_jobs", [None, True])
+def test_service_requires_explicit_scan_opt_in(tmp_path, system, run_jobs):
+    kwargs = {} if run_jobs is None else {"run_jobs": run_jobs}
+    with patch("vardrrunner.service.os.getuid", return_value=501, create=True):
+        plan = service.build_plan(
+            executable=tmp_path / "runner", system=system, home=tmp_path, **kwargs
+        )
+    command = plan.definition or " ".join(plan.install_commands[0])
+    assert ("--run-jobs" in command) is (run_jobs is True)
+
+
+@pytest.mark.parametrize("run_jobs", [False, True])
+def test_service_install_forwards_execution_choice(tmp_path, run_jobs):
+    plan = service.build_plan(executable=tmp_path / "runner", system="Windows", home=tmp_path)
+    with patch.object(service_cmd.service, "build_plan", return_value=plan) as build:
+        service_cmd.install(dry_run=True, run_jobs=run_jobs)
+    build.assert_called_once_with(env_file=None, run_jobs=run_jobs)
+
+
 def test_linux_plan_is_user_scoped_and_uses_json_logs(tmp_path):
     (tmp_path / "runner.env").write_text("VARDRMAP_URL=https://example.com\n")
     (tmp_path / "runner.env").chmod(0o600)

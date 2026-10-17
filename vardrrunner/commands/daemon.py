@@ -1,7 +1,7 @@
 """
 vardrrunner daemon — long-running background worker.
 
-start  : run the job-poll + heartbeat loop (foreground or detached)
+start  : send heartbeats; opt in to job polling and recovery with --run-jobs
 stop   : request a graceful shutdown of a running daemon
 status : show whether a daemon is running
 
@@ -245,8 +245,9 @@ def start(
         help="Append output to file (defaults to ~/.vardrrunner.log when --detach is used)",
     ),
     log_format: LogFormat = LogFormat.TEXT,
+    run_jobs: bool = False,
 ) -> None:
-    """Start the daemon: continuously poll for jobs and send heartbeats."""
+    """Send heartbeats; poll and recover jobs only with explicit execution opt-in."""
     if not 1 <= poll_interval <= 3600 or not 1 <= heartbeat_interval <= 86400:
         console.print(
             "[red]Invalid intervals:[/red] poll must be 1-3600 seconds and heartbeat "
@@ -267,6 +268,7 @@ def start(
             heartbeat_interval=heartbeat_interval,
             log_file=log_file,
             log_format=log_format,
+            run_jobs=run_jobs,
         )
         return
 
@@ -333,6 +335,12 @@ def start(
         f"· poll {poll_interval}s · heartbeat {heartbeat_interval}s"
     )
     out.print("[dim]Press Ctrl+C to stop.[/dim]")
+    if not run_jobs:
+        out.print(
+            "[yellow]Heartbeat only: automatic scans and job recovery are disabled.[/yellow] "
+            "Use `vardrrunner jobs run` for a manual run, or restart with --run-jobs "
+            "to enable unattended execution."
+        )
 
     _stop = threading.Event()
 
@@ -371,6 +379,11 @@ def start(
     _stop_work_blocked: dict[str, float] = {}
     try:
         while not _shutdown_requested():
+            # The pending endpoint can materialize scheduled scans. Keep all queue
+            # access and recovery behind opt-in, including legacy login services.
+            if not run_jobs:
+                _stop.wait(timeout=poll_interval)
+                continue
             try:
                 with compatibility_lock:
                     compatibility_blocked = bool(compatibility_state["blocked"])
@@ -471,6 +484,7 @@ def _detach(
     heartbeat_interval: int,
     log_file: Path | None,
     log_format: LogFormat = LogFormat.TEXT,
+    run_jobs: bool = False,
 ) -> None:
     """Re-launch self without --detach so the child runs as a foreground daemon."""
     exe = shutil.which("vardrrunner") or sys.argv[0]
@@ -490,6 +504,8 @@ def _detach(
         "--log-format",
         log_format.value,
     ]
+    if run_jobs:
+        cmd.append("--run-jobs")
 
     log_file.parent.mkdir(parents=True, exist_ok=True)
     fh = open(log_file, "a")
