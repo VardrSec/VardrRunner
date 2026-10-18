@@ -98,7 +98,7 @@ required for shared playbook reads or case binding.
 | `tests/test_engagements.py` | `engagements` list + `scope` display |
 | `tests/test_cli.py` | Typer wiring — every command route reaches its command module |
 | `tests/test_api.py` | API client headers, HTTP methods + retry configuration |
-| `tests/test_daemon.py` | daemon start/stop/status, PID file, liveness probe |
+| `tests/test_daemon.py` | rejected daemon starts, legacy stop/status, PID file, liveness probe |
 | `tests/test_heartbeat.py` | heartbeat payload + posting |
 | `tests/test_job_events.py` | lifecycle event emission |
 | `tests/test_runner.py` | subprocess execution, process-tree timeouts, private temporary data, output capture, failures |
@@ -106,7 +106,7 @@ required for shared playbook reads or case binding.
 | `tests/test_recovery.py` | interruption reconciliation, safe resume, ambiguous-upload refusal, backend isolation |
 | `tests/test_audit.py` | sanitized list/show/export behavior and atomic export failures |
 | `tests/test_identity.py` | stable UUID creation, concurrent first use, labels, corruption and IO failures |
-| `tests/test_service.py` | cross-platform service plans, command safety, install/status/uninstall behavior |
+| `tests/test_service.py` | cross-platform cleanup plans, rejected installation, status/uninstall behavior |
 | `tests/test_compatibility.py` | version parsing, capability/schema negotiation, legacy and malformed responses |
 | `tests/test_resources.py` | bounded environment policy, disk reserve, and artifact ceilings |
 | `tests/test_updates.py` | cached release checks and human/JSON command output |
@@ -210,8 +210,8 @@ export VARDRRUNNER_MIN_FREE_DISK_MB=512     # required reserve before claim/exec
 ```
 Env values take precedence over the config file.
 
-For a systemd service using environment-only auth, create and permission your own env file,
-run `chmod 600 /path/to/runner.env`, then run
-`vardrrunner init --production --env-file /path/to/runner.env`. Do not commit that file.
-VardrRunner references the path but deliberately never creates or displays its secret
-contents. macOS/Windows per-user services should use keychain/config auth.
+VardrRunner runs only when invoked. `init` installs no startup service; legacy service
+options fail before setup changes. `service install` and `daemon start` always reject
+requests. Use `run`, `pipeline run`, or one-shot `jobs run` explicitly, and `heartbeat`
+for a single connectivity check. Use `daemon stop` and `service uninstall` to clean up
+older installations. Environment credentials apply to the invoked command.

@@ -1,12 +1,12 @@
 """
-vardrrunner doctor — deep preflight for unattended use.
+vardrrunner doctor — deep preflight for scan execution.
 
 Where `status` is a quick human glance ("show me where I stand"), `doctor`
-validates the machine ("is this box safe to run unattended?") and is built for
+validates the machine ("is this machine ready to run scans?") and is built for
 scripts: it exits 0 only when the runner is healthy enough to work, exits
 non-zero on any actionable failure, and prints a remediation hint per problem.
 
-    vardrrunner doctor && vardrrunner daemon start --detach
+    vardrrunner doctor && vardrrunner jobs run
 
 Checks: credential source, backend URL validity, config-file permissions, API
 auth, daemon PID health, run-dir writability, free disk, tool versions, and
@@ -32,7 +32,6 @@ from vardrrunner import (
     redaction,
     resources,
     runner,
-    service,
     toolchain,
 )
 from vardrrunner.commands import daemon
@@ -237,30 +236,6 @@ def _check_journal() -> Check:
     return Check("execution journal", Health.OK, str(config.journal_file()))
 
 
-def _check_service() -> Check:
-    pid = daemon._read_pid()
-    if pid and daemon._process_alive(pid):
-        return Check("background service", Health.OK, f"daemon running (pid {pid})")
-    try:
-        plan = service.build_plan()
-        active, _detail = service.status(plan)
-    except service.ServiceError as e:
-        return Check(
-            "background service",
-            Health.FAIL,
-            redaction.redact_exception(e),
-            "Install the package on PATH, then run `vardrrunner service install`.",
-        )
-    if active:
-        return Check("background service", Health.OK, plan.kind)
-    return Check(
-        "background service",
-        Health.FAIL,
-        f"{plan.kind} is not active",
-        "Run `vardrrunner service install` or start the daemon under your supervisor.",
-    )
-
-
 def _check_disk(production: bool = False) -> Check:
     target = config.runs_dir()
     while not target.exists():
@@ -401,8 +376,6 @@ def _collect(production: bool = False) -> list[Check]:
     checks.append(_check_disk(production=production))
     checks += _check_tools()
     checks += _check_pipelines()
-    if production:
-        checks.append(_check_service())
     return checks
 
 
@@ -445,7 +418,7 @@ def _print_text(checks: list[Check], failed: list[Check], warned: list[Check]) -
     if failed:
         console.print(
             f"[red]{'✗' if fancy else 'FAIL'} {len(failed)} failure(s)[/red], "
-            f"[yellow]{len(warned)} warning(s)[/yellow] {dash} not ready for unattended use."
+            f"[yellow]{len(warned)} warning(s)[/yellow] {dash} not ready for scan execution."
         )
     elif warned:
         console.print(
@@ -454,7 +427,7 @@ def _print_text(checks: list[Check], failed: list[Check], warned: list[Check]) -
         )
     else:
         console.print(
-            f"[green]{'✓' if fancy else 'OK'} All checks passed {dash} ready for unattended use.[/green]"
+            f"[green]{'✓' if fancy else 'OK'} All checks passed {dash} ready for scan execution.[/green]"
         )
 
 

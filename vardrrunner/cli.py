@@ -99,17 +99,13 @@ def initialize(
     ),
     name: str | None = typer.Option(None, "--name", help="Human label for this runner"),
     production: bool = typer.Option(
-        False, "--production", help="Require the strict unattended doctor profile"
+        False, "--production", help="Require strict credential, disk, and durable-state checks"
     ),
-    install_service: bool = typer.Option(
-        False, "--install-service", help="Install the native per-user worker service"
+    install_service: bool = typer.Option(False, "--install-service", hidden=True),
+    start_service: bool | None = typer.Option(
+        None, "--start-service/--no-start-service", hidden=True
     ),
-    start_service: bool = typer.Option(
-        True, "--start-service/--no-start-service", help="Start an installed service now"
-    ),
-    env_file: Path | None = typer.Option(
-        None, "--env-file", help="Linux systemd credential environment file"
-    ),
+    env_file: Path | None = typer.Option(None, "--env-file", hidden=True),
     allow_plaintext: bool = typer.Option(
         False,
         "--allow-plaintext-credentials",
@@ -124,7 +120,7 @@ def initialize(
         help="Install pinned, verified tools (asked interactively; off when unattended)",
     ),
 ):
-    """Guided auth, identity, service, and health setup for a new runner."""
+    """Set up a runner for manual use; never install or start background services."""
     setup_cmd.initialize(
         api_url=api_url,
         api_key=api_key,
@@ -160,10 +156,10 @@ def doctor(
     production: bool = typer.Option(
         False,
         "--production",
-        help="Require durable state, secure credentials, disk headroom, and a service",
+        help="Require durable state, secure credentials, and disk headroom",
     ),
 ):
-    """Deep preflight before unattended use — exits non-zero on actionable failures."""
+    """Deep preflight before running scans — exits non-zero on actionable failures."""
     doctor_cmd.run_doctor(as_json=as_json, production=production)
 
 
@@ -281,23 +277,25 @@ def tools_purge(yes: bool = typer.Option(False, "--yes", "-y", help="Skip the co
 
 
 service_app = typer.Typer(
-    help="Manage VardrRunner as a per-user background service.", no_args_is_help=True
+    help="Inspect or remove legacy startup services. Installation is no longer supported.",
+    no_args_is_help=True,
 )
 app.add_typer(service_app, name="service")
 
 
 @service_app.command("install")
 def service_install(
-    env_file: Path | None = typer.Option(
-        None, "--env-file", help="systemd EnvironmentFile path (never copied or displayed)"
-    ),
-    start: bool = typer.Option(True, "--start/--no-start", help="Start after installation"),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Print the plan without changing host state"
+    env_file: Path | None = typer.Option(None, "--env-file", hidden=True),
+    start: bool = typer.Option(True, "--start/--no-start", hidden=True),
+    dry_run: bool = typer.Option(False, "--dry-run", hidden=True),
+    run_jobs: bool = typer.Option(
+        False,
+        "--run-jobs",
+        hidden=True,
     ),
 ):
-    """Install a systemd user unit, launchd agent, or Windows scheduled task."""
-    service_cmd.install(env_file=env_file, start=start, dry_run=dry_run)
+    """Unavailable: install the program with pipx; invoke scans manually."""
+    service_cmd.install(env_file=env_file, start=start, dry_run=dry_run, run_jobs=run_jobs)
 
 
 @service_app.command("uninstall")
@@ -392,38 +390,50 @@ def import_httpx(
 # --------------------------------------------------------------------------- #
 
 daemon_app = typer.Typer(
-    help="Long-running background worker: polls jobs and sends heartbeats.", no_args_is_help=True
+    help="Inspect or stop legacy daemons. Starting background workers is no longer supported.",
+    no_args_is_help=True,
 )
 app.add_typer(daemon_app, name="daemon")
 
 
 @daemon_app.command("start")
 def daemon_start(
-    detach: bool = typer.Option(False, "--detach", "-d", help="Run in background"),
+    detach: bool = typer.Option(False, "--detach", "-d", hidden=True, help="Run in background"),
     poll_interval: int = typer.Option(
-        5, "--poll-interval", min=1, max=3600, help="Seconds between job polls"
+        5, "--poll-interval", min=1, max=3600, hidden=True, help="Seconds between job polls"
     ),
     heartbeat_interval: int = typer.Option(
         60,
         "--heartbeat-interval",
         min=1,
         max=86400,
+        hidden=True,
         help="Seconds between heartbeats",
     ),
-    log_file: Path | None = typer.Option(None, "--log-file", help="Append output to file"),
+    log_file: Path | None = typer.Option(
+        None, "--log-file", hidden=True, help="Append output to file"
+    ),
     log_format: daemon_cmd.LogFormat = typer.Option(
         daemon_cmd.LogFormat.TEXT,
         "--log-format",
+        hidden=True,
         help="Log encoding: text or newline-delimited JSON",
     ),
+    run_jobs: bool = typer.Option(
+        False,
+        "--run-jobs",
+        hidden=True,
+        help="Opt in to polling, executing, and recovering scan jobs",
+    ),
 ):
-    """Start the daemon (foreground by default, use --detach for background)."""
+    """Unavailable: invoke scans manually; no background worker is started."""
     daemon_cmd.start(
         detach=detach,
         poll_interval=poll_interval,
         heartbeat_interval=heartbeat_interval,
         log_file=log_file,
         log_format=log_format,
+        run_jobs=run_jobs,
     )
 
 

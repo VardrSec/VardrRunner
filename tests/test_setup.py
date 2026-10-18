@@ -29,7 +29,7 @@ def test_noninteractive_existing_auth_completes_and_sets_name(monkeypatch, capsy
     monkeypatch.setenv(config.ENV_API_KEY, "vmap_secret")
     with (
         patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
-        patch("vardrrunner.commands.setup.service_command.install") as install,
+        patch("vardrrunner.commands.service.install") as install,
     ):
         setup.initialize(name="runner-a", non_interactive=True)
     assert identity.load_or_create().name == "runner-a"
@@ -74,39 +74,11 @@ def test_login_that_does_not_leave_usable_auth_fails_cleanly():
         setup.initialize(api_url="https://api.example.com", api_key="vmap_secret")
 
 
-def test_supplied_auth_and_service_options_are_forwarded(monkeypatch):
-    def login(**_kwargs):
-        monkeypatch.setenv(config.ENV_API_URL, "https://api.example.com")
-        monkeypatch.setenv(config.ENV_API_KEY, "vmap_secret")
-
-    env_file = Path("runner.env")
-    with (
-        patch("vardrrunner.commands.setup.auth.login_vardrmap", side_effect=login) as login_mock,
-        patch("vardrrunner.commands.setup.service_command.install") as install,
-        patch(
-            "vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor
-        ) as doctor,
-    ):
-        setup.initialize(
-            api_url="https://api.example.com",
-            api_key="vmap_secret",
-            allow_plaintext=True,
-            production=True,
-            install_service=True,
-            start_service=False,
-            env_file=env_file,
-            non_interactive=True,
-        )
-    login_mock.assert_called_once_with(
-        api_url="https://api.example.com",
-        api_key="vmap_secret",
-        allow_plaintext=True,
-    )
-    install.assert_called_once_with(env_file=env_file, start=False, dry_run=False)
-    doctor.assert_called_once_with(as_json=False, production=True)
-
-
-def test_production_interactive_defaults_to_service_install(monkeypatch):
+@pytest.mark.parametrize("production", [False, True])
+@pytest.mark.parametrize("non_interactive", [False, True])
+def test_setup_never_offers_or_installs_startup_service(
+    monkeypatch, capsys, production, non_interactive
+):
     monkeypatch.setenv(config.ENV_API_URL, "https://api.example.com")
     monkeypatch.setenv(config.ENV_API_KEY, "vmap_secret")
     with (
@@ -115,13 +87,32 @@ def test_production_interactive_defaults_to_service_install(monkeypatch):
         ),
         patch("vardrrunner.commands.setup.typer.confirm", return_value=True) as confirm,
         patch("vardrrunner.commands.setup.tools_command.install") as tools_install,
-        patch("vardrrunner.commands.setup.service_command.install") as install,
+        patch("vardrrunner.commands.service.install") as install,
         patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
     ):
-        setup.initialize(production=True)
-    confirm.assert_any_call("Install the native per-user background service?", default=True)
-    install.assert_called_once()
-    tools_install.assert_called_once_with([], all_tools=True, force=False)
+        setup.initialize(production=production, non_interactive=non_interactive)
+    install.assert_not_called()
+    if non_interactive:
+        confirm.assert_not_called()
+        tools_install.assert_not_called()
+    else:
+        # Even accepting every setup prompt must never install a startup task.
+        confirm.assert_called_once_with("Install pinned, verified scan tools now?", default=True)
+        tools_install.assert_called_once_with([], all_tools=True, force=False)
+    assert "No startup service was installed" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("non_interactive", [False, True])
+def test_env_file_cannot_implicitly_install_service(non_interactive, capsys):
+    with (
+        patch.object(setup, "_ensure_auth") as auth,
+        patch("vardrrunner.commands.service.install") as install,
+        pytest.raises(typer.Exit),
+    ):
+        setup.initialize(env_file=Path("runner.env"), non_interactive=non_interactive)
+    auth.assert_not_called()
+    install.assert_not_called()
+    assert "startup services are no longer supported" in capsys.readouterr().out
 
 
 def test_failed_health_check_keeps_setup_incomplete(monkeypatch, capsys):
@@ -208,3 +199,19 @@ def test_failed_tool_install_does_not_abort_setup(monkeypatch, capsys):
         setup.initialize(non_interactive=True, install_tools=True)
     out = capsys.readouterr().out
     assert "could not be installed" in out and "setup complete" in out.lower()
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"install_service": True},
+        {"start_service": True},
+        {"start_service": False},
+        {"install_service": True, "env_file": Path("runner.env")},
+    ],
+)
+def test_legacy_service_options_fail_before_setup(options, capsys):
+    with patch.object(setup, "_ensure_auth") as auth, pytest.raises(typer.Exit):
+        setup.initialize(**options)
+    auth.assert_not_called()
+    assert "startup services are no longer supported" in capsys.readouterr().out

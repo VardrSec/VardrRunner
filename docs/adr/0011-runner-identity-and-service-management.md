@@ -1,6 +1,6 @@
 # ADR 0011: Stable runner identity and native user-service management
 
-- **Status:** Accepted
+- **Status:** Service portions superseded by [ADR 0016](0016-explicit-daemon-execution.md); other decisions accepted
 - **Date:** 2026-08-18
 
 ## Context

@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from vardrrunner import configs
 from vardrrunner.cli import app
+from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import run as run_cmd
 
 runner = CliRunner()
@@ -201,7 +202,13 @@ class TestServiceCommands:
                 "--no-start",
                 "--dry-run",
             )
-        mock.assert_called_once_with(env_file=env_file, start=False, dry_run=True)
+        mock.assert_called_once_with(env_file=env_file, start=False, dry_run=True, run_jobs=False)
+
+    @pytest.mark.parametrize("flags, expected", [([], False), (["--run-jobs"], True)])
+    def test_service_scan_opt_in(self, flags, expected):
+        with patch("vardrrunner.commands.service.install") as mock:
+            invoke("service", "install", *flags)
+        mock.assert_called_once_with(env_file=None, start=True, dry_run=False, run_jobs=expected)
 
     def test_status_and_uninstall(self):
         with patch("vardrrunner.commands.service.show_status") as status:
@@ -305,10 +312,18 @@ class TestImportCommands:
 
 
 class TestDaemonCommands:
-    def test_daemon_start(self):
+    @pytest.mark.parametrize("flags, expected", [([], False), (["--run-jobs"], True)])
+    def test_daemon_start(self, flags, expected):
         with patch("vardrrunner.commands.daemon.start") as mock:
-            invoke("daemon", "start")
-        mock.assert_called_once()
+            invoke("daemon", "start", *flags)
+        mock.assert_called_once_with(
+            detach=False,
+            poll_interval=5,
+            heartbeat_interval=60,
+            log_file=None,
+            log_format=daemon_cmd.LogFormat.TEXT,
+            run_jobs=expected,
+        )
 
     def test_daemon_stop(self):
         with patch("vardrrunner.commands.daemon.stop") as mock:
@@ -827,3 +842,61 @@ class TestTestCasesCommands:
             result = invoke("test-cases", "save", "eng", "--reviewed")
         assert result.exit_code == 2
         mock.assert_not_called()
+
+
+class TestManualInvocationOnly:
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("service", "install"),
+            ("service", "install", "--run-jobs"),
+            ("service", "install", "--dry-run"),
+            ("service", "install", "--no-start", "--env-file", "legacy.env"),
+            ("daemon", "start"),
+            ("daemon", "start", "--detach", "--run-jobs"),
+            ("daemon", "start", "--log-file", "legacy.log", "--log-format", "json"),
+            ("init", "--install-service"),
+            ("init", "--start-service"),
+            ("init", "--no-start-service"),
+            ("init", "--env-file", "legacy.env"),
+            ("init", "--production", "--non-interactive", "--install-service"),
+        ],
+    )
+    def test_legacy_entrypoints_cannot_start_work(self, args):
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            blocked = [
+                stack.enter_context(patch(target))
+                for target in (
+                    "subprocess.Popen",
+                    "subprocess.run",
+                    "vardrrunner.service.build_plan",
+                    "vardrrunner.commands.setup._ensure_auth",
+                    "vardrrunner.commands.setup._ensure_identity",
+                    "vardrrunner.commands.setup._ensure_journal",
+                    "vardrrunner.commands.setup._ensure_tools",
+                    "vardrrunner.commands.jobs.execute_pending_jobs",
+                    "vardrrunner.recovery.reconcile",
+                    "vardrrunner.commands.heartbeat.send_heartbeat",
+                )
+            ]
+            result = invoke(*args)
+        assert result.exit_code == (1 if args[0] == "init" else 2)
+        assert "no longer supported" in result.output
+        for mock in blocked:
+            mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "args, hidden_flags",
+        [
+            (("daemon", "start"), ("--run-jobs", "--detach", "--poll-interval")),
+            (("service", "install"), ("--run-jobs", "--env-file", "--no-start")),
+            (("init",), ("--install-service", "--start-service", "--env-file")),
+        ],
+    )
+    def test_help_does_not_offer_retired_options(self, args, hidden_flags):
+        result = invoke(*args, "--help")
+        assert result.exit_code == 0
+        for flag in hidden_flags:
+            assert flag not in result.output

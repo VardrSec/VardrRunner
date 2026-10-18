@@ -4,9 +4,9 @@
 
 VardrRunner runs your security tooling on *your* machine and syncs the results to a
 VardrSec backend (today: [VardrMap](https://github.com/VardrSec/VardrMap)) over HTTP.
-It is a thin, fast, dependency-light client: it polls the backend for queued scan jobs,
-claims them atomically, executes the tool locally, streams live progress back, uploads
-results, and heartbeats so the backend always knows which machines are online.
+It runs only when you invoke a command: execute a tool or pipeline directly, or use
+`jobs run` to claim queued jobs once, report progress, and upload results. It never
+installs a startup service or starts a background scan worker.
 
 > **Why local?** Recon and scanning tools belong on the operator's box — their bandwidth,
 > their IP, their tool versions. The backend orchestrates and stores; the runner does the
@@ -15,9 +15,8 @@ results, and heartbeats so the backend always knows which machines are online.
 ---
 
 ## Features
-- **Job queue worker** — poll, atomically claim, execute, and report scan jobs
-- **Daemon mode** — `daemon start` runs a continuous background worker (poll every 5 s,
-  heartbeat every 60 s) with detached mode, PID file, and graceful shutdown
+- **Manual queue execution** — `jobs run` claims and executes pending jobs once, then exits
+- **Manual invocation only** — no startup registration, detached daemon, or automatic queue polling
 - **Tool runners** — `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu`, `katana`
   (crawler), `gau` (archived URLs),
   each capturing output into an atomically unique run directory, every run bounded by a
@@ -58,7 +57,7 @@ results, and heartbeats so the backend always knows which machines are online.
   so the backend Terminal shows real-time logs
 - **Preflight (`doctor`)** — one command validates the whole machine (creds, URL, perms,
   auth, daemon, disk, tools, pipelines) and exits non-zero on actionable failures, for
-  scripting unattended/VPS provisioning
+  scripted host preflight
 - **Safe by default** — missing tools fail the job loudly, targets are normalized before
   use, risky target classes can be denied locally, and the API key is stored locally with
   restrictive permissions
@@ -131,13 +130,19 @@ above does. Inside a venv you'll need it activated; `pipx`/`uv` avoid that entir
 
 ## Quick start
 ```bash
-vardrrunner init               # guided auth, runner name, optional service, and health gate
+vardrrunner init               # guided setup for manual use; no background startup
 vardrrunner tools install --all   # pinned, verified tools into ~/.vardrmap/tools
 ```
 
-For an unattended host, use `vardrrunner init --production --install-service`. Existing
-individual `login`, `identity`, `doctor`, and `service` commands remain available when you
-want to control each step separately.
+Installation and normal setup create no startup task, launch no daemon, and do not offer
+background startup in a prompt. VardrRunner runs when you invoke it. Use `vardrrunner jobs run`
+to execute queued jobs manually. If an older setup installed automatic startup, remove it
+with `vardrrunner service uninstall`; upgrading alone does not remove an existing service.
+
+`service install`, `daemon start`, and legacy setup service flags are no longer
+supported, including their former opt-in flags. Install the program with `pipx install
+vardrrunner`; install scan dependencies with `tools install`. See
+[legacy cleanup instructions](docs/cli.md#service--legacy-startup-cleanup).
 
 ### One-shot usage
 ```bash
@@ -185,10 +190,8 @@ file**:
 The runner refuses to send your API key over plain HTTP to a non-local host, so a mistyped
 `http://` URL can't leak your key.
 
-An installed service does not inherit arbitrary variables from the shell that installed
-it. If credentials exist only in environment variables, Linux service setup requires an
-operator-owned `--env-file`; macOS/Windows should use keychain/config credentials or an
-existing supervisor. VardrRunner never creates, reads, or prints the env file's secrets.
+Environment credentials apply to the command you explicitly invoke. Use the OS keychain
+for stored credentials; VardrRunner does not install a service to keep them running.
 
 ## Documentation
 - [docs/architecture.md](docs/architecture.md) — how the runner is structured and how it talks to the backend

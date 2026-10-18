@@ -93,8 +93,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.10"
 ignore_missing_imports = true
-# warn_unused_ignores is intentionally OFF: Windows-only `# type: ignore`s (ctypes.windll,
-# DETACHED_PROCESS) are needed when CI type-checks on Linux but unused on Windows.
+# warn_unused_ignores is intentionally OFF: Windows-only `# type: ignore`s (such as ctypes.windll) are needed when CI type-checks on Linux but unused on Windows.
 # Pragmatic baseline — not strict mode. Tighten incrementally over time.
 
 [tool.pytest.ini_options]

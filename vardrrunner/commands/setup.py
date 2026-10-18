@@ -1,4 +1,4 @@
-"""Guided first-run setup without weakening credential or service safeguards."""
+"""Guided first-run setup for manual invocation."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from rich.console import Console
 from vardrrunner import config, identity, redaction
 from vardrrunner.commands import auth, doctor
 from vardrrunner.commands import identity as identity_command
-from vardrrunner.commands import service as service_command
 from vardrrunner.commands import tools as tools_command
 from vardrrunner.journal import Journal
 
@@ -123,13 +122,19 @@ def initialize(
     name: str | None = None,
     production: bool = False,
     install_service: bool = False,
-    start_service: bool = True,
+    start_service: bool | None = None,
     env_file: Path | None = None,
     allow_plaintext: bool = False,
     non_interactive: bool = False,
     install_tools: bool | None = None,
 ) -> None:
-    """Configure auth, identity, durable state, tools, optional service, and health checks."""
+    """Configure auth, identity, durable state, tools, and health checks."""
+    if install_service or start_service is not None or env_file is not None:
+        _fail(
+            "startup services are no longer supported; run `vardrrunner init` without service "
+            "options, then invoke scans manually. Remove old services with "
+            "`vardrrunner service uninstall`"
+        )
     console.print("\n[bold]VardrRunner guided setup[/bold]")
     _ensure_auth(
         api_url=api_url,
@@ -141,14 +146,6 @@ def initialize(
     _ensure_journal()
     _ensure_tools(install_tools, non_interactive)
 
-    should_install = install_service or env_file is not None
-    if not non_interactive and not should_install:
-        should_install = typer.confirm(
-            "Install the native per-user background service?", default=production
-        )
-    if should_install:
-        service_command.install(env_file=env_file, start=start_service, dry_run=False)
-
     console.print("\n[bold]Final health check[/bold]")
     try:
         doctor.run_doctor(as_json=False, production=production)
@@ -157,5 +154,7 @@ def initialize(
             _fail("health checks did not pass; follow the remediation above", exc)
 
     console.print("\n[bold green]VardrRunner setup complete.[/bold green]")
-    if not should_install:
-        console.print("Start work with `vardrrunner jobs run` or `vardrrunner daemon start`.")
+    console.print(
+        "No startup service was installed. Run `vardrrunner jobs run` when you want to scan. "
+        "If an older setup installed a service, remove it with `vardrrunner service uninstall`."
+    )

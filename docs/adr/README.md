@@ -22,8 +22,9 @@ the way it does.
 | [0008](0008-error-classification-and-policy-handling.md) | Error classification and advisory policy handling | Accepted |
 | [0009](0009-fail-closed-credential-storage.md) | Fail closed on plaintext credential storage | Accepted |
 | [0010](0010-durable-execution-journal.md) | Durable execution journal and conservative reconciliation | Accepted |
-| [0011](0011-runner-identity-and-service-management.md) | Stable runner identity and native user-service management | Accepted |
+| [0011](0011-runner-identity-and-service-management.md) | Stable runner identity and native user-service management | Service portions superseded by 0016 |
 | [0012](0012-compatibility-and-local-safety-controls.md) | Compatibility negotiation and local execution safety controls | Accepted |
-| [0013](0013-guided-setup-and-host-lifecycle.md) | Guided setup and verified host lifecycle | Accepted |
+| [0013](0013-guided-setup-and-host-lifecycle.md) | Guided setup and verified host lifecycle | Service portions superseded by 0016 |
 | [0014](0014-pinned-verified-tool-installs.md) | Pinned, verified tool installs in one managed directory | Accepted |
 | [0015](0015-mcp-server.md) | MCP server for agent-driven engagements | Accepted |
+| [0016](0016-explicit-daemon-execution.md) | Manual invocation and removal of startup workers | Accepted |
