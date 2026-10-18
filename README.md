@@ -132,18 +132,19 @@ above does. Inside a venv you'll need it activated; `pipx`/`uv` avoid that entir
 
 ## Quick start
 ```bash
-vardrrunner init               # guided auth, runner name, optional service, and health gate
+vardrrunner init               # guided setup for manual use; no background startup
 vardrrunner tools install --all   # pinned, verified tools into ~/.vardrmap/tools
 ```
 
-Setup and service installation do not enable automatic scans. `daemon start` and the
-sign-in service send heartbeats only; use `vardrrunner jobs run` to run queued jobs manually.
-For an unattended host, use `vardrrunner init --production --install-service`, then
-explicitly opt in with `vardrrunner service install --run-jobs` after stopping any running
-daemon. This enables queued and scheduled scans whenever the service starts, including
-at sign-in. See the [upgrade instructions](docs/cli.md#service--native-unattended-startup).
-Existing individual `login`, `identity`, `doctor`, and `service` commands remain available when you
-want to control each step separately.
+Installation and normal setup create no startup task, launch no daemon, and do not offer
+background startup in a prompt. VardrRunner runs when you invoke it. Use `vardrrunner jobs run`
+to execute queued jobs manually. If an older setup installed automatic startup, remove it
+with `vardrrunner service uninstall`; upgrading alone does not remove an existing service.
+
+Unattended hosts are an explicit opt-in: `init --install-service` or `service install`
+registers background startup and starts a heartbeat-only service. `service install --run-jobs`
+also enables automatic scans. See [service and upgrade instructions](docs/cli.md#service--native-unattended-startup).
+Individual `login`, `identity`, `doctor`, and `service` commands remain available.
 
 ### One-shot usage
 ```bash

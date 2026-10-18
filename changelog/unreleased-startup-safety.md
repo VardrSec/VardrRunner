@@ -1,4 +1,4 @@
-# Unreleased — explicit automatic scan opt-in
+# Unreleased — manual setup and explicit background execution opt-in
 
 Previously, a service installed at sign-in immediately polled the backend, reconciled
 interrupted work, and executed pending jobs. A backlog could therefore produce unexpected
@@ -9,12 +9,17 @@ queue polling, execution, and recovery for that process. Detached startup preser
 choice. `service install` creates a heartbeat-only service; `service install --run-jobs`
 persists the opt-in in the native service command on Windows, macOS, and Linux.
 
-`init` never opts in to scan execution. Its interactive service prompt defaults to No,
-including under `--production`. Package installation does not register a startup service.
+`init` never offers or installs background startup unless `--install-service` is explicitly
+passed. Accepting every setup prompt or using `--production` cannot install a service.
+`--env-file` now requires `--install-service` and fails before setup changes if omitted.
+Package installation does not register a startup service. Explicit service installation
+prints that it enables background startup and explains how to remove it.
 Explicit manual commands such as `jobs run`, `run`, and `pipeline run` remain unchanged.
 
 ## Upgrade
 
+- For manual-only operation, remove an older startup service with `service uninstall`.
+  Package upgrades and normal setup do not remove existing service registrations.
 - Stop existing daemons before upgrading and restart with the updated executable.
 - Legacy services without `--run-jobs` then send heartbeats only. Already-running old
   processes retain their old behavior until stopped.

@@ -130,6 +130,10 @@ def initialize(
     install_tools: bool | None = None,
 ) -> None:
     """Configure auth, identity, durable state, tools, optional service, and health checks."""
+    if env_file is not None and not install_service:
+        _fail(
+            "--env-file requires --install-service; normal setup does not enable background startup"
+        )
     console.print("\n[bold]VardrRunner guided setup[/bold]")
     _ensure_auth(
         api_url=api_url,
@@ -141,12 +145,7 @@ def initialize(
     _ensure_journal()
     _ensure_tools(install_tools, non_interactive)
 
-    should_install = install_service or env_file is not None
-    if not non_interactive and not should_install:
-        should_install = typer.confirm(
-            "Install a heartbeat-only service at sign-in (no automatic scans)?", default=False
-        )
-    if should_install:
+    if install_service:
         service_command.install(env_file=env_file, start=start_service, dry_run=False)
 
     console.print("\n[bold]Final health check[/bold]")
@@ -157,8 +156,8 @@ def initialize(
             _fail("health checks did not pass; follow the remediation above", exc)
 
     console.print("\n[bold green]VardrRunner setup complete.[/bold green]")
-    if not should_install:
+    if not install_service:
         console.print(
-            "Start work with `vardrrunner jobs run`. For unattended scans, explicitly use "
-            "`vardrrunner daemon start --run-jobs`."
+            "No startup service was installed. Run `vardrrunner jobs run` when you want to scan. "
+            "If an older setup installed a service, remove it with `vardrrunner service uninstall`."
         )

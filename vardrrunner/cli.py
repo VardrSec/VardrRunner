@@ -102,13 +102,13 @@ def initialize(
         False, "--production", help="Require the strict unattended doctor profile"
     ),
     install_service: bool = typer.Option(
-        False, "--install-service", help="Install the native per-user worker service"
+        False, "--install-service", help="Explicitly enable background startup at sign-in"
     ),
     start_service: bool = typer.Option(
         True, "--start-service/--no-start-service", help="Start an installed service now"
     ),
     env_file: Path | None = typer.Option(
-        None, "--env-file", help="Linux systemd credential environment file"
+        None, "--env-file", help="Linux systemd credential file; requires --install-service"
     ),
     allow_plaintext: bool = typer.Option(
         False,
@@ -124,7 +124,7 @@ def initialize(
         help="Install pinned, verified tools (asked interactively; off when unattended)",
     ),
 ):
-    """Guided auth, identity, service, and health setup for a new runner."""
+    """Set up a runner for manual use; background startup requires --install-service."""
     setup_cmd.initialize(
         api_url=api_url,
         api_key=api_key,
@@ -301,7 +301,7 @@ def service_install(
         help="Opt in to automatic scans and job recovery whenever the service starts",
     ),
 ):
-    """Install a systemd user unit, launchd agent, or Windows scheduled task."""
+    """Opt in to background startup using the native service manager."""
     service_cmd.install(env_file=env_file, start=start, dry_run=dry_run, run_jobs=run_jobs)
 
 

@@ -163,7 +163,9 @@ worker receives an isolated API session; the backend's atomic claim remains the 
 across multiple runner processes or hosts. Atomic run-directory allocation prevents
 same-second workers from sharing an output path.
 
-For unattended startup, `service.py` generates a per-user systemd unit (Linux), LaunchAgent
+Normal setup never offers or installs background startup. Only `init --install-service`
+or the separate `service install` command opts in; an environment file alone cannot do so.
+For explicitly requested unattended startup, `service.py` generates a per-user systemd unit (Linux), LaunchAgent
 (macOS), or Scheduled Task (Windows). The generated command is the same foreground daemon,
 so there is one lifecycle implementation. Service files contain executable/log paths only,
 never credentials, and native manager commands are executed as argv lists without a shell.

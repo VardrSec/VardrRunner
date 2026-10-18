@@ -27,19 +27,25 @@ rename keep working.
 
 ```bash
 vardrrunner init
-vardrrunner init --production --install-service
-vardrrunner init --non-interactive --name runner-a --production --install-service
+vardrrunner init --non-interactive --name runner-a
 ```
 
 `init` composes the secure setup steps in their required order: configure or reuse auth,
 create the stable runner identity, initialize the durable journal, offer to install the
-pinned scan tools, optionally install the native per-user service, then run `doctor`. Setup succeeds only when the final doctor
+pinned scan tools, then run `doctor`. Setup succeeds only when the final doctor
 profile succeeds. It is safe to rerun; completed local state is reused.
 
-The service prompt defaults to **No**, including with `--production`. If installed,
-the service sends heartbeats only: setup never opts in to automatic scans or job recovery.
-Use `jobs run` manually, or explicitly configure `service install --run-jobs` for unattended
-execution. The strict production health check still requires an installed service.
+Normal setup neither installs nor offers a startup service. Accepting every interactive
+prompt cannot enable background startup. Only an explicit `--install-service` installs
+one; `--production` alone never does. `--env-file` requires `--install-service` and fails
+before any setup changes if it is omitted. An explicitly installed service sends heartbeats
+only; setup never opts in to automatic scans or recovery. Use `jobs run` manually.
+
+For deliberate unattended deployment, use `init --production --install-service` or the
+separate `service install` command. `service install --run-jobs` also enables automatic
+execution. The strict production health check still requires an installed service or
+live daemon. Existing services are left unchanged by normal setup; use `service uninstall`
+to remove automatic startup from an older setup.
 
 | Option | Purpose |
 |--------|---------|
@@ -47,9 +53,9 @@ execution. The strict production health check still requires an installed servic
 | `--name` | Set the durable human runner label |
 | `--production` | Require the strict unattended doctor profile |
 | `--install-tools` / `--no-install-tools` | Install pinned, verified scan tools. Asked interactively (default yes); off under `--non-interactive` unless `--install-tools` is passed |
-| `--install-service` | Install the native per-user heartbeat-only service (no automatic scans) |
+| `--install-service` | Explicitly register background startup at sign-in (heartbeat-only) |
 | `--start-service` / `--no-start-service` | Start after installation (default: start) |
-| `--env-file <path>` | Attach an existing Linux systemd credential environment file; also enables service installation |
+| `--env-file <path>` | Attach an existing Linux systemd credential file; requires `--install-service` |
 | `--allow-plaintext-credentials` | Explicitly accept config-file key storage if no keychain exists |
 | `--non-interactive` | Never prompt; fail if auth input is missing |
 
@@ -885,6 +891,8 @@ skips the immediate start; it is not a cross-platform guarantee against future s
 **Upgrading existing installations:** stop the old daemon before upgrading, then restart
 using the updated executable. Existing service commands without `--run-jobs` become
 heartbeat-only on their next launch; upgrading does not change an already-running process.
+For manual-only use, run `service uninstall` to remove existing automatic startup entirely;
+upgrading does not remove an existing service registration.
 To retain intentional unattended scanning, stop the daemon and reinstall the service with
 `--run-jobs` (and the existing `--env-file` on Linux, if used). To remove a prior execution
 opt-in, stop the daemon and reinstall without that flag. `service uninstall` removes

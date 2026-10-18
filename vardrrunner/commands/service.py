@@ -48,6 +48,10 @@ def install(
 ) -> None:
     plan = _plan(env_file, run_jobs=run_jobs)
     console.print(
+        "Startup service requested: VardrRunner will run in the background at sign-in "
+        "or service startup. Remove it with `vardrrunner service uninstall`."
+    )
+    console.print(
         "[yellow]Automatic scans enabled: queued and scheduled jobs will run at sign-in "
         "or service startup; interrupted work will be reconciled.[/yellow]"
         if run_jobs

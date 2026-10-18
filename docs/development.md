@@ -212,8 +212,11 @@ Env values take precedence over the config file.
 
 For a systemd service using environment-only auth, create and permission your own env file,
 run `chmod 600 /path/to/runner.env`, then run
-`vardrrunner init --production --env-file /path/to/runner.env`. Do not commit that file.
-Setup installs a heartbeat-only service. Automatic scans require a separate explicit
+`vardrrunner init --production --install-service --env-file /path/to/runner.env`.
+Do not commit that file. Normal `init` is for manual use: it never offers or installs a
+startup service. `--env-file` requires explicit `--install-service`; `--production` alone
+does not install anything. Explicit service setup installs a heartbeat-only service.
+Automatic scans require a separate explicit
 `vardrrunner service install --run-jobs --env-file /path/to/runner.env` after stopping
 any running daemon. On all platforms, `daemon start` alone never polls or recovers jobs;
 use `jobs run` manually or `daemon start --run-jobs` for intentional unattended execution.
