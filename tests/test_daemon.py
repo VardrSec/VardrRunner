@@ -232,258 +232,6 @@ class TestStatus:
 # ---------------------------------------------------------------------------
 
 
-class TestDetach:
-    @pytest.mark.parametrize("run_jobs", [False, True])
-    def test_spawns_daemon_process(self, tmp_path, run_jobs):
-        log = tmp_path / "daemon.log"
-        with (
-            patch("vardrrunner.commands.daemon.shutil.which", return_value="vardrrunner"),
-            patch("vardrrunner.commands.daemon.subprocess.Popen") as MockPopen,
-        ):
-            MockPopen.return_value = MagicMock(pid=9999)
-            daemon_mod._detach(
-                poll_interval=5, heartbeat_interval=60, log_file=log, run_jobs=run_jobs
-            )
-
-        args, _ = MockPopen.call_args
-        cmd = args[0]
-        assert cmd[0] == "vardrrunner"
-        assert "daemon" in cmd
-        assert "start" in cmd
-        assert "--poll-interval" in cmd
-        assert "--log-file" in cmd
-        assert ("--run-jobs" in cmd) is run_jobs
-
-    def test_defaults_log_to_home(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(daemon_mod, "DEFAULT_LOG", tmp_path / "daemon.log")
-        with (
-            patch("vardrrunner.commands.daemon.shutil.which", return_value="vardrrunner"),
-            patch("vardrrunner.commands.daemon.subprocess.Popen") as MockPopen,
-        ):
-            MockPopen.return_value = MagicMock(pid=1)
-            daemon_mod._detach(poll_interval=5, heartbeat_interval=60, log_file=None)
-
-        args, _ = MockPopen.call_args
-        assert str(tmp_path / "daemon.log") in args[0]
-
-    def test_posix_uses_start_new_session(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(daemon_mod, "_IS_WINDOWS", False)
-        with (
-            patch("vardrrunner.commands.daemon.shutil.which", return_value="vardrrunner"),
-            patch("vardrrunner.commands.daemon.subprocess.Popen") as MockPopen,
-        ):
-            MockPopen.return_value = MagicMock(pid=1)
-            daemon_mod._detach(poll_interval=5, heartbeat_interval=60, log_file=tmp_path / "d.log")
-
-        _, kwargs = MockPopen.call_args
-        assert kwargs.get("start_new_session") is True
-        assert "creationflags" not in kwargs
-
-    def test_windows_uses_detached_process_flags(self, tmp_path, monkeypatch):
-        """Windows needs DETACHED_PROCESS so the daemon survives terminal close."""
-        monkeypatch.setattr(daemon_mod, "_IS_WINDOWS", True)
-        # These constants only exist in subprocess on Windows builds
-        monkeypatch.setattr(daemon_mod.subprocess, "DETACHED_PROCESS", 0x8, raising=False)
-        monkeypatch.setattr(daemon_mod.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
-        with (
-            patch("vardrrunner.commands.daemon.shutil.which", return_value="vardrrunner"),
-            patch("vardrrunner.commands.daemon.subprocess.Popen") as MockPopen,
-        ):
-            MockPopen.return_value = MagicMock(pid=1)
-            daemon_mod._detach(poll_interval=5, heartbeat_interval=60, log_file=tmp_path / "d.log")
-
-        _, kwargs = MockPopen.call_args
-        assert kwargs.get("creationflags") == (0x8 | 0x200)
-        assert "start_new_session" not in kwargs
-
-
-# ---------------------------------------------------------------------------
-# start (foreground loop)
-# ---------------------------------------------------------------------------
-
-
-def _run_start(
-    pid_file, stop_after: int, execute=None, heartbeat_report=None, run_jobs=True, client=None
-):
-    """Run daemon_mod.start with all externals mocked; loop exits after N cycles."""
-    execute = execute if execute is not None else MagicMock(return_value=0)
-    client = client if client is not None else MagicMock()
-    with (
-        patch("vardrrunner.commands.daemon.threading.Event", _fake_event_factory(stop_after)),
-        patch("vardrrunner.commands.daemon.threading.Thread") as MockThread,
-        patch("vardrrunner.commands.daemon.signal.signal"),
-        patch(
-            "vardrrunner.commands.daemon.config.require_auth", return_value=("http://api", "key")
-        ),
-        patch("vardrrunner.commands.daemon.api.VardrMapClient", client),
-        patch("vardrrunner.commands.daemon.execute_pending_jobs", execute),
-        patch("vardrrunner.commands.daemon.send_heartbeat", return_value=heartbeat_report),
-    ):
-        kwargs = {} if run_jobs is None else {"run_jobs": run_jobs}
-        daemon_mod.start(
-            detach=False, poll_interval=1, heartbeat_interval=60, log_file=None, **kwargs
-        )
-    return execute, MockThread
-
-
-class TestStart:
-    def test_default_never_reads_queue_or_recovers_interrupted_jobs(self, pid_file, capsys):
-        # Model a leftover claimed run and a queued scan. Neither may be touched
-        # by the legacy `daemon start` command used by existing login services.
-        journal = MagicMock()
-        journal.unfinished.return_value = [MagicMock(phase="uploading")]
-        client = MagicMock()
-        client.return_value.pending_jobs.return_value = [{"id": "queued-scan"}]
-        with (
-            patch.object(daemon_mod, "Journal", return_value=journal),
-            patch.object(daemon_mod, "reconcile") as recover,
-        ):
-            execute, thread = _run_start(pid_file, stop_after=3, run_jobs=None, client=client)
-        recover.assert_not_called()
-        journal.unfinished.assert_not_called()
-        client.assert_not_called()
-        execute.assert_not_called()
-        thread.return_value.start.assert_called_once()
-        assert "Heartbeat only" in capsys.readouterr().out
-
-    def test_writes_and_removes_pid_file(self, pid_file):
-        """Daemon writes PID on entry and removes it in the finally block."""
-        _run_start(pid_file, stop_after=1)
-        assert not pid_file.exists()
-
-    @pytest.mark.parametrize(("poll", "heartbeat"), [(0, 60), (5, 0)])
-    def test_rejects_invalid_intervals(self, pid_file, poll, heartbeat):
-        with pytest.raises(typer.Exit):
-            daemon_mod.start(
-                detach=False,
-                poll_interval=poll,
-                heartbeat_interval=heartbeat,
-                log_file=None,
-            )
-        assert not pid_file.exists()
-
-    def test_calls_execute_pending_jobs(self, pid_file):
-        with patch.object(daemon_mod, "reconcile") as recover:
-            execute, _ = _run_start(pid_file, stop_after=1)
-        recover.assert_called_once()
-        execute.assert_called_once()
-        assert callable(execute.call_args.kwargs["should_stop"])
-
-    def test_compatibility_block_pauses_claims(self, pid_file, capsys):
-        from vardrrunner import compatibility
-
-        report = compatibility.CompatibilityReport(
-            compatibility.CompatibilityLevel.BLOCK, ("upgrade required",)
-        )
-        execute, _ = _run_start(pid_file, stop_after=1, heartbeat_report=report)
-        execute.assert_not_called()
-        assert "claims paused" in capsys.readouterr().out
-
-    def test_invalid_resource_policy_fails_before_pid(self, pid_file):
-        from vardrrunner import resources
-
-        with (
-            patch(
-                "vardrrunner.commands.daemon.config.require_auth",
-                return_value=("http://api", "key"),
-            ),
-            patch(
-                "vardrrunner.commands.daemon.resources.load_limits",
-                side_effect=resources.ResourceLimitError("bad limit"),
-            ),
-            pytest.raises(typer.Exit),
-        ):
-            daemon_mod.start(detach=False, poll_interval=5, heartbeat_interval=60, log_file=None)
-        assert not pid_file.exists()
-
-    def test_starts_heartbeat_thread(self, pid_file):
-        _, MockThread = _run_start(pid_file, stop_after=1)
-        MockThread.assert_called_once()
-        MockThread.return_value.start.assert_called_once()
-
-    def test_exits_when_not_authenticated(self, pid_file):
-        with patch(
-            "vardrrunner.commands.daemon.config.require_auth", side_effect=RuntimeError("no creds")
-        ):
-            with pytest.raises(typer.Exit):
-                daemon_mod.start(
-                    detach=False, poll_interval=5, heartbeat_interval=60, log_file=None
-                )
-
-    def test_refuses_to_start_when_already_running(self, pid_file):
-        """A second daemon must not silently overwrite a live daemon's PID file."""
-        pid_file.write_text("1234")
-        with patch.object(daemon_mod, "_process_alive", return_value=True):
-            with pytest.raises(typer.Exit):
-                daemon_mod.start(
-                    detach=False, poll_interval=5, heartbeat_interval=60, log_file=None
-                )
-        assert pid_file.read_text() == "1234"  # untouched
-
-    def test_starts_over_stale_pid_file(self, pid_file):
-        """A dead process's leftover PID file must not block startup."""
-        pid_file.write_text("2000000000")
-        _run_start(pid_file, stop_after=1)
-        assert not pid_file.exists()  # ran and cleaned up
-
-    @pytest.mark.parametrize("run_jobs", [False, True])
-    def test_detach_delegates_to_detach(self, pid_file, tmp_path, run_jobs):
-        log = tmp_path / "daemon.log"
-        with patch("vardrrunner.commands.daemon._detach") as mock_detach:
-            daemon_mod.start(
-                detach=True, poll_interval=5, heartbeat_interval=60, log_file=log, run_jobs=run_jobs
-            )
-        mock_detach.assert_called_once_with(
-            poll_interval=5,
-            heartbeat_interval=60,
-            log_file=log,
-            log_format=daemon_mod.LogFormat.TEXT,
-            run_jobs=run_jobs,
-        )
-
-    def test_poll_error_does_not_crash_daemon(self, pid_file):
-        """A transient API error is caught and the loop continues."""
-        call_count = {"n": 0}
-
-        def flaky_execute(*args, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                raise RuntimeError("temporary network error")
-            return 0
-
-        _run_start(pid_file, stop_after=2, execute=MagicMock(side_effect=flaky_execute))
-        assert call_count["n"] == 2  # tried twice despite first failure
-
-    def test_poll_backoff_message_mentions_retry(self, pid_file, capsys):
-        """The backoff message should tell operators when the next retry will happen."""
-
-        def always_fail(*args, **kwargs):
-            raise RuntimeError("backend down")
-
-        _run_start(pid_file, stop_after=1, execute=MagicMock(side_effect=always_fail))
-        out = capsys.readouterr().out
-        assert "retry in" in out
-
-    def test_pid_file_removal_stops_loop(self, pid_file):
-        """Deleting the PID file (what `stop` does) ends the loop gracefully."""
-
-        def remove_pid_file(*args, **kwargs):
-            pid_file.unlink(missing_ok=True)
-            return 0
-
-        # Event never fires — only the PID-file check can end the loop
-        execute, _ = _run_start(
-            pid_file, stop_after=99, execute=MagicMock(side_effect=remove_pid_file)
-        )
-        execute.assert_called_once()
-        assert not pid_file.exists()
-
-
-# ---------------------------------------------------------------------------
-# _RotatingLogFile
-# ---------------------------------------------------------------------------
-
-
 class TestRotatingLogFile:
     def test_writes_timestamped_lines(self, tmp_path):
         log = tmp_path / "daemon.log"
@@ -538,48 +286,6 @@ class TestRotatingLogFile:
         f.close()
         assert log.exists()
 
-    def test_start_writes_to_log_file(self, pid_file, tmp_path):
-        log = tmp_path / "daemon.log"
-
-        with (
-            patch("vardrrunner.commands.daemon.threading.Event", _fake_event_factory(1)),
-            patch("vardrrunner.commands.daemon.threading.Thread"),
-            patch("vardrrunner.commands.daemon.signal.signal"),
-            patch(
-                "vardrrunner.commands.daemon.config.require_auth",
-                return_value=("http://api", "key"),
-            ),
-            patch("vardrrunner.commands.daemon.api.VardrMapClient"),
-            patch("vardrrunner.commands.daemon.execute_pending_jobs", return_value=0),
-            patch("vardrrunner.commands.daemon.send_heartbeat"),
-        ):
-            daemon_mod.start(detach=False, poll_interval=1, heartbeat_interval=60, log_file=log)
-
-        content = log.read_text(encoding="utf-8")
-        assert "Daemon started" in content
-
-    def test_log_file_contains_no_markup_brackets(self, pid_file, tmp_path):
-        """Rich markup tags must not appear literally in the log file."""
-        log = tmp_path / "daemon.log"
-
-        with (
-            patch("vardrrunner.commands.daemon.threading.Event", _fake_event_factory(1)),
-            patch("vardrrunner.commands.daemon.threading.Thread"),
-            patch("vardrrunner.commands.daemon.signal.signal"),
-            patch(
-                "vardrrunner.commands.daemon.config.require_auth",
-                return_value=("http://api", "key"),
-            ),
-            patch("vardrrunner.commands.daemon.api.VardrMapClient"),
-            patch("vardrrunner.commands.daemon.execute_pending_jobs", return_value=0),
-            patch("vardrrunner.commands.daemon.send_heartbeat"),
-        ):
-            daemon_mod.start(detach=False, poll_interval=1, heartbeat_interval=60, log_file=log)
-
-        content = log.read_text(encoding="utf-8")
-        assert "[green]" not in content
-        assert "[dim]" not in content
-
     def test_rotating_log_file_isatty_returns_false(self, tmp_path):
         log = tmp_path / "daemon.log"
         f = daemon_mod._RotatingLogFile(log)
@@ -626,3 +332,27 @@ class TestExecutePendingJobs:
         assert result == 1
         client.claim_job.assert_called_once_with("job-d01")
         client.complete_job.assert_called_once_with("job-d01", "done")
+
+
+@pytest.mark.parametrize(
+    "options", [{}, {"detach": True}, {"run_jobs": True}, {"detach": True, "run_jobs": True}]
+)
+def test_legacy_start_never_executes_work(pid_file, tmp_path, options):
+    log = tmp_path / "daemon.jsonl"
+    with (
+        patch("subprocess.Popen") as spawn,
+        patch("vardrrunner.api.VardrMapClient") as client,
+        patch("vardrrunner.recovery.reconcile") as recover,
+        patch("vardrrunner.commands.jobs.execute_pending_jobs") as execute,
+        patch("vardrrunner.commands.heartbeat.send_heartbeat") as heartbeat,
+        pytest.raises(typer.Exit) as exc,
+    ):
+        daemon_mod.start(log_file=log, **options)
+    assert exc.value.exit_code == 2
+    spawn.assert_not_called()
+    client.assert_not_called()
+    recover.assert_not_called()
+    execute.assert_not_called()
+    heartbeat.assert_not_called()
+    assert not pid_file.exists()
+    assert not log.exists()

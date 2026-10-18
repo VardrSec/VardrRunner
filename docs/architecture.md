@@ -62,10 +62,10 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/credentials.py` | Describes credential posture — source, encryption at rest, keychain availability, cleartext state, file permissions — without ever returning the key. Shared by `doctor` and `credentials` so they cannot disagree about the same machine (ADR 0009). |
 | `vardrrunner/redaction.py` | The single sanitization layer. Everything the runner emits — job events, failure reasons, log lines, errors — passes through here first. Masks by key name and by value pattern; deterministic, idempotent, depth-bounded, and never raises. |
 | `vardrrunner/journal.py` | Transactional SQLite execution journal and explicit run state machine. WAL mode supports concurrent audit readers; a partial unique index permits only one unfinished attempt per backend job. |
-| `vardrrunner/recovery.py` | Startup reconciliation for interrupted jobs. Resumes known-safe artifact uploads, retries finalization, and refuses automatic replay when an upload outcome is ambiguous. |
+| `vardrrunner/recovery.py` | Reconciliation of interrupted jobs during explicit queue execution. Resumes known-safe artifact uploads, retries finalization, and refuses automatic replay when an upload outcome is ambiguous. |
 | `vardrrunner/manifests.py` | Streaming SHA-256 artifact hashes and atomic, permission-restricted JSON manifests/exports. |
 | `vardrrunner/identity.py` | Stable per-installation UUID + human label. Uses exclusive first creation, fails closed on corruption, and supports a `VARDRRUNNER_NAME` deployment override. |
-| `vardrrunner/service.py` | Pure service-plan generation plus argv-only native manager execution for systemd, launchd, and Windows Scheduled Tasks. Definitions never contain credentials. |
+| `vardrrunner/service.py` | Legacy status/removal plans and argv-only native manager execution for systemd, launchd, and Windows Scheduled Tasks. No registration generation or installation. |
 | `vardrrunner/compatibility.py` | Version/capability advertisement and total evaluation of optional backend constraints. Legacy responses remain compatible; definite mismatches block queue claims. |
 | `vardrrunner/resources.py` | Bounded environment-driven target, artifact, concurrency, and free-disk policy shared by direct, pipeline, and queue execution. |
 | `vardrrunner/updates.py` | Explicit release-check orchestration and 24-hour atomic cache. Network access remains isolated in `api.py`. |
@@ -84,11 +84,11 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
-| `vardrrunner/commands/service.py` | `service install|status|uninstall` — preview and manage native per-user supervision. |
+| `vardrrunner/commands/service.py` | `service status|uninstall` — inspect and remove legacy startup. `install` rejects requests. |
 | `vardrrunner/commands/updates.py` | `update check` — inspect public release metadata; never installs automatically. |
-| `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, optional service installation, and doctor into one idempotent guided/provisioning workflow. |
+| `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, tool installation, and doctor into one idempotent guided/provisioning workflow. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
-| `vardrrunner/commands/daemon.py` | `daemon start|stop|status` — heartbeats by default; `--run-jobs` enables polling and recovery, with PID file and graceful shutdown. |
+| `vardrrunner/commands/daemon.py` | `daemon stop|status` — inspect and stop legacy processes. `start` rejects requests. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
 | `vardrrunner/commands/status.py` | `status` — local config, version, and each tool's source (managed / PATH / missing) (quick glance). |
 | `vardrrunner/commands/test_cases.py` | `test-cases draft|save` - draft VardrGate cases from observed operations or OpenAPI into a never-overwritten review file, refuse literal credentials, and save only with `--reviewed`. |
@@ -123,39 +123,25 @@ requires VardrMap ≥ v0.22.0.
 Events are posted via `POST /jobs/{id}/events` so the backend Terminal can render live logs.
 
 ## Heartbeat
-On daemon start and every 60 s thereafter, the runner sends `POST /runner/heartbeat` with
+Explicit `heartbeat` and `jobs run` commands send `POST /runner/heartbeat` with
 stable runner UUID/name, hostname, runner version, OS, and per-tool availability + versions.
 Identity fields are additive; older backends may ignore them and retain hostname identity.
 The payload also advertises supported job schemas and named capabilities. An optional
 compatibility response can require runner versions/capabilities/schemas; definite mismatches
-pause claims while heartbeats continue, and absent metadata means legacy-compatible.
+prevent claims, and absent metadata means legacy-compatible.
 The backend marks a
 runner **online** if `last_seen` is within 5 minutes. Heartbeats are upserted per
 `(owner, hostname)`, so multiple machines show up independently in the backend's Bridge.
 
-## Daemon model
-`daemon start` sends heartbeats (60 s) on a dedicated thread. The main loop only polls
-jobs (5 s) and reconciles interrupted runs when `--run-jobs` is explicitly passed.
-Without it, no queue client is constructed and `/jobs/pending` is never called: that
-endpoint can materialize due schedules, so even polling is an execution-side effect.
-Service plans omit the flag by default on all platforms; existing service commands
-therefore become heartbeat-only after upgrading and restarting. No backend change is
-required. `--detach` preserves the opt-in, spawns a detached process, and writes a PID file; `stop`
-removes the PID file as a cooperative shutdown signal and the daemon exits gracefully.
-Windows liveness is checked via a ctypes probe (plain `os.kill` on Windows is
-`TerminateProcess` and would kill the daemon it was meant to check).
+## Manual execution and legacy cleanup
+`run`, `pipeline run`, and `jobs run` execute in the foreground only when invoked.
+No command registers startup, creates a detached worker, or polls continuously.
+`daemon start` and `service install` reject every invocation, including legacy flags.
+`init` rejects legacy service options before changing auth or local state.
 
-Shutdown does not interrupt an active tool. Once that job finishes, workers check the
-shutdown signal before every subsequent job and claim no more work from an already-fetched
-group.
-
-PID ownership is claimed with exclusive file creation and a durable write. Concurrent
-starts cannot both pass; malformed/non-positive/dead state is replaced once as stale.
-Poll and heartbeat ranges are checked in both CLI parsing and the daemon command boundary.
-
-Daemon logs rotate at 5 MiB with three backups. Text remains the interactive default;
-`--log-format json` emits one redacted JSON object per line with schema version, UTC
-timestamp, level, event, runner ID, process ID, and message.
+`daemon stop|status` and `service uninstall|status` remain for older installations.
+Service plans contain only removal and status commands. Windows process liveness uses
+a ctypes probe because `os.kill(pid, 0)` would terminate a Windows process.
 
 Queue concurrency defaults to one and may be raised to eight. Pending work is grouped by
 engagement: groups may run in parallel, but jobs inside one group are sequential. Each
@@ -163,17 +149,7 @@ worker receives an isolated API session; the backend's atomic claim remains the 
 across multiple runner processes or hosts. Atomic run-directory allocation prevents
 same-second workers from sharing an output path.
 
-Normal setup never offers or installs background startup. Only `init --install-service`
-or the separate `service install` command opts in; an environment file alone cannot do so.
-For explicitly requested unattended startup, `service.py` generates a per-user systemd unit (Linux), LaunchAgent
-(macOS), or Scheduled Task (Windows). The generated command is the same foreground daemon,
-so there is one lifecycle implementation. Service files contain executable/log paths only,
-never credentials, and native manager commands are executed as argv lists without a shell.
-Installation preflight also verifies credentials survive a fresh process. Shell-only auth
-requires an explicitly referenced Linux systemd env file; the runner never copies or reads
-that file's contents.
-
-Before each poll, reconciliation inspects unfinished records for the configured backend:
+During an explicit `jobs run` invocation, reconciliation inspects unfinished records for the configured backend:
 
 - work interrupted before claim is closed locally;
 - a dead claimed/executing job with no complete artifact is failed on the backend;
@@ -190,7 +166,7 @@ Local state lives under `~/.vardrmap/`:
 - `runs/` — atomically unique timestamp-prefixed tool output directories, pruned after 7 days
 - `runner-journal.sqlite3` — sanitized execution state and recovery metadata (SQLite/WAL)
 - `runner-identity.json` — stable installation UUID, name, and original hostname
-- `daemon.jsonl` — default structured service log (rotated; service installs only)
+- `daemon.jsonl` — legacy service log, potentially retained from older installations
 - `update-check.json` — public release metadata cache (24-hour TTL; no credentials)
 
 Completed job run directories also contain `manifest.json` with provenance, lifecycle
@@ -198,7 +174,7 @@ timestamps, artifact SHA-256/size, warnings, and failure category. Manifests and
 exports pass through the same redaction layer as terminal and backend output. Raw targets,
 API keys, identity credentials, request bodies, and headers are never journaled.
 
-The one exception is the daemon PID file, `~/.vardrrunner.pid`, which is deliberately
+A legacy daemon may also leave a PID file, `~/.vardrrunner.pid`, which is deliberately
 outside `~/.vardrmap/` — it belongs to the runner process, not to a backend's config.
 
 `login` **fails closed**: with no OS keychain it refuses to write a cleartext key unless
@@ -229,9 +205,8 @@ impossible to miss, not to enforce them.
 **Stop-work is the one exception.** It arrives as HTTP `403` and halts
 execution. It is the operator's own emergency brake, not the platform
 second-guessing them, and it is never presented as a generic claim failure. The
-daemon remembers which engagements refused and stops re-claiming their jobs every
-cycle. It rechecks after 60 seconds, so lifting stop-work restores availability without a
-daemon restart or special command.
+queue executor remembers refused engagements during the current invocation and suppresses
+further claims during the cooldown. It does not start a background retry loop.
 
 `403` carries this single meaning because VardrMap answers cross-account access
 with `404` rather than `403`, so object existence is never disclosed. That
@@ -242,7 +217,7 @@ backend contract changed.
 
 Every value leaving the process is sanitized by `redaction.py` first: job events
 (written to the backend and rendered in its Terminal), failure reasons (printed
-*and* stored as `error_message`), log lines, and daemon poll errors. It defends
+*and* stored as `error_message`), log lines, and queue errors. It defends
 on two axes — by key name (`api_key`, `authorization`, `cookie`, `value_env`, …,
 normalised so `X-API-KEY` matches) and by value pattern (`vmap_` keys, `Bearer`
 headers, secret query parameters, `key=value` in free text) — because either
@@ -261,7 +236,7 @@ in depth—in a successful response's warning array.
 - **All HTTP goes through `api.py`.** No ad-hoc requests elsewhere.
 - **All backend data is untrusted.** Validate and normalize before it reaches a subprocess.
 - **Every tool run is time-bounded.** A hung tool's complete process tree is killed and the
-  job marked failed — the daemon never blocks forever or leaves scanner children running.
+  job marked failed — the runner never blocks forever or leaves scanner children running.
 - **Failures are loud, and classified.** A missing/failed tool fails the job; it is never
   skipped silently. Every reported failure carries a `FailureCategory`.
 - **A managed tool runs only if it still matches its receipt.** A binary in
@@ -281,10 +256,8 @@ in depth—in a successful response's warning array.
   one runner process never executes two jobs from the same engagement simultaneously.
 - **Run outputs are isolated.** Directory allocation is atomic, so concurrent starts cannot
   collide even when their wall-clock timestamp is identical.
-- **Installed means restartable.** Native service preflight rejects authentication that
-  exists only in the launching shell unless a Linux environment file is attached.
-- **One local daemon owns the PID.** Exclusive creation closes the concurrent-start race;
-  the backend claim remains the cross-host ownership authority.
+- **Manual invocation only.** Installation and setup cannot register startup or launch a
+  background worker. Only explicit execution commands claim, run, or recover queued jobs.
 - **No backend coupling.** The runner must build, test, and run without the backend present
   (tests mock every HTTP and subprocess call).
 

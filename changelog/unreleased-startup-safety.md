@@ -1,34 +1,31 @@
-# Unreleased — manual setup and explicit background execution opt-in
+# Manual invocation only
 
-Previously, a service installed at sign-in immediately polled the backend, reconciled
-interrupted work, and executed pending jobs. A backlog could therefore produce unexpected
-scans each time the operator signed in.
+Older versions could register a native service at sign-in. Its daemon polled pending
+jobs, reconciled interrupted execution, and ran scans without a new manual invocation.
 
-`daemon start` now sends heartbeats only. `daemon start --run-jobs` explicitly enables
-queue polling, execution, and recovery for that process. Detached startup preserves the
-choice. `service install` creates a heartbeat-only service; `service install --run-jobs`
-persists the opt-in in the native service command on Windows, macOS, and Linux.
+Startup registration and background workers have been removed. `service install` and
+`daemon start` return errors without creating files, processes, or network requests,
+including when their former `--run-jobs`, `--detach`, or installation flags are supplied.
+`init` never offers startup and rejects legacy service options before changing state.
+`doctor --production` checks credentials, disk, identity, and journal without requiring
+background execution.
 
-`init` never offers or installs background startup unless `--install-service` is explicitly
-passed. Accepting every setup prompt or using `--production` cannot install a service.
-`--env-file` now requires `--install-service` and fails before setup changes if omitted.
-Package installation does not register a startup service. Explicit service installation
-prints that it enables background startup and explains how to remove it.
-Explicit manual commands such as `jobs run`, `run`, and `pipeline run` remain unchanged.
+Install the program with `pipx install vardrrunner` and its supported scan dependencies
+with `vardrrunner tools install --all`. Invoke `run`, `pipeline run`, or `jobs run` when
+ready to execute. `jobs run` retains its one-shot queue and recovery behavior; it does
+not leave a worker running. The backend can still hold queued or scheduled work, but
+VardrRunner no longer checks for or executes it in the background.
 
-## Upgrade
+## Existing installations
 
-- For manual-only operation, remove an older startup service with `service uninstall`.
-  Package upgrades and normal setup do not remove existing service registrations.
-- Stop existing daemons before upgrading and restart with the updated executable.
-- Legacy services without `--run-jobs` then send heartbeats only. Already-running old
-  processes retain their old behavior until stopped.
-- For intentional unattended scanning, stop the daemon and reinstall the service with
-  `--run-jobs`; retain the Linux `--env-file` argument if one was configured.
-- To revoke a previously configured opt-in, stop the daemon and reinstall without the
-  flag. To remove sign-in startup entirely, use `service uninstall`.
-- Queued jobs, interrupted journal entries, and scan artifacts are preserved.
+Run `vardrrunner daemon stop` and `vardrrunner service uninstall` to stop legacy workers
+and remove their startup registration. An active old scan may finish before cooperative
+shutdown. Verify with `daemon status` and `service status`.
 
-No backend endpoint, request, or response contract changes. Heartbeat-only mode avoids
-`/jobs/pending` entirely because that endpoint can materialize due schedules. Existing
-manual queue commands retain their behavior.
+Upgrading alone does not remove OS registrations or stop a running old executable.
+A remaining registration that calls the updated `daemon start` exits with an error;
+remove the registration to prevent the invocation itself on sign-in.
+
+Regression tests cover all native cleanup plans, rejected legacy flags, setup accepting
+all normal prompts without startup, production preflight without a service, and manual
+queue execution. No real target scans are required to validate these changes.

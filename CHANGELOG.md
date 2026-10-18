@@ -22,16 +22,14 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ### Changed
 
-- **Normal setup is manual-only.** `init` no longer prompts to install a startup service,
-  including in production mode. Background startup requires an explicit `--install-service`
-  or `service install`; `--env-file` alone is rejected before setup changes. Existing
-  startup services can be removed with `service uninstall`.
-- **Automatic scans are now opt-in.** `daemon start` and newly installed services send
-  heartbeats only. Pass `--run-jobs` to `daemon start` or `service install` to enable queue
-  polling, scan execution, and interrupted-job recovery. Existing sign-in services without
-  the flag become heartbeat-only after an upgrade and restart; already-running processes
-  must be stopped. Normal setup creates no background service.
-  Manual `jobs run` is unchanged. See [migration notes](changelog/unreleased-startup-safety.md).
+- **VardrRunner runs only when invoked.** Startup service installation and background
+  workers have been removed. `service install` and `daemon start` reject all invocations,
+  including legacy opt-in flags. `init` rejects service options before changing state;
+  production health checks no longer require a daemon or service. Manual `run`,
+  `pipeline run`, and one-shot `jobs run` remain available. Legacy `daemon stop|status`
+  and `service uninstall|status` remain for cleanup. Upgrading alone does not remove
+  existing OS registrations or stop old running processes.
+  See [migration notes](changelog/unreleased-startup-safety.md).
 - `tools install` reports what each tool needed: already up to date (no download),
   installed, updated from an older pinned version, repaired (missing or changed binary,
   or one without a receipt), or reinstalled with `--force`, followed by a summary line.

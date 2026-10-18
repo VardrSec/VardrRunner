@@ -1,7 +1,7 @@
 """
-vardrrunner daemon — long-running background worker.
+vardrrunner daemon — legacy worker cleanup.
 
-start  : send heartbeats; opt in to job polling and recovery with --run-jobs
+start  : rejected; scans require an explicit manual command
 stop   : request a graceful shutdown of a running daemon
 status : show whether a daemon is running
 
@@ -21,25 +21,16 @@ import json
 import logging
 import logging.handlers
 import os
-import shutil
 import signal
 import stat
-import subprocess
-import sys
-import threading
 from datetime import datetime, timezone
 from enum import Enum
-from functools import partial
 from pathlib import Path
 
 import typer
 from rich.console import Console
 
-from vardrrunner import api, compatibility, config, identity, redaction, resources
-from vardrrunner.commands.heartbeat import send_heartbeat
-from vardrrunner.commands.jobs import execute_pending_jobs
-from vardrrunner.journal import Journal
-from vardrrunner.recovery import reconcile
+from vardrrunner import redaction
 
 console = Console()
 
@@ -247,195 +238,14 @@ def start(
     log_format: LogFormat = LogFormat.TEXT,
     run_jobs: bool = False,
 ) -> None:
-    """Send heartbeats; poll and recover jobs only with explicit execution opt-in."""
-    if not 1 <= poll_interval <= 3600 or not 1 <= heartbeat_interval <= 86400:
-        console.print(
-            "[red]Invalid intervals:[/red] poll must be 1-3600 seconds and heartbeat "
-            "must be 1-86400 seconds."
-        )
-        raise typer.Exit(1)
-    existing = _read_pid()
-    if existing and _process_alive(existing):
-        console.print(
-            f"[red]Daemon already running (PID {existing}).[/red] "
-            "Stop it first: vardrrunner daemon stop"
-        )
-        raise typer.Exit(1)
-
-    if detach:
-        _detach(
-            poll_interval=poll_interval,
-            heartbeat_interval=heartbeat_interval,
-            log_file=log_file,
-            log_format=log_format,
-            run_jobs=run_jobs,
-        )
-        return
-
-    try:
-        config.require_auth()
-    except Exception as e:
-        console.print(f"[red]Not authenticated:[/red] {redaction.redact_rich_exception(e)}")
-        raise typer.Exit(1) from e
-
-    # Opening and migrating the journal is a startup gate. The daemon must not
-    # claim work it cannot durably account for.
-    try:
-        journal_store = Journal(config.journal_file())
-    except Exception as e:
-        console.print(
-            f"[red]Execution journal unavailable:[/red] {redaction.redact_rich_exception(e)}"
-        )
-        raise typer.Exit(1) from e
-    try:
-        runner_identity = identity.load_or_create()
-    except identity.IdentityError as e:
-        console.print(
-            f"[red]Runner identity unavailable:[/red] {redaction.redact_rich_exception(e)}"
-        )
-        raise typer.Exit(1) from e
-    try:
-        limits = resources.load_limits()
-    except resources.ResourceLimitError as e:
-        console.print(
-            f"[red]Invalid runner resource policy:[/red] {redaction.redact_rich_exception(e)}"
-        )
-        raise typer.Exit(1) from e
-
-    initial_report = send_heartbeat(quiet=True)
-    compatibility_state = {
-        "blocked": isinstance(initial_report, compatibility.CompatibilityReport)
-        and not initial_report.compatible,
-        "message": "; ".join(initial_report.messages)
-        if isinstance(initial_report, compatibility.CompatibilityReport)
-        else "",
-        "announced": False,
-    }
-    compatibility_lock = threading.Lock()
-
-    out = console
-    _log = None
-    if log_file:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        _log = _RotatingLogFile(
-            log_file, log_format=log_format, runner_id=runner_identity.runner_id
-        )
-        out = Console(file=_log, highlight=False)  # type: ignore[arg-type]
-
-    pid = os.getpid()
-    try:
-        _claim_pid_file(pid)
-    except DaemonStateError as e:
-        if _log:
-            _log.close()
-        console.print(f"[red]Could not start daemon:[/red] {redaction.redact_rich_exception(e)}")
-        raise typer.Exit(1) from e
-    out.print(
-        f"[green]Daemon started[/green] · PID {pid} "
-        f"· poll {poll_interval}s · heartbeat {heartbeat_interval}s"
+    """Reject legacy worker startup without polling, recovery, or process creation."""
+    console.print(
+        "[red]Background workers are no longer supported.[/red] "
+        "Run scans explicitly with `vardrrunner run <tool>`, `vardrrunner pipeline run`, "
+        "or `vardrrunner jobs run`. Use `vardrrunner heartbeat` to report availability once. "
+        "Remove any older startup service with `vardrrunner service uninstall`."
     )
-    out.print("[dim]Press Ctrl+C to stop.[/dim]")
-    if not run_jobs:
-        out.print(
-            "[yellow]Heartbeat only: automatic scans and job recovery are disabled.[/yellow] "
-            "Use `vardrrunner jobs run` for a manual run, or restart with --run-jobs "
-            "to enable unattended execution."
-        )
-
-    _stop = threading.Event()
-
-    def _on_signal(sig, _frame):
-        out.print(f"\n[yellow]Signal {sig} — finishing current job then stopping…[/yellow]")
-        _stop.set()
-
-    # SIGINT covers Ctrl+C on both platforms; SIGTERM only fires on POSIX
-    # (Windows termination is handled by the PID-file check below).
-    signal.signal(signal.SIGINT, _on_signal)
-    signal.signal(signal.SIGTERM, _on_signal)
-
-    def _shutdown_requested() -> bool:
-        # PID file removed or replaced by another process = graceful stop request
-        return _stop.is_set() or _read_pid() != pid
-
-    # Heartbeat runs on its own interval independent of job duration
-    def _hb_loop():
-        while not _stop.wait(timeout=heartbeat_interval):
-            report = send_heartbeat(quiet=True)
-            if isinstance(report, compatibility.CompatibilityReport):
-                blocked = not report.compatible
-                with compatibility_lock:
-                    if blocked != compatibility_state["blocked"]:
-                        compatibility_state["announced"] = False
-                    compatibility_state["blocked"] = blocked
-                    compatibility_state["message"] = "; ".join(report.messages)
-
-    hb_thread = threading.Thread(target=_hb_loop, daemon=True, name="vardrrunner-heartbeat")
-    hb_thread.start()
-
-    _error_streak = 0
-    # Engagements whose stop-work switch refused a claim. Held for the life of
-    # the daemon so a halted engagement is not re-claimed and re-refused every
-    # poll_interval seconds; restarting the daemon re-checks it.
-    _stop_work_blocked: dict[str, float] = {}
-    try:
-        while not _shutdown_requested():
-            # The pending endpoint can materialize scheduled scans. Keep all queue
-            # access and recovery behind opt-in, including legacy login services.
-            if not run_jobs:
-                _stop.wait(timeout=poll_interval)
-                continue
-            try:
-                with compatibility_lock:
-                    compatibility_blocked = bool(compatibility_state["blocked"])
-                    compatibility_message = str(compatibility_state["message"])
-                    compatibility_announced = bool(compatibility_state["announced"])
-                    if compatibility_blocked and not compatibility_announced:
-                        compatibility_state["announced"] = True
-                if compatibility_blocked:
-                    if not compatibility_announced:
-                        out.print(
-                            "[red]Queue claims paused by backend compatibility policy:[/red] "
-                            f"{redaction.redact_rich_text(compatibility_message)}"
-                        )
-                    _stop.wait(timeout=poll_interval)
-                    continue
-                url, key = config.require_auth()
-                client = api.VardrMapClient(url, key)
-                reconcile(journal_store, client, url, out)
-                count = execute_pending_jobs(
-                    client,
-                    out,
-                    blocked_engagements=_stop_work_blocked,
-                    journal_store=journal_store,
-                    backend_url=url,
-                    limits=limits,
-                    client_factory=partial(api.VardrMapClient, url, key),
-                    should_stop=_shutdown_requested,
-                )
-                if count:
-                    out.print(f"[dim]Cycle complete — {count} job(s) executed.[/dim]")
-                _error_streak = 0
-            except Exception as e:
-                # Transient API/network errors must never kill the loop; back off
-                # exponentially (5s → 10s → 20s … capped at 5 min) so a downed
-                # backend is polled politely instead of hammered every 5 seconds.
-                _error_streak += 1
-                backoff = min(poll_interval * (2 ** (_error_streak - 1)), 300)
-                out.print(
-                    f"[red]Poll error:[/red] {redaction.redact_exception(e)}  (retry in {backoff}s)"
-                )
-                _stop.wait(timeout=backoff)
-                continue
-            _stop.wait(timeout=poll_interval)
-    finally:
-        _stop.set()  # release the heartbeat thread promptly
-        # Only remove the PID file if it is still ours — stop() may have
-        # already removed it, or a new daemon may have replaced it.
-        if _read_pid() == pid:
-            PID_FILE.unlink(missing_ok=True)
-        out.print("[dim]Daemon stopped.[/dim]")
-        if _log:
-            _log.close()
+    raise typer.Exit(2)
 
 
 def stop() -> None:
@@ -477,55 +287,3 @@ def status() -> None:
     else:
         console.print(f"[yellow]Stale PID file (process {pid} not found) — cleaning up.[/yellow]")
         PID_FILE.unlink(missing_ok=True)
-
-
-def _detach(
-    poll_interval: int,
-    heartbeat_interval: int,
-    log_file: Path | None,
-    log_format: LogFormat = LogFormat.TEXT,
-    run_jobs: bool = False,
-) -> None:
-    """Re-launch self without --detach so the child runs as a foreground daemon."""
-    exe = shutil.which("vardrrunner") or sys.argv[0]
-    if log_file is None:
-        log_file = DEFAULT_LOG
-
-    cmd = [
-        exe,
-        "daemon",
-        "start",
-        "--poll-interval",
-        str(poll_interval),
-        "--heartbeat-interval",
-        str(heartbeat_interval),
-        "--log-file",
-        str(log_file),
-        "--log-format",
-        log_format.value,
-    ]
-    if run_jobs:
-        cmd.append("--run-jobs")
-
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    fh = open(log_file, "a")
-
-    # Detach from this terminal so closing it doesn't kill the daemon:
-    # Windows needs DETACHED_PROCESS (start_new_session is POSIX-only).
-    popen_kwargs: dict = {}
-    if _IS_WINDOWS:
-        # DETACHED_PROCESS / CREATE_NEW_PROCESS_GROUP are Windows-only — absent when
-        # mypy type-checks on Linux (CI), so ignore the attr-defined error there.
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-        popen_kwargs["creationflags"] = flags
-    else:
-        popen_kwargs["start_new_session"] = True
-
-    proc = subprocess.Popen(
-        cmd,
-        stdout=fh,
-        stderr=fh,
-        close_fds=True,
-        **popen_kwargs,
-    )
-    console.print(f"[green]Daemon started[/green] · PID {proc.pid} · log {log_file}")

@@ -35,35 +35,23 @@ create the stable runner identity, initialize the durable journal, offer to inst
 pinned scan tools, then run `doctor`. Setup succeeds only when the final doctor
 profile succeeds. It is safe to rerun; completed local state is reused.
 
-Normal setup neither installs nor offers a startup service. Accepting every interactive
-prompt cannot enable background startup. Only an explicit `--install-service` installs
-one; `--production` alone never does. `--env-file` requires `--install-service` and fails
-before any setup changes if it is omitted. An explicitly installed service sends heartbeats
-only; setup never opts in to automatic scans or recovery. Use `jobs run` manually.
-
-For deliberate unattended deployment, use `init --production --install-service` or the
-separate `service install` command. `service install --run-jobs` also enables automatic
-execution. The strict production health check still requires an installed service or
-live daemon. Existing services are left unchanged by normal setup; use `service uninstall`
-to remove automatic startup from an older setup.
+Setup never installs or starts a background service, including in production mode.
+Accepting every interactive prompt cannot enable startup. Legacy `--install-service`,
+`--start-service`, `--no-start-service`, and `--env-file` options are rejected before
+setup changes any state. Run scans explicitly with `run`, `pipeline run`, or `jobs run`.
+Use `service uninstall` to remove a service installed by an older version.
 
 | Option | Purpose |
 |--------|---------|
 | `--url` / `--key` | Supply VardrMap credentials; omit `--key` interactively for a hidden prompt |
 | `--name` | Set the durable human runner label |
-| `--production` | Require the strict unattended doctor profile |
+| `--production` | Require strict credential, disk, identity, and journal checks |
 | `--install-tools` / `--no-install-tools` | Install pinned, verified scan tools. Asked interactively (default yes); off under `--non-interactive` unless `--install-tools` is passed |
-| `--install-service` | Explicitly register background startup at sign-in (heartbeat-only) |
-| `--start-service` / `--no-start-service` | Start after installation (default: start) |
-| `--env-file <path>` | Attach an existing Linux systemd credential file; requires `--install-service` |
 | `--allow-plaintext-credentials` | Explicitly accept config-file key storage if no keychain exists |
 | `--non-interactive` | Never prompt; fail if auth input is missing |
 
-Non-interactive setup accepts existing environment credentials. For an installed service,
-those credentials must also survive a fresh process: use keychain/config auth, or on Linux
-pass an operator-owned, owner-readable-only (`chmod 600`) `--env-file`. Setup never creates
-or displays a secret env file. As with `login`, prefer the hidden prompt over `--key` so the
-credential does not enter shell history.
+Non-interactive setup accepts existing environment credentials. As with `login`,
+prefer the hidden prompt over `--key` so the credential does not enter shell history.
 
 ---
 
@@ -183,14 +171,14 @@ vardrrunner status
 ---
 
 ## `doctor`
-Deep preflight before unattended use — *"validate this machine."* Unlike `status`, `doctor`
+Deep preflight before running scans — *"validate this machine."* Unlike `status`, `doctor`
 is built for scripts: it **exits 0 only when the runner is healthy enough to work**, exits
 non-zero on any actionable failure, and prints a remediation hint per problem.
 
 ```bash
-vardrrunner doctor && vardrrunner daemon start --detach   # heartbeat-only background service
+vardrrunner doctor && vardrrunner jobs run                 # execute pending jobs once
 vardrrunner doctor --json                                  # machine-readable report
-vardrrunner doctor --production                            # strict unattended profile
+vardrrunner doctor --production                            # strict health profile
 ```
 
 Checks: credential source (env vs file), backend URL validity (HTTPS), config-file
@@ -203,7 +191,7 @@ naabu capture library, and low-ish disk are **warnings** that don't block.
 
 `--production` additionally treats plaintext credentials as a failure, raises disk
 thresholds to 1 GiB minimum / 5 GiB warning, verifies the execution journal and stable
-identity, and requires either a live daemon or active native service. JSON output includes
+identity. No background daemon or service is required. JSON output includes
 `"profile": "standard" | "production"`.
 
 ---
@@ -692,7 +680,7 @@ A rule is a class name (`public`, `private`, `loopback`, `link_local`, `cloud_me
 literal host, or a CIDR. **Nothing is denied by default.** Set
 `VARDRRUNNER_ALLOW_DENIED_TARGETS=1` to override the rules; the override is recorded as a
 `deny_override` job event. It is an environment variable rather than a flag so it also
-applies to the daemon, where deny rules matter most and there is no command line.
+applies to queued jobs executed through `jobs run`.
 
 ### Target cap
 A run aborts before executing anything if the resolved target count exceeds
@@ -772,7 +760,7 @@ vardrrunner jobs run      # claim and execute all currently pending jobs, then e
 ```
 `jobs run` auto-sends a heartbeat first, then for each pending job: claims it
 (`POST /jobs/{id}/claim`), resolves targets, executes, and reports lifecycle events.
-This is the same execution core the daemon uses.
+It does not leave a worker running or poll for future jobs.
 
 Before claim, the runner validates the job schema, target shape/count, and free-disk
 reserve. Before upload it enforces the artifact ceiling. Defaults are 500 targets, 100 MiB
@@ -784,12 +772,12 @@ sequential and each worker uses an isolated API client.
 
 | Outcome | Behaviour |
 |---|---|
-| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. That engagement is suppressed for 60 seconds, then rechecked automatically. |
+| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. Further claims for that engagement are suppressed during the cooldown; no background retry is started. |
 | **Claim race** (`409`) | Another runner won. Skipped quietly, **not** marked failed — the job is theirs to finish. |
 | **Auth** (`401`) | Reported as `auth`. Re-run `vardrrunner login vardrmap`. |
-| **Rate limited** (`429`) | Reported as `rate_limited`; the daemon backs off. |
-| **Backend down** (`5xx`) | Reported as `backend_unavailable`; the daemon backs off and retries. |
-| **Anything else** | Reported as `unknown` and logged. The job is left pending and the worker stays alive. |
+| **Rate limited** (`429`) | Reported as `rate_limited`; retry with a later explicit invocation. |
+| **Backend down** (`5xx`) | Reported as `backend_unavailable`; retry with a later explicit invocation. |
+| **Anything else** | Reported as `unknown` and logged. The job is left pending. |
 
 ### Advisory policy warnings
 
@@ -819,104 +807,40 @@ secret never reaches the backend. A missing referenced secret fails the job. See
 
 ---
 
-## `daemon` — continuous background worker
+## `daemon` — legacy process cleanup
+
 ```bash
-vardrrunner daemon start [--detach]   # heartbeats only; no scan queue access or recovery
-vardrrunner daemon start --run-jobs [--detach]   # explicitly enable unattended scans
-vardrrunner daemon stop               # cooperative graceful shutdown (removes PID file)
-vardrrunner daemon status             # report whether the daemon is running
+vardrrunner daemon status   # inspect a daemon left by an older version
+vardrrunner daemon stop     # request cooperative shutdown of an old daemon
 ```
 
-Options for `daemon start`:
+`daemon start` exits with an error and starts nothing, including with `--detach` or
+`--run-jobs`. There is no background heartbeat, queue polling, or interrupted-job recovery.
+Use `heartbeat` for a single connectivity check and `jobs run` for explicit queue execution.
 
-| Option | Default | Purpose |
-|--------|---------|---------|
-| `--detach` / `-d` | off | Run in the background and write the PID file |
-| `--run-jobs` | off | Enable queued/scheduled scan execution and interrupted-job recovery |
-| `--poll-interval N` | 5 | Seconds between job polls when `--run-jobs` is enabled |
-| `--heartbeat-interval N` | 60 | Seconds between heartbeats |
-| `--log-file <path>` | none | Append output to a rotating log file |
-| `--log-format text|json` | `text` | Human text or redacted JSON Lines |
-
-Poll intervals are bounded to 1–3600 seconds and heartbeat intervals to 1–86400 seconds.
-The PID file is claimed with exclusive creation, so concurrent starts cannot both become
-workers; malformed or dead PID state is replaced as stale.
-
-- The PID file is `~/.vardrrunner.pid`. A double-start guard prevents two daemons from
-  running at once, and `daemon status` cleans up a stale PID file.
-- `--log-file` writes through a rotating handler — **5 MB per file, 3 backups** — so a
-  long-lived VPS daemon can't fill the disk. Every line is prefixed with an ISO 8601
-  timestamp, and Rich markup is rendered to plain text rather than written literally.
-- Poll failures back off exponentially (5 s → 10 s → 20 s …, capped at 5 min) and reset on
-  the next successful poll, so a downed backend isn't hammered.
-- The daemon opens the SQLite execution journal before writing its PID or claiming work.
-  Journal failure is a startup failure, preventing unaccounted execution.
-- With `--run-jobs`, every poll first reconciles interrupted runs. Complete artifacts can resume upload and a
-  confirmed upload can resume finalization. An upload with an unknown outcome is never
-  duplicated automatically; it is retained as an `upload_failed` audit record.
-- Shutdown is cooperative: `stop` removes the PID file; an active job may finish, then the
-  daemon claims no additional jobs and exits cleanly (graceful SIGTERM handling on Unix,
-  ctypes liveness probe on Windows).
-
-JSON log records contain `log_schema_version`, UTC `timestamp`, `level`, `event`, stable
-`runner_id`, `pid`, and redacted `message`. Rotation remains 5 MiB × four files total.
-
-Without `--run-jobs`, the daemon never calls `/jobs/pending` (which can create due scheduled
-jobs), claims jobs, or reconciles interrupted runs. It still sends heartbeats. The flag is
-per invocation and is preserved by `--detach`; there is no remembered execution opt-in.
-`jobs run` remains the explicit one-shot execution command. Stop an existing daemon before
-starting it in a different mode.
+`stop` removes the legacy PID file, `~/.vardrrunner.pid`. An old daemon can finish an
+active job before exiting; upgrading a package does not replace an already-running process.
 
 ---
 
-## `service` — native unattended startup
+## `service` — legacy startup cleanup
 
 ```bash
-vardrrunner service install [--no-start] [--dry-run]   # heartbeats only
-vardrrunner service install --run-jobs               # opt in to automatic scans at startup
 vardrrunner service status
 vardrrunner service uninstall
 ```
 
-The command installs a systemd **user** unit on Linux, LaunchAgent on macOS, or per-user
-ONLOGON Scheduled Task on Windows. It runs the foreground daemon with rotating JSON logs;
-no separate worker implementation is introduced. `--dry-run` prints paths and manager
-commands without changing the host.
+These commands inspect and remove an existing systemd user unit (Linux), LaunchAgent
+(macOS), or VardrRunner Scheduled Task (Windows). No command creates startup registrations.
+`service install` always exits with an error, including with `--no-start`, `--dry-run`,
+`--env-file`, or `--run-jobs`. To install the program, use `pipx install vardrrunner`;
+to install supported scanning dependencies, use `vardrrunner tools install --all`.
 
-By default the service sends heartbeats only, even when pending or interrupted jobs exist.
-`--run-jobs` writes the execution opt-in into the installed service command. This permits
-queued and scheduled scans and recovery whenever that service starts. `--no-start` only
-skips the immediate start; it is not a cross-platform guarantee against future sign-in startup.
-
-**Upgrading existing installations:** stop the old daemon before upgrading, then restart
-using the updated executable. Existing service commands without `--run-jobs` become
-heartbeat-only on their next launch; upgrading does not change an already-running process.
-For manual-only use, run `service uninstall` to remove existing automatic startup entirely;
-upgrading does not remove an existing service registration.
-To retain intentional unattended scanning, stop the daemon and reinstall the service with
-`--run-jobs` (and the existing `--env-file` on Linux, if used). To remove a prior execution
-opt-in, stop the daemon and reinstall without that flag. `service uninstall` removes
-automatic startup altogether. None of these choices clears queued jobs or scan evidence.
-
-Actual installation first verifies local authentication, the execution journal, and stable
-identity so a broken configuration does not enter a native supervisor restart loop.
-
-Authentication must be available to a newly started service process. A keychain or
-explicitly accepted config credential satisfies this. Credentials that exist only in the
-current shell are rejected unless Linux `--env-file` is supplied; macOS and Windows users
-must use keychain/config resolution or an established external supervisor. Linux env files
-must already exist with mode `0600`; a missing file is a service startup failure rather than
-being silently ignored.
-
-On Linux only, `--env-file <path>` adds a systemd `EnvironmentFile` reference. The file is
-never copied or displayed, and no secret is embedded in the unit. macOS and Windows should
-use the OS keychain or config-based credential resolution. Windows hosts that must start
-before user logon should use their existing enterprise supervisor rather than the per-user
-task.
-
-A systemd user unit starts at boot only when user lingering is enabled. The installer does
-not change that host policy; it prints the administrator command
-`loginctl enable-linger <user>` after installation.
+**Upgrading existing installations:** run `daemon stop` and `service uninstall` to stop
+legacy execution and remove its startup registration. Upgrading alone does not remove an
+OS registration or stop an already-running old executable. A legacy registration calling
+the updated `daemon start` gets an error instead of starting a worker, but should still be
+removed. Manual `run`, `pipeline run`, and one-shot `jobs run` remain available.
 
 ---
 
@@ -935,7 +859,7 @@ Conflicting `program_id` and `engagement_id` fail before execution.
 explicit timeouts are rejected.
 
 For an internal API engagement, set `VARDRRUNNER_ALLOW_PRIVATE_TARGETS=1` on
-the machine running the worker before starting `vardrrunner jobs run` or the worker daemon. This opts
+the machine running the worker before starting `vardrrunner jobs run`. This opts
 that worker into Gate's private-target mode, including loopback, for all Gate
 jobs it executes. Unset it when finished. Only the exact value `1` enables it;
 backend job config cannot enable it. This changes Gate's network safeguard,

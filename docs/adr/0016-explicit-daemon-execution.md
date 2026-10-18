@@ -1,36 +1,41 @@
-# ADR 0016 — Require explicit daemon scan execution opt-in
+# ADR 0016: Manual invocation and removal of startup workers
 
-Status: accepted
+- **Status:** Accepted
+- **Date:** 2026-10-17
 
 ## Context
 
-The native sign-in service previously launched `daemon start`, which immediately
-reconciled interrupted jobs and consumed the pending queue. Old queued jobs could
-therefore start scans when an operator signed in. Changing only setup defaults would
-leave existing service definitions executing scans after upgrades.
+A native sign-in service launched the runner daemon, which polled pending jobs and
+reconciled interrupted execution. Installing or setting up a scanning tool could thus
+lead to scans at the next sign-in without a new operator action. An opt-in service
+command still permits this accident when mistaken for program/dependency installation.
 
 ## Decision
 
-Normal installation and setup are for manual use. Setup never offers a service prompt,
-including with `--production`. Background startup requires `init --install-service` or
-the separate `service install` command. An environment file cannot imply that choice:
-`init --env-file` without `--install-service` fails before setup changes.
+VardrRunner runs only when invoked, like an ordinary command-line scanning program.
+Remove native service creation, detached worker creation, and the continuous queue loop.
+`service install` and `daemon start` remain as compatibility errors, with no opt-in flag
+or configuration escape hatch. Old options are hidden but accepted for migration errors.
+`init` rejects legacy service options before authentication or local state changes.
+Production health checks no longer require a daemon or service.
 
-`daemon start` sends heartbeats by default. Queue polling, claims, execution, and recovery
-require `--run-jobs`. The flag applies to the current invocation and propagates to a
-detached child. `service install --run-jobs` explicitly records it in the native service
-definition; explicit service installation otherwise produces heartbeat-only services.
+Keep manual `run`, `pipeline run`, and one-shot `jobs run`, including recovery during
+explicit queue execution. Keep single `heartbeat`, legacy `daemon stop|status`, and
+`service uninstall|status`. Service plans can only inspect or remove old registrations.
 
-The guard precedes all queue/recovery access, because `/jobs/pending` can materialize
-scheduled jobs. Existing manual execution commands retain their behavior. No backend
-contract or persisted configuration key changes.
+This supersedes the service-management portions of ADR 0011 and the service-setup and
+background-health requirements of ADR 0013. Their identity and secure setup decisions
+remain in effect.
 
 ## Consequences
 
-Existing service registrations require `service uninstall` for manual-only use. Package
-upgrades and ordinary setup leave host supervision configuration unchanged.
-Legacy service commands become heartbeat-only when launched with the upgraded executable.
-An already-running old process must be stopped. Intentional unattended operators must
-explicitly reinstall their service with `--run-jobs`, retaining any Linux environment-file
-argument. Heartbeats still report runner availability, not permission to execute jobs.
-Queued jobs and interrupted evidence remain available for deliberate execution or review.
+Neither downloading, setup, nor a former service command can enable startup or background
+scans. Queue jobs may still exist on the backend; the runner processes them only when
+explicitly invoked. This intentionally removes unattended worker support.
+
+An upgrade does not stop already-running old code or remove OS registrations. Operators
+must stop legacy daemons and uninstall their services. Old registrations that call the
+updated daemon entry point receive an error and cannot launch a worker.
+
+Tests verify rejected commands have no execution side effects and preserve cleanup and
+manual queue behavior across platforms.

@@ -842,3 +842,61 @@ class TestTestCasesCommands:
             result = invoke("test-cases", "save", "eng", "--reviewed")
         assert result.exit_code == 2
         mock.assert_not_called()
+
+
+class TestManualInvocationOnly:
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("service", "install"),
+            ("service", "install", "--run-jobs"),
+            ("service", "install", "--dry-run"),
+            ("service", "install", "--no-start", "--env-file", "legacy.env"),
+            ("daemon", "start"),
+            ("daemon", "start", "--detach", "--run-jobs"),
+            ("daemon", "start", "--log-file", "legacy.log", "--log-format", "json"),
+            ("init", "--install-service"),
+            ("init", "--start-service"),
+            ("init", "--no-start-service"),
+            ("init", "--env-file", "legacy.env"),
+            ("init", "--production", "--non-interactive", "--install-service"),
+        ],
+    )
+    def test_legacy_entrypoints_cannot_start_work(self, args):
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            blocked = [
+                stack.enter_context(patch(target))
+                for target in (
+                    "subprocess.Popen",
+                    "subprocess.run",
+                    "vardrrunner.service.build_plan",
+                    "vardrrunner.commands.setup._ensure_auth",
+                    "vardrrunner.commands.setup._ensure_identity",
+                    "vardrrunner.commands.setup._ensure_journal",
+                    "vardrrunner.commands.setup._ensure_tools",
+                    "vardrrunner.commands.jobs.execute_pending_jobs",
+                    "vardrrunner.recovery.reconcile",
+                    "vardrrunner.commands.heartbeat.send_heartbeat",
+                )
+            ]
+            result = invoke(*args)
+        assert result.exit_code == (1 if args[0] == "init" else 2)
+        assert "no longer supported" in result.output
+        for mock in blocked:
+            mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "args, hidden_flags",
+        [
+            (("daemon", "start"), ("--run-jobs", "--detach", "--poll-interval")),
+            (("service", "install"), ("--run-jobs", "--env-file", "--no-start")),
+            (("init",), ("--install-service", "--start-service", "--env-file")),
+        ],
+    )
+    def test_help_does_not_offer_retired_options(self, args, hidden_flags):
+        result = invoke(*args, "--help")
+        assert result.exit_code == 0
+        for flag in hidden_flags:
+            assert flag not in result.output

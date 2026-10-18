@@ -126,7 +126,9 @@ def test_check_dataclass_shape():
     assert c.remediation == "" and c.status is Health.OK
 
 
-def test_production_profile_requires_secure_storage_and_service(tmp_path, monkeypatch):
+def test_production_profile_requires_secure_storage_without_background_service(
+    tmp_path, monkeypatch
+):
     config_file = tmp_path / "config.json"
     config_file.write_text('{"api_url":"https://api.example.com","api_key":"vmap_plain"}')
     monkeypatch.setattr("vardrrunner.config.CONFIG_FILE", config_file)
@@ -135,25 +137,13 @@ def test_production_profile_requires_secure_storage_and_service(tmp_path, monkey
     with (
         patch("vardrrunner.commands.doctor.api.VardrMapClient", return_value=client),
         patch("vardrrunner.runner.tool_available", return_value=True),
-        patch(
-            "vardrrunner.commands.doctor.service.build_plan",
-            side_effect=doctor.service.ServiceError("not installed"),
-        ),
+        patch("vardrrunner.service.build_plan") as service_plan,
     ):
         checks = doctor._collect(production=True)
     storage = next(check for check in checks if check.name == "credential storage")
-    background = next(check for check in checks if check.name == "background service")
     assert storage.status is Health.FAIL
-    assert background.status is Health.FAIL
-
-
-def test_production_service_accepts_running_daemon():
-    with (
-        patch("vardrrunner.commands.doctor.daemon._read_pid", return_value=123),
-        patch("vardrrunner.commands.doctor.daemon._process_alive", return_value=True),
-    ):
-        check = doctor._check_service()
-    assert check.status is Health.OK
+    assert not any(check.name == "background service" for check in checks)
+    service_plan.assert_not_called()
 
 
 def test_identity_and_journal_failures_are_fatal():
