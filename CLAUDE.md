@@ -1,6 +1,6 @@
 # VardrRunner — Claude Instructions
 
-Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs security tooling locally and syncs results to VardrMap **over HTTP only**. Polls `GET /jobs/pending`, claims atomically (`POST /jobs/{id}/claim`), executes locally, streams lifecycle events back, uploads results, heartbeats. Zero code coupling to the backend — JSON over wire only. Extracted from VardrMap monorepo 2026-06-14 (see `docs/adr/0001-extract-vardrrunner-from-vardrmap.md`).
+Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs security tooling locally and syncs results to VardrMap **over HTTP only**. **Runs only when invoked** — no startup service, no background worker (ADR 0016). `jobs run` polls `GET /jobs/pending` once, claims atomically (`POST /jobs/{id}/claim`), executes locally, streams lifecycle events back, uploads results, heartbeats. Zero code coupling to the backend — JSON over wire only. Extracted from VardrMap monorepo 2026-06-14 (see `docs/adr/0001-extract-vardrrunner-from-vardrmap.md`).
 
 ## Where things live
 - `vardrrunner/` — Python package
@@ -36,7 +36,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
     deferred, and each methodology says so in `scope`
   - `toolchain.py` — pinned, verified tool installs into `~/.vardrmap/tools` from `tool_manifest.json`; re-hashes managed binaries before use (ADR 0014)
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
-  - `identity.py` / `service.py` — stable installation identity and cross-platform user-service plans (ADR 0011)
+  - `identity.py` / `service.py` — stable installation identity, and plans that only inspect or remove **legacy** startup services (ADR 0011, superseded in part by ADR 0016)
   - `compatibility.py` / `resources.py` / `updates.py` — wire negotiation, bounded local policy, and cached release checks (ADR 0012)
   - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `tools`, `updates`, `engagements`, `run`, `status`
 - `tests/` — pytest suite with a 95% coverage floor. Default tests mock backend/scanner calls; opt-in real-binary smoke tests use bounded loopback fixtures. The real three-repository acceptance harness lives in VardrMap; see its `scripts/integration/README.md`
@@ -47,6 +47,9 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
 - `scratch/` — gitignored; throwaway experiments only
 
 ## Hard rules
+- **`git fetch` before starting.** Work happens on branches merged by PR, so a local branch is often behind `origin/main` — or already merged into it. Check `git status -sb` and `gh run list --limit 1` first.
+- **Never reintroduce startup or background execution.** No service install, sign-in task, detached worker or polling loop, opt-in or not (ADR 0016). Queued jobs run only from an explicit `jobs run`.
+- **Backend contract:** this runner calls a VardrMap that deploys separately. Changing an endpoint or response key it reads means checking which VardrMap version serves it, and recording that requirement in the changelog.
 - No "Co-Authored-By: Claude" in commits
 - Use focused tests while editing code, then run the full relevant suite, lint and type checks before review. Docs-only changes require a diff and Markdown-link check, not another application test run
 - Every behavior-changing change updates docs **and** `CHANGELOG.md` in the same commit
@@ -98,12 +101,12 @@ python -m venv venv
 pip install -e ".[dev]"
 vardrrunner login vardrmap
 vardrrunner heartbeat
-vardrrunner daemon start
+vardrrunner jobs run   # one-shot; nothing runs in the background
 ```
 
 ## Commands
 - `login vardrmap` — authenticate; store key in OS keychain
-- `init` — guided/provisioned auth, identity, service, and doctor acceptance gate
+- `init` — guided/provisioned auth, identity, and doctor acceptance gate; never installs a startup service and rejects the legacy `--install-service`/`--start-service`/`--env-file` options
 - `logout` — remove credentials, keep URL
 - `whoami` — identity behind the configured key
 - `credentials` — credential source/posture; never shows the key
@@ -115,12 +118,12 @@ vardrrunner daemon start
 - `jobs list|run` — inspect and execute backend job queue (one-shot)
 - `audit list|show|export` — inspect/export sanitized local execution evidence
 - `identity show|set-name` — stable UUID and human runner label
-- `service install|status|uninstall` — native per-user background service
-- `daemon start|stop|status` — long-running background worker (poll + heartbeat)
+- `service status|uninstall` — inspect or remove a **legacy** startup service; `service install` always errors
+- `daemon stop|status` — stop or inspect a **legacy** worker; `daemon start` always errors, with or without `--run-jobs`/`--detach`
 - `heartbeat` — send single heartbeat
 - `tools install|list|verify|remove|purge` — pinned, verified tool installs in `~/.vardrmap/tools`
 - `status` — local config, version, tool availability and source
-- `doctor` — deep preflight for unattended use; exits non-zero on failures (`--json`)
+- `doctor` — deep preflight (credentials, disk, identity, journal, tools); exits non-zero on failures (`--json`)
 - `update check` — cached opt-in release discovery; never installs automatically
 - `test-cases draft|save` — draft VardrGate cases from observed operations/OpenAPI into a review file, save only with `--reviewed`
 - `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra.
