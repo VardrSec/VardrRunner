@@ -5,6 +5,7 @@ This covers cli.py which is otherwise 0% — the logic lives in the command modu
 (tested elsewhere); here we only verify the wiring.
 """
 
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -911,11 +912,9 @@ class TestManualInvocationOnly:
     def test_help_lists_no_removed_commands(self):
         result = invoke("--help")
         assert result.exit_code == 0
-        listed = {
-            line.split()[1]
-            for line in result.output.splitlines()
-            if line.startswith("│ ") and len(line.split()) > 1
-        }
+        # A command row is a name followed by two or more spaces and its help, whatever
+        # border (`│`, `|`, `┃`, none) the environment's Rich rendering draws around it.
+        listed = set(re.findall(r"^[^\w\n]*([a-z][\w-]*)\s{2,}\S", result.output, re.MULTILINE))
         assert {"daemon", "service", "engagement-list"}.isdisjoint(listed)
         assert "engagements" in listed
 
