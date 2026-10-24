@@ -7,9 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.52.0] — 2026-10-24
+
 Leftover names from when engagements were "programs" are removed, and `login vardrmap` is
 now `login` — **breaking**. No backend change required. See
-[`changelog/unreleased-rename-leftovers.md`](changelog/unreleased-rename-leftovers.md).
+[`changelog/v0.52.0.md`](changelog/v0.52.0.md).
 
 ### Breaking
 
