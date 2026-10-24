@@ -7,6 +7,14 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Changed
+
+- The MCP server now surfaces an engagement's request-rate ceiling. `get_engagement`
+  returns `max_request_rate`, the `queue_job` and `queue_pipeline` tool descriptions name the
+  `config.rate` key and the automatic ceiling, and the server instructions tell an agent to
+  respect it. The backend already enforced the ceiling; the agent just could not see it. No
+  backend change, and no new or writable tool — scope and authorization stay operator-only.
+
 ## [0.52.0] — 2026-10-24
 
 Leftover names from when engagements were "programs" are removed, and `login vardrmap` is
