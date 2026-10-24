@@ -31,8 +31,8 @@ behavior (help text, exit code 2) so nothing waits for input that never comes.
 - **`mcp` is refused** inside the console, because it serves over the stdin and stdout
   the console reads from.
 - **After `update`,** the console checks the installed version from a fresh interpreter. If
-  it changed, the console says the running session is still the old version and asks the
-  operator to restart it.
+  it changed, the console says so and closes, because staying open would keep running the
+  old modules. The operator reopens it with `vardrrunner`.
 - **Completion is optional.** The `shell` extra adds `prompt_toolkit` for tab completion
   and up-arrow history. Without it, `input()` gives a plain prompt with the same features.
 - **History is in memory only.** A line can carry a secret (`login vardrmap --key …`), so

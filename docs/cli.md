@@ -59,8 +59,8 @@ vardrrunner(3f2a9c1e) > exit
 - **Errors keep the console open.** Ctrl+C cancels the running command, not the console.
 - **`mcp` is refused,** because it serves over the terminal the console reads from. Run
   `vardrrunner mcp` from your shell.
-- **After `update`,** if a newer version was installed, the console says so and asks you to
-  `exit` and reopen it. The open session still runs the old code.
+- **After `update`,** if a newer version was installed, the console says so and closes,
+  because the open session still holds the old code. Run `vardrrunner` to reopen it.
 - **The banner** shows the version, tool, pipeline and job-type counts, the VardrMap host,
   a cached update notice, a quote and a tip. It makes no network request and never shows
   the API key. Quotes without a primary source are credited "attributed to". In a window

@@ -315,8 +315,8 @@ class Session:
             )
         else:
             self._invoke(args)
-            if args[0] == "update" and len(args) == 1:
-                self._restart_if_upgraded()
+            if args[0] == "update" and len(args) == 1 and self._upgraded():
+                return False
         return True
 
     def _help(self) -> None:
@@ -364,13 +364,17 @@ class Session:
             if code == _INTERRUPTED:
                 console.print("[yellow]Interrupted.[/yellow]")
 
-    def _restart_if_upgraded(self) -> None:
+    def _upgraded(self) -> bool:
+        """True when `update` installed a different version, so the console closes: this
+        process still holds the old modules, and staying open would run them."""
         installed = updates.installed_version()
-        if installed and installed != __version__:
-            console.print(
-                f"[yellow]VardrRunner {installed} is installed, but this console is still "
-                f"running {__version__}.[/yellow] Type `exit` and run `vardrrunner` again."
-            )
+        if not installed or installed == __version__:
+            return False
+        console.print(
+            f"[green]VardrRunner {installed} is installed.[/green] Closing the console; "
+            "run `vardrrunner` to reopen it."
+        )
+        return True
 
 
 def _reader(session: Session) -> tuple[Callable[[str], str], bool]:

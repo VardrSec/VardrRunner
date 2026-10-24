@@ -222,22 +222,35 @@ class TestHandle:
 
 
 class TestUpdateInsideConsole:
-    def test_newer_install_asks_for_restart(self, session, recording_console):
+    def test_newer_install_closes_the_console(self, session, recording_console):
         with (
             patch("vardrrunner.commands.updates.upgrade"),
             patch("vardrrunner.shell.updates.installed_version", return_value="99.0.0"),
         ):
-            session.handle("update")
+            assert session.handle("update") is False
         out = _output(recording_console)
         assert "VardrRunner 99.0.0 is installed" in out
-        assert "run `vardrrunner` again" in out
+        assert "run `vardrrunner` to reopen it" in out
 
-    def test_unchanged_install_says_nothing_more(self, session, recording_console):
+    def test_newer_install_ends_the_loop(self, recording_console):
+        lines = iter(["update", "heartbeat"])
+        with (
+            patch("vardrrunner.shell._reader", return_value=(lambda _p: next(lines), False)),
+            patch("vardrrunner.commands.updates.upgrade"),
+            patch("vardrrunner.shell.updates.installed_version", return_value="99.0.0"),
+            patch("vardrrunner.commands.heartbeat.send_heartbeat") as send,
+        ):
+            shell.run(app)
+        send.assert_not_called()
+        assert shell.is_running() is False
+
+    @pytest.mark.parametrize("installed", [__version__, None])
+    def test_unchanged_or_unknown_install_stays_open(self, session, recording_console, installed):
         with (
             patch("vardrrunner.commands.updates.upgrade"),
-            patch("vardrrunner.shell.updates.installed_version", return_value=__version__),
+            patch("vardrrunner.shell.updates.installed_version", return_value=installed),
         ):
-            session.handle("update")
+            assert session.handle("update") is True
         assert "is installed" not in _output(recording_console)
 
     def test_update_check_does_not_probe_installed_version(self, session):
