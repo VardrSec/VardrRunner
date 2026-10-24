@@ -17,6 +17,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
   and the command that upgrades it. An unreachable registry warns and never fails `status`.
   See [`changelog/unreleased-version-visibility.md`](changelog/unreleased-version-visibility.md).
 
+### Fixed
+
+- The heartbeat, `doctor` and `status` report VardrGate's version instead of `unknown`. The
+  version probe ran `vardrgate -version`, which VardrGate rejects with its usage text; it now
+  runs `vardrgate version`.
+
 ### Changed
 
 - `update check` names the upgrade command for how this copy was installed (pipx, uv, or pip

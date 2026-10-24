@@ -342,6 +342,8 @@ _VERSION_ARGS: dict[str, list[str]] = {
     "ffuf": ["-V"],
     "dalfox": ["--version"],
     "nmap": ["--version"],
+    # A subcommand, not a flag: `vardrgate -version` prints usage and exits 1.
+    "vardrgate_api_test": ["version"],
 }
 
 
