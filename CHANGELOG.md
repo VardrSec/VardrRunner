@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.53.0] — 2026-10-24
+
+Agent proposals and request-rate visibility in the MCP server. MCP only; the CLI is
+unchanged. The propose tools require a VardrMap with the agent-proposals endpoints. See
+[`changelog/v0.53.0.md`](changelog/v0.53.0.md).
+
 ### Added
 
 - MCP server: `propose_scope_item`, `propose_authorization` and `propose_rate_ceiling` write
