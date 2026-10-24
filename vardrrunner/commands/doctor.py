@@ -8,9 +8,9 @@ non-zero on any actionable failure, and prints a remediation hint per problem.
 
     vardrrunner doctor && vardrrunner jobs run
 
-Checks: installed version against the latest release, credential source, backend URL validity, config-file permissions, API
-auth, daemon PID health, run-dir writability, free disk, tool versions, and
-per-pipeline readiness. `--json` emits a machine-readable report.
+Checks: installed version against the latest release, credential source, backend URL
+validity, config-file permissions, API auth, identity, journal, run-dir writability, free
+disk, tool versions, and per-pipeline readiness. `--json` emits a machine-readable report.
 """
 
 import platform
@@ -36,7 +36,6 @@ from vardrrunner import (
     toolchain,
     updates,
 )
-from vardrrunner.commands import daemon
 from vardrrunner.commands import tools as tools_cmd
 from vardrrunner.journal import Journal, JournalError
 
@@ -195,20 +194,6 @@ def _check_version() -> Check:
             "Run `vardrrunner update`.",
         )
     return Check("version", Health.OK, f"{status.current} (latest)")
-
-
-def _check_daemon() -> Check:
-    pid = daemon._read_pid()
-    if pid is None:
-        return Check("daemon", Health.OK, "not running")
-    if daemon._process_alive(pid):
-        return Check("daemon", Health.OK, f"running (pid {pid})")
-    return Check(
-        "daemon",
-        Health.WARN,
-        f"stale PID file (pid {pid} is not alive)",
-        f"`vardrrunner daemon stop` or delete {daemon.PID_FILE}",
-    )
 
 
 def _check_run_dir() -> Check:
@@ -387,7 +372,6 @@ def _collect(production: bool = False) -> list[Check]:
                 f"Delete {config.CONFIG_FILE} or run `vardrrunner login vardrmap` to reset.",
             )
         )
-    checks.append(_check_daemon())
     checks.append(_check_identity())
     checks.append(_check_journal())
     checks.append(_check_run_dir())

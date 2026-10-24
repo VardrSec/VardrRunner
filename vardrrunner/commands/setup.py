@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import typer
 from rich.console import Console
 
@@ -121,20 +119,11 @@ def initialize(
     api_key: str | None = None,
     name: str | None = None,
     production: bool = False,
-    install_service: bool = False,
-    start_service: bool | None = None,
-    env_file: Path | None = None,
     allow_plaintext: bool = False,
     non_interactive: bool = False,
     install_tools: bool | None = None,
 ) -> None:
     """Configure auth, identity, durable state, tools, and health checks."""
-    if install_service or start_service is not None or env_file is not None:
-        _fail(
-            "startup services are no longer supported; run `vardrrunner init` without service "
-            "options, then invoke scans manually. Remove old services with "
-            "`vardrrunner service uninstall`"
-        )
     console.print("\n[bold]VardrRunner guided setup[/bold]")
     _ensure_auth(
         api_url=api_url,
@@ -155,6 +144,5 @@ def initialize(
 
     console.print("\n[bold green]VardrRunner setup complete.[/bold green]")
     console.print(
-        "No startup service was installed. Run `vardrrunner jobs run` when you want to scan. "
-        "If an older setup installed a service, remove it with `vardrrunner service uninstall`."
+        "Run `vardrrunner jobs run` when you want to scan; nothing runs in the background."
     )

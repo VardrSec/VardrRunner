@@ -10,8 +10,7 @@ done/fail); the per-tool specifics live in ``vardrrunner.handlers``.
 import json
 import logging
 import threading
-import time
-from collections.abc import Callable, MutableMapping
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
 import typer
@@ -38,11 +37,6 @@ from vardrrunner.journal import Journal, Phase, RunRecord, utc_now
 from vardrrunner.recovery import reconcile
 
 console = Console()
-
-# Stop-work is rechecked periodically rather than every daemon poll.  A
-# permanent in-memory block would leave work unavailable after the operator
-# lifts the halt until someone notices and restarts the service.
-STOP_WORK_RECHECK_SECONDS = 60.0
 
 _AUDIT_CONFIG_FIELDS = frozenset(
     {"limit", "status_code", "severity", "templates", "timeout", "top_ports", "timing"}
@@ -283,7 +277,8 @@ def _execute_one(
         claimed = client.claim_job(job_id)
     except errors.StopWorkError as e:
         # The operator's own halt switch. Never presented as a claim failure,
-        # and never silently retried — see StopWork handling in the daemon.
+        # and never silently retried; execute_pending_jobs skips the engagement's
+        # remaining jobs for the rest of the run.
         con.print(
             "[bold red]STOP-WORK — not running this job.[/bold red] "
             f"{redaction.redact_rich_text(str(e))}"
@@ -305,8 +300,8 @@ def _execute_one(
         finish(Phase.FAILED, "claim_failed", e.category, str(e))
         return
     except Exception as e:
-        # Daemon boundary: an unclassified claim failure must not kill the poll
-        # loop or wrongly mark another runner's job failed. Logged for triage.
+        # Batch boundary: an unclassified claim failure must not abort the rest of
+        # the run or wrongly mark another runner's job failed. Logged for triage.
         safe = redaction.redact_exception(e)
         logging.warning("Unclassified claim failure for job %s: %s", job_id, safe)
         con.print(
@@ -473,30 +468,24 @@ def execute_pending_jobs(
     client: api.VardrMapClient,
     con: Console,
     yes: bool = True,
-    blocked_engagements: MutableMapping[str, float] | None = None,
     *,
-    monotonic: Callable[[], float] = time.monotonic,
     journal_store: Journal | None = None,
     backend_url: str | None = None,
     limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
     client_factory: Callable[[], api.VardrMapClient] | None = None,
-    should_stop: Callable[[], bool] | None = None,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
-    ``blocked_engagements`` maps engagements whose stop-work switch is engaged
-    to the monotonic time when they should be checked again. Pass a mapping that
-    outlives the call (the daemon does) to avoid a refusal every poll while still
-    discovering when the operator lifts stop-work. Omit it and suppression lasts
-    for this batch only.
+    An engagement whose stop-work switch refuses a claim has its remaining jobs skipped for
+    the rest of this run, so one halt is reported once instead of once per job. The next
+    `jobs run` asks again, which is how lifting stop-work takes effect.
     """
     jobs_list = client.pending_jobs()
     if not jobs_list:
         return 0
 
-    blocked = blocked_engagements if blocked_engagements is not None else {}
+    blocked: set[str] = set()
     blocked_lock = threading.Lock()
-    now = monotonic()
 
     con.print(
         f"Found [bold]{len(jobs_list)}[/bold] pending job(s) · "
@@ -505,25 +494,19 @@ def execute_pending_jobs(
 
     def execute_group(group: list[dict], worker_client: api.VardrMapClient) -> None:
         for job in group:
-            if should_stop is not None and should_stop():
-                return
             execute_job(job, worker_client)
 
     def execute_job(job: dict, worker_client: api.VardrMapClient) -> None:
         engagement_id = str(job.get("engagement_id") or "")
         with blocked_lock:
-            retry_at = blocked.get(engagement_id, 0.0) if engagement_id else 0.0
-        if retry_at > now:
-            remaining = max(1, int(retry_at - now))
+            halted = bool(engagement_id) and engagement_id in blocked
+        if halted:
             con.print(
                 f"[dim]Skipping job {redaction.redact_rich_text(str(job.get('id', ''))[:8])}… — "
-                "stop-work recheck for engagement "
-                f"{redaction.redact_rich_text(engagement_id)} in {remaining}s.[/dim]"
+                f"stop-work is engaged for engagement {redaction.redact_rich_text(engagement_id)}."
+                "[/dim]"
             )
             return
-        if engagement_id:
-            with blocked_lock:
-                blocked.pop(engagement_id, None)
         try:
             _execute_one(
                 worker_client,
@@ -535,16 +518,12 @@ def execute_pending_jobs(
                 limits=limits,
             )
         except errors.StopWorkError:
-            # Reported already by _execute_one. Remember the engagement so the
-            # daemon does not re-claim and re-refuse it on every poll, but set a
-            # bounded recheck so lifting stop-work restores availability.
+            # Reported already by _execute_one. Don't claim this engagement's other
+            # jobs only to have each refused the same way.
             if engagement_id:
                 with blocked_lock:
-                    blocked[engagement_id] = monotonic() + STOP_WORK_RECHECK_SECONDS
-            con.print(
-                "[yellow]No further jobs will be claimed for this engagement "
-                f"for {int(STOP_WORK_RECHECK_SECONDS)}s, then it will be rechecked.[/yellow]"
-            )
+                    blocked.add(engagement_id)
+            con.print("[yellow]Skipping this engagement's remaining jobs in this run.[/yellow]")
 
     groups: dict[str, list[dict]] = {}
     for index, job in enumerate(jobs_list):

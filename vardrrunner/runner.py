@@ -41,8 +41,8 @@ ALLOWED_TOOLS = {
     "vardrgate_api_test": "vardrgate",
 }
 
-# Wall-clock ceiling for a single tool run. A hung tool must never freeze the
-# daemon forever — the run is killed and the job marked failed. Override per run
+# Wall-clock ceiling for a single tool run. A hung tool must never freeze a
+# run forever — the run is killed and the job marked failed. Override per run
 # (job config `timeout`) or globally via the VARDRRUNNER_TOOL_TIMEOUT env var.
 DEFAULT_TOOL_TIMEOUT = 1800  # 30 minutes
 

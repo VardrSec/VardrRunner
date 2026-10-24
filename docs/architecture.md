@@ -65,7 +65,6 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/recovery.py` | Reconciliation of interrupted jobs during explicit queue execution. Resumes known-safe artifact uploads, retries finalization, and refuses automatic replay when an upload outcome is ambiguous. |
 | `vardrrunner/manifests.py` | Streaming SHA-256 artifact hashes and atomic, permission-restricted JSON manifests/exports. |
 | `vardrrunner/identity.py` | Stable per-installation UUID + human label. Uses exclusive first creation, fails closed on corruption, and supports a `VARDRRUNNER_NAME` deployment override. |
-| `vardrrunner/service.py` | Legacy status/removal plans and argv-only native manager execution for systemd, launchd, and Windows Scheduled Tasks. No registration generation or installation. |
 | `vardrrunner/compatibility.py` | Version/capability advertisement and total evaluation of optional backend constraints. Legacy responses remain compatible; definite mismatches block queue claims. |
 | `vardrrunner/resources.py` | Bounded environment-driven target, artifact, concurrency, and free-disk policy shared by direct, pipeline, and queue execution. |
 | `vardrrunner/shell.py` | Interactive console for a bare `vardrrunner` at a terminal: banner, line splitting, `use`/`back` engagement defaults (Click `default_map`), optional `prompt_toolkit` completion with in-memory history. Every line runs through the same Typer app as a one-shot call; nothing runs between lines (ADR 0017). |
@@ -85,11 +84,9 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
-| `vardrrunner/commands/service.py` | `service status|uninstall` — inspect and remove legacy startup. `install` rejects requests. |
 | `vardrrunner/commands/updates.py` | `update` — install the newest release in the foreground with pipx (`updates.upgrade_argv`/`run_upgrade`), confirm it from an isolated interpreter, or name the installer's command for uv/virtualenv installs; `update check` — report only. Both always ask the registry. Nothing installs unless the operator runs `update`. |
 | `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, tool installation, and doctor into one idempotent guided/provisioning workflow. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
-| `vardrrunner/commands/daemon.py` | `daemon stop|status` — inspect and stop legacy processes. `start` rejects requests. |
 | `vardrrunner/commands/heartbeat.py` | `heartbeat` — send a single heartbeat. |
 | `vardrrunner/commands/status.py` | `status` — local config, version, and each tool's source (managed / PATH / missing) (quick glance). |
 | `vardrrunner/commands/test_cases.py` | `test-cases draft|save` - draft VardrGate cases from observed operations or OpenAPI into a never-overwritten review file, refuse literal credentials, and save only with `--reviewed`. |
@@ -134,15 +131,14 @@ The backend marks a
 runner **online** if `last_seen` is within 5 minutes. Heartbeats are upserted per
 `(owner, hostname)`, so multiple machines show up independently in the backend's Bridge.
 
-## Manual execution and legacy cleanup
+## Manual execution
 `run`, `pipeline run`, and `jobs run` execute in the foreground only when invoked.
-No command registers startup, creates a detached worker, or polls continuously.
-`daemon start` and `service install` reject every invocation, including legacy flags.
-`init` rejects legacy service options before changing auth or local state.
+No command registers startup, creates a detached worker, or polls continuously. The
+`daemon` and `service` commands were removed in v0.51.0 (ADR 0016 amendment); leftover
+registrations from 0.47.0 or earlier are removed by hand (see `docs/cli.md`).
 
-`daemon stop|status` and `service uninstall|status` remain for older installations.
-Service plans contain only removal and status commands. Windows process liveness uses
-a ctypes probe because `os.kill(pid, 0)` would terminate a Windows process.
+A stop-work refusal skips the engagement's remaining jobs for the rest of that run; the
+next `jobs run` asks the backend again.
 
 Queue concurrency defaults to one and may be raised to eight. Pending work is grouped by
 engagement: groups may run in parallel, but jobs inside one group are sequential. Each
@@ -167,16 +163,12 @@ Local state lives under `~/.vardrmap/`:
 - `runs/` — atomically unique timestamp-prefixed tool output directories, pruned after 7 days
 - `runner-journal.sqlite3` — sanitized execution state and recovery metadata (SQLite/WAL)
 - `runner-identity.json` — stable installation UUID, name, and original hostname
-- `daemon.jsonl` — legacy service log, potentially retained from older installations
 - `update-check.json` — public release metadata cache (24-hour TTL; no credentials)
 
 Completed job run directories also contain `manifest.json` with provenance, lifecycle
 timestamps, artifact SHA-256/size, warnings, and failure category. Manifests and audit
 exports pass through the same redaction layer as terminal and backend output. Raw targets,
 API keys, identity credentials, request bodies, and headers are never journaled.
-
-A legacy daemon may also leave a PID file, `~/.vardrrunner.pid`, which is deliberately
-outside `~/.vardrmap/` — it belongs to the runner process, not to a backend's config.
 
 `login` **fails closed**: with no OS keychain it refuses to write a cleartext key unless
 `--allow-plaintext-credentials` is passed, because the machines without a keyring backend

@@ -1,6 +1,6 @@
 # ADR 0011: Stable runner identity and native user-service management
 
-- **Status:** Service portions superseded by [ADR 0016](0016-explicit-daemon-execution.md); other decisions accepted
+- **Status:** Service portions superseded by [ADR 0016](0016-explicit-daemon-execution.md) (service code removed in v0.51.0); identity decisions accepted
 - **Date:** 2026-08-18
 
 ## Context
@@ -40,3 +40,9 @@ never shell strings.
   VardrRunner under their established enterprise supervisor instead.
 - Identity files, unit files, and logs remain local operational state and must be included
   in host backup/retention policy where required.
+
+## Amendment (2026-10-24): service code removed
+
+v0.51.0 deleted `service.py` and the `service status|uninstall` commands. The identity
+decisions above stay in effect. Removing an old registration is now a manual step,
+documented in `docs/cli.md` under "Upgrading from 0.47.0 or earlier".

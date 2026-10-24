@@ -310,7 +310,7 @@ def install(name: str, *, force: bool = False) -> InstallResult:
             os.replace(staged, target)
         except PermissionError as exc:
             raise ToolchainError(
-                f"could not replace {target}; stop the daemon or any running {name} and retry"
+                f"could not replace {target}; stop any running {name} and retry"
             ) from exc
 
         lock[name] = {

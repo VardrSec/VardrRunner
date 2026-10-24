@@ -6,8 +6,8 @@ vardrrunner.errors.RunnerError subclasses, so callers can distinguish a
 stop-work refusal from a claim race without inspecting status codes.
 
 The session retries transient failures (connection errors and 429/5xx) with
-exponential backoff so a long-running daemon survives network blips and brief
-backend restarts. Retries are limited to idempotent methods (urllib3's default:
+exponential backoff so a `jobs run` survives network blips and brief backend
+restarts. Retries are limited to idempotent methods (urllib3's default:
 GET/HEAD/PUT/DELETE/OPTIONS/TRACE) — POST and PATCH are never auto-retried, so a
 dropped response can't cause a double-claim, double-import, or duplicate event.
 """

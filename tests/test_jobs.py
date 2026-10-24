@@ -248,7 +248,7 @@ def test_run_jobs_marks_failed_on_tool_timeout(tmp_path):
             side_effect=ToolTimeout("httpx timed out after 1s and was killed"),
         ),
     ):
-        jobs_cmd.run_jobs(yes=True)  # must not raise — the daemon survives a hung tool
+        jobs_cmd.run_jobs(yes=True)  # must not raise — the run survives a hung tool
 
     client.claim_job.assert_called_once_with("job-timeout")
     assert client.complete_job.call_args[0][:2] == ("job-timeout", "failed")
@@ -533,34 +533,3 @@ def test_run_jobs_generic_exception_marks_failed(tmp_path):
         jobs_cmd.run_jobs(yes=True)
 
     assert client.complete_job.call_args[0][1] == "failed"
-
-
-def test_stop_request_prevents_claiming_the_next_job(tmp_path):
-    jobs = [
-        {
-            "id": f"job-{index}",
-            "engagement_id": "prog-1",
-            "tool_type": "httpx",
-            "target_source": "scope",
-            "config": {},
-        }
-        for index in range(2)
-    ]
-    client = MagicMock()
-    client.pending_jobs.return_value = jobs
-    client.scope.return_value = {"in": [{"value": "app.example.com"}], "out": []}
-    client.claim_job.return_value = {}
-
-    with (
-        patch("vardrrunner.commands.jobs.runner.tool_available", return_value=True),
-        patch("vardrrunner.commands.jobs._make_run_dir", return_value=tmp_path),
-        patch("vardrrunner.commands.jobs.runner.run_httpx"),
-    ):
-        jobs_cmd.execute_pending_jobs(
-            client,
-            MagicMock(),
-            yes=True,
-            should_stop=lambda: client.claim_job.call_count >= 1,
-        )
-
-    client.claim_job.assert_called_once_with("job-0")
