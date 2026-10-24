@@ -22,8 +22,8 @@ Interactive console. No backend change required. See
 
 ### Changed
 
-- A bare `vardrrunner` in a script or pipe still prints help and exits 2; only an
-  interactive terminal gets the console.
+- A bare `vardrrunner` at a terminal opens the console instead of printing help. In a
+  script, pipe or CI job (no terminal) it still prints help and exits 2.
 
 ## [0.50.0] — 2026-10-24
 

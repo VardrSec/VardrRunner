@@ -420,6 +420,26 @@ class TestCompletion:
         assert completes is False
 
 
+class TestRealPromptSession:
+    def test_prompt_toolkit_session_reads_and_runs_lines(self):
+        """Drive `run` through a real PromptSession and completer, not a stub reader."""
+        from prompt_toolkit.application import create_app_session
+        from prompt_toolkit.input import create_pipe_input
+        from prompt_toolkit.output import DummyOutput
+
+        with (
+            create_pipe_input() as pipe,
+            create_app_session(input=pipe, output=DummyOutput()),
+            patch("vardrrunner.commands.heartbeat.send_heartbeat") as send,
+        ):
+            pipe.send_text("heartbeat\r")
+            pipe.send_text(f"use {ENGAGEMENT}\r")
+            pipe.send_text("exit\r")
+            shell.run(app)
+        send.assert_called_once()
+        assert shell.is_running() is False
+
+
 class TestRun:
     def _run(self, lines, completes=False):
         feed = iter(lines)
