@@ -44,7 +44,7 @@ def test_interactive_missing_auth_uses_login_and_prompts(monkeypatch):
         monkeypatch.setenv(config.ENV_API_KEY, "vmap_secret")
 
     with (
-        patch("vardrrunner.commands.setup.auth.login_vardrmap", side_effect=login) as login_mock,
+        patch("vardrrunner.commands.setup.auth.login", side_effect=login) as login_mock,
         patch("vardrrunner.commands.setup.typer.prompt", return_value="desk-runner"),
         patch("vardrrunner.commands.setup.typer.confirm", return_value=False),
         patch("vardrrunner.commands.setup.doctor.run_doctor", side_effect=_healthy_doctor),
@@ -56,7 +56,7 @@ def test_interactive_missing_auth_uses_login_and_prompts(monkeypatch):
 
 def test_noninteractive_missing_or_partial_auth_fails_without_prompt():
     with (
-        patch("vardrrunner.commands.setup.auth.login_vardrmap") as login,
+        patch("vardrrunner.commands.setup.auth.login") as login,
         pytest.raises(typer.Exit),
     ):
         setup.initialize(non_interactive=True)
@@ -67,7 +67,7 @@ def test_noninteractive_missing_or_partial_auth_fails_without_prompt():
 
 def test_login_that_does_not_leave_usable_auth_fails_cleanly():
     with (
-        patch("vardrrunner.commands.setup.auth.login_vardrmap"),
+        patch("vardrrunner.commands.setup.auth.login"),
         pytest.raises(typer.Exit),
     ):
         setup.initialize(api_url="https://api.example.com", api_key="vmap_secret")

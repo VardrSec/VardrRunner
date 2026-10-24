@@ -189,7 +189,7 @@ tool archives — the test suite never does.
 ## Configuration during development
 The CLI reads/writes `~/.vardrmap/config.json`. To point at a local backend:
 ```bash
-vardrrunner login vardrmap     # enter http://localhost:8000 and a dev API key
+vardrrunner login              # enter http://localhost:8000 and a dev API key
 ```
 `http://localhost` is accepted; any other host must be `https://` (the runner refuses to
 send the key over plain HTTP). Delete `~/.vardrmap/config.json` to reset auth.

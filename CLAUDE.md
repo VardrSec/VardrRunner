@@ -100,18 +100,18 @@ Autofix: `ruff check --fix vardrrunner tests && ruff format vardrrunner tests`
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-vardrrunner login vardrmap
+vardrrunner init
 vardrrunner heartbeat
 vardrrunner jobs run   # one-shot; nothing runs in the background
 ```
 
 ## Commands
-- `login vardrmap` — authenticate; store key in OS keychain
+- `login` — save or replace the API key in the OS keychain without re-running setup (`init` is first-time setup)
 - `init` — guided/provisioned auth, identity, and doctor acceptance gate; never installs a startup service (the old `--install-service`/`--start-service`/`--env-file` options are gone, so they fail as unknown options)
 - `logout` — remove credentials, keep URL
 - `whoami` — identity behind the configured key
 - `credentials` — credential source/posture; never shows the key
-- `engagements` — list engagements (`programs` kept as a hidden alias)
+- `engagements` — list engagements
 - `scope <engagement-id>` — show in/out-of-scope items
 - `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau|ffuf|dalfox` — run tool locally, upload results
 - `pipeline list|run <name>` — chain tools (`recon`, `quick`, `deep`, `ports`, `content`)
@@ -134,8 +134,8 @@ vardrrunner jobs run   # one-shot; nothing runs in the background
   make (human review; an immutable client-facing document), unlike the scope/delete set, which
   is withheld to bound a compromised agent. Draft and read; stop where a human commits
 
-Every engagement-scoped command takes `--engagement <uuid>`, with `--program`/`-p` as
-back-compat aliases.
+Every engagement-scoped command takes `--engagement <uuid>` (short form `-e`). Messages
+point first-time setup at `init` and a rejected or expired key at `login`.
 
 ## Real-binary smoke tests
 `tests/test_smoke_*.py` run the actual pinned tools against a `127.0.0.1` fixture and are

@@ -1,4 +1,4 @@
-"""Tests for auth commands: login_vardrmap, logout, whoami."""
+"""Tests for auth commands: login, logout, whoami."""
 
 import os
 from unittest.mock import MagicMock, patch
@@ -9,7 +9,7 @@ import typer
 from vardrrunner.commands import auth
 
 
-class TestLoginVardrmap:
+class TestLogin:
     def _run(self, url="https://api.example.com", key="vmap_validkey", whoami_return=None):
         whoami_return = whoami_return or {"username": "jorge", "github_id": 1}
         client = MagicMock()
@@ -21,7 +21,7 @@ class TestLoginVardrmap:
             patch("vardrrunner.commands.auth.keychain.set_key", return_value=True),
             patch("vardrrunner.commands.auth.config.save_url"),
         ):
-            auth.login_vardrmap(api_url=url, api_key=key)
+            auth.login(api_url=url, api_key=key)
         return client
 
     def test_successful_login_with_keychain(self):
@@ -30,7 +30,7 @@ class TestLoginVardrmap:
 
     def test_invalid_key_prefix_exits(self):
         with pytest.raises(typer.Exit):
-            auth.login_vardrmap(api_url="https://api.example.com", api_key="bad_key")
+            auth.login(api_url="https://api.example.com", api_key="bad_key")
 
     def test_invalid_url_exits(self):
         with (
@@ -40,7 +40,7 @@ class TestLoginVardrmap:
             ),
         ):
             with pytest.raises((typer.Exit, Exception)):
-                auth.login_vardrmap(api_url="not-a-url", api_key="vmap_validkey")
+                auth.login(api_url="not-a-url", api_key="vmap_validkey")
 
     def test_auth_failure_exits(self):
         client = MagicMock()
@@ -50,7 +50,7 @@ class TestLoginVardrmap:
             patch("vardrrunner.commands.auth.api.VardrMapClient", return_value=client),
         ):
             with pytest.raises(typer.Exit):
-                auth.login_vardrmap(api_url="https://api.example.com", api_key="vmap_validkey")
+                auth.login(api_url="https://api.example.com", api_key="vmap_validkey")
 
     def test_falls_back_to_config_when_no_keychain(self):
         client = MagicMock()
@@ -61,7 +61,7 @@ class TestLoginVardrmap:
             patch("vardrrunner.commands.auth.keychain.available", return_value=False),
             patch("vardrrunner.commands.auth.config.save") as mock_save,
         ):
-            auth.login_vardrmap(
+            auth.login(
                 api_url="https://api.example.com",
                 api_key="vmap_validkey",
                 allow_plaintext=True,
@@ -78,7 +78,7 @@ class TestLoginVardrmap:
             patch("vardrrunner.commands.auth.config.save") as save,
             pytest.raises(typer.Exit),
         ):
-            auth.login_vardrmap(api_url="https://api.example.com", api_key="vmap_validkey")
+            auth.login(api_url="https://api.example.com", api_key="vmap_validkey")
         save.assert_not_called()
 
     def test_keychain_is_rolled_back_when_url_save_fails(self):
@@ -93,7 +93,7 @@ class TestLoginVardrmap:
             patch("vardrrunner.commands.auth.keychain.delete_key") as delete,
             pytest.raises(typer.Exit),
         ):
-            auth.login_vardrmap(api_url="https://api.example.com", api_key="vmap_validkey")
+            auth.login(api_url="https://api.example.com", api_key="vmap_validkey")
         delete.assert_called_once_with("https://api.example.com")
 
     def test_plaintext_save_failure_exits_cleanly(self):
@@ -106,7 +106,7 @@ class TestLoginVardrmap:
             patch("vardrrunner.commands.auth.config.save", side_effect=OSError("disk full")),
             pytest.raises(typer.Exit),
         ):
-            auth.login_vardrmap(
+            auth.login(
                 api_url="https://api.example.com",
                 api_key="vmap_validkey",
                 allow_plaintext=True,
@@ -122,7 +122,7 @@ class TestLoginVardrmap:
             ),
         ):
             with pytest.raises(typer.Exit):
-                auth.login_vardrmap(api_url="http://bad.example.com", api_key="vmap_validkey")
+                auth.login(api_url="http://bad.example.com", api_key="vmap_validkey")
 
 
 class TestLogout:
@@ -196,3 +196,37 @@ class TestWhoami:
         ):
             with pytest.raises(typer.Exit):
                 auth.whoami()
+
+
+class TestLoginUrlPrompt:
+    """`login` replaces a key, so the URL prompt defaults to the saved backend."""
+
+    def _login_with_prompts(self, saved_url):
+        client = MagicMock()
+        client.whoami.return_value = {"username": "jorge", "github_id": 1}
+        prompts = []
+
+        def prompt(text, default=None, **_kwargs):
+            prompts.append((text, default))
+            return default if "URL" in text else "vmap_newkey"
+
+        with (
+            patch("vardrrunner.commands.auth.config.get_api_url", return_value=saved_url),
+            patch("vardrrunner.commands.auth.typer.prompt", side_effect=prompt),
+            patch("vardrrunner.commands.auth.config.validate_api_url"),
+            patch("vardrrunner.commands.auth.api.VardrMapClient", return_value=client) as made,
+            patch("vardrrunner.commands.auth.keychain.available", return_value=True),
+            patch("vardrrunner.commands.auth.keychain.set_key", return_value=True),
+            patch("vardrrunner.commands.auth.config.save_url"),
+        ):
+            auth.login(api_url=None, api_key=None, allow_plaintext=False)
+        return prompts, made
+
+    def test_defaults_to_the_saved_url(self):
+        prompts, made = self._login_with_prompts("https://saved.example.com")
+        assert prompts[0] == ("VardrMap API URL", "https://saved.example.com")
+        made.assert_called_once_with("https://saved.example.com", "vmap_newkey")
+
+    def test_no_saved_url_has_an_empty_default(self):
+        prompts, _ = self._login_with_prompts(None)
+        assert prompts[0] == ("VardrMap API URL", "")

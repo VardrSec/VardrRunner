@@ -118,7 +118,7 @@ class TestEngagement:
     def test_typed_engagement_wins(self, session):
         session.handle(f"use {ENGAGEMENT}")
         with patch("vardrrunner.commands.imports.import_file") as import_file:
-            session.handle(f"import nuclei -p {OTHER} -f out.jsonl")
+            session.handle(f"import nuclei -e {OTHER} -f out.jsonl")
         assert import_file.call_args.args[1] == OTHER
 
     def test_without_engagement_required_option_still_errors(self, session, capsys):
@@ -301,7 +301,7 @@ class TestBanner:
         monkeypatch.delenv("VARDRMAP_URL", raising=False)
         with patch("vardrrunner.shell.config.load", return_value={}):
             out = self._render(recording_console, choose=_first)
-        assert "Not logged in. Run `login vardrmap`." in out
+        assert "Not set up. Run `init`." in out
 
     def test_cached_update_notice(self, recording_console):
         newer = updates.UpdateStatus(__version__, "99.0.0", True, CHECKED_AT, True)
@@ -407,7 +407,7 @@ class TestCompletion:
         assert "heartbeat" in tree
         assert set(tree["jobs"]) >= {"list", "run"}
         assert "--engagement" in tree["import"]["nuclei"]
-        assert "-p" not in tree["import"]["nuclei"]
+        assert "-e" not in tree["import"]["nuclei"]
 
     def test_tree_omits_hidden_and_blocked_commands(self):
         tree = shell.completion_tree(typer.main.get_command(app))

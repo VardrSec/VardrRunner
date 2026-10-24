@@ -791,14 +791,22 @@ def test_unconfigured_client_surfaces_a_login_hint():
     srv = mcp_server.build_server(client_factory=boom)
     with pytest.raises(ToolError, match="not configured") as exc:
         _call(srv, "list_engagements")
-    assert "vardrrunner login vardrmap" in str(exc.value)
+    assert "vardrrunner init" in str(exc.value)
 
 
-def test_unconfigured_message_does_not_repeat_a_login_hint_already_given():
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Not set up. Run: vardrrunner init (or set VARDRMAP_URL)",
+        "the API key was rejected — run `vardrrunner login`",
+    ],
+)
+def test_unconfigured_message_does_not_repeat_a_hint_already_given(message):
     def boom():
-        raise RuntimeError("Not logged in. Run: vardrrunner login vardrmap (or set VARDRMAP_URL)")
+        raise RuntimeError(message)
 
     srv = mcp_server.build_server(client_factory=boom)
     with pytest.raises(ToolError) as exc:
         _call(srv, "list_engagements")
-    assert str(exc.value).lower().count("login") == 1
+    text = str(exc.value)
+    assert text.count("vardrrunner init") + text.count("vardrrunner login") == 1

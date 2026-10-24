@@ -162,7 +162,7 @@ vardrrunner update check                                      # only check for o
 vardrrunner run subfinder --engagement <engagement-id>        # run a single tool and upload results
 vardrrunner import nuclei --engagement <engagement-id> -f out.jsonl
 ```
-`--engagement` takes the engagement UUID; `--program` and `-p` are accepted as aliases.
+`--engagement` (short form `-e`) takes the engagement UUID.
 
 See **[docs/cli.md](docs/cli.md)** for the full command reference.
 

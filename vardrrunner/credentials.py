@@ -136,5 +136,5 @@ def plaintext_refusal_message(config_file: Path) -> str:
         "  2. Install a keyring backend so the key can be encrypted at rest "
         "(e.g. gnome-keyring or kwallet on Linux).\n\n"
         "  3. Accept cleartext storage explicitly:\n"
-        "       vardrrunner login vardrmap --allow-plaintext-credentials"
+        "       vardrrunner login --allow-plaintext-credentials"
     )

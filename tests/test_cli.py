@@ -28,6 +28,12 @@ def invoke(*args):
     return runner.invoke(app, list(args))
 
 
+def plain(output: str) -> str:
+    """Help text without ANSI escapes. Typer forces color on GitHub Actions, which splits
+    option names and borders with escape codes."""
+    return re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\]8;[^\x1b]*\x1b\\\\", "", output)
+
+
 # ---------------------------------------------------------------------------
 # Top-level commands
 # ---------------------------------------------------------------------------
@@ -269,12 +275,11 @@ class TestToolsCommands:
 
 class TestUpdateCommands:
     def test_check_options(self):
-        # --force is still accepted, so existing scripts keep working; checks are always fresh.
         with (
             patch("vardrrunner.commands.updates.check") as mock,
             patch("vardrrunner.commands.updates.upgrade") as upgrade,
         ):
-            result = invoke("update", "check", "--force", "--json")
+            result = invoke("update", "check", "--json")
         assert result.exit_code == 0
         mock.assert_called_once_with(as_json=True)
         upgrade.assert_not_called()  # the group callback must never install on `update check`
@@ -309,8 +314,8 @@ class TestAuditCommands:
 # ---------------------------------------------------------------------------
 
 
-class TestProgramListCommand:
-    def test_programs_alias(self):
+class TestEngagementsCommand:
+    def test_engagements(self):
         with patch("vardrrunner.commands.engagements.list_engagements") as mock:
             invoke("engagements")
         mock.assert_called_once()
@@ -465,7 +470,7 @@ class TestRunCommands:
             invoke(
                 "run",
                 "ffuf",
-                "-p",
+                "-e",
                 "p1",
                 "--from-recon",
                 "--limit",
@@ -499,7 +504,7 @@ class TestRunCommands:
     def test_run_ffuf_rejects_an_out_of_range_rate(self, rate):
         """The rate cap is a safety control, so its bounds are enforced at the CLI."""
         with patch("vardrrunner.commands.run.run_ffuf") as mock:
-            result = invoke("run", "ffuf", "-p", "p1", "--scope", "--rate", rate)
+            result = invoke("run", "ffuf", "-e", "p1", "--scope", "--rate", rate)
         assert result.exit_code != 0
         mock.assert_not_called()
 
@@ -525,7 +530,7 @@ class TestRunCommands:
             invoke(
                 "run",
                 "dalfox",
-                "-p",
+                "-e",
                 "p1",
                 "--target",
                 "https://a.test/?q=1",
@@ -557,7 +562,7 @@ class TestRunCommands:
     def test_run_dalfox_rejects_out_of_range_load_controls(self, flag, value):
         """These bound the traffic a job puts on a client's host."""
         with patch("vardrrunner.commands.run.run_dalfox") as mock:
-            result = invoke("run", "dalfox", "-p", "p1", "--scope", flag, value)
+            result = invoke("run", "dalfox", "-e", "p1", "--scope", flag, value)
         assert result.exit_code != 0
         mock.assert_not_called()
 
@@ -577,7 +582,7 @@ class TestRunCommands:
             invoke(
                 "run",
                 "gau",
-                "-p",
+                "-e",
                 "p1",
                 "--no-subs",
                 "--providers",
@@ -864,6 +869,53 @@ class TestTestCasesCommands:
         mock.assert_not_called()
 
 
+class TestRenamedAndRemovedNames:
+    """v0.52.0 dropped the names left from when engagements were "programs", and flattened
+    `login vardrmap` to `login`. The old forms must fail before anything runs."""
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("programs",),
+            ("run", "httpx", "--program", "eng-1", "--scope"),
+            ("run", "httpx", "-p", "eng-1", "--scope"),
+            ("import", "nuclei", "--program", "eng-1", "-f", "out.jsonl"),
+            ("update", "check", "--force"),
+            ("login", "vardrmap"),
+        ],
+    )
+    def test_old_forms_fail_and_run_nothing(self, args):
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            blocked = [
+                stack.enter_context(patch(target))
+                for target in (
+                    "vardrrunner.commands.engagements.list_engagements",
+                    "vardrrunner.commands.run.run_httpx",
+                    "vardrrunner.commands.imports.import_file",
+                    "vardrrunner.commands.updates.check",
+                    "vardrrunner.commands.auth.api.VardrMapClient",
+                )
+            ]
+            result = invoke(*args)
+        assert result.exit_code == 2
+        for mock in blocked:
+            mock.assert_not_called()
+
+    def test_short_engagement_option_is_e(self):
+        with patch("vardrrunner.commands.imports.import_file") as mock:
+            result = invoke("import", "nuclei", "-e", "eng-1", "-f", "out.jsonl")
+        assert result.exit_code == 0
+        assert mock.call_args.args[:2] == ("nuclei", "eng-1")
+
+    def test_login_is_a_top_level_command(self):
+        result = invoke("login", "--help")
+        assert result.exit_code == 0
+        for flag in ("--url", "--key", "--allow-plaintext-credentials"):
+            assert flag in plain(result.output)
+
+
 class TestManualInvocationOnly:
     """The background modes were removed (ADR 0016, v0.51.0). Their old entry points must
     fail as unknown commands or options before anything runs."""
@@ -913,10 +965,10 @@ class TestManualInvocationOnly:
         result = invoke("--help")
         assert result.exit_code == 0
         # A command row is a name followed by two or more spaces and its help, whatever
-        # border (`│`, `|`, `┃`, none) Rich draws. Typer forces color on GitHub Actions, so
-        # ANSI escapes are stripped first.
-        plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\]8;[^\x1b]*\x1b\\\\", "", result.output)
-        listed = set(re.findall(r"^[^\w\n]*([a-z][\w-]*)\s{2,}\S", plain, re.MULTILINE))
+        # border (`│`, `|`, `┃`, none) Rich draws.
+        listed = set(
+            re.findall(r"^[^\w\n]*([a-z][\w-]*)\s{2,}\S", plain(result.output), re.MULTILINE)
+        )
         assert {"daemon", "service", "engagement-list"}.isdisjoint(listed)
         assert "engagements" in listed
 

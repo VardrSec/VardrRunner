@@ -46,7 +46,7 @@ def _ensure_auth(
                 "no credentials configured; set VARDRMAP_URL and VARDRMAP_API_KEY or "
                 "provide --url and --key"
             )
-        auth.login_vardrmap(
+        auth.login(
             api_url=api_url,
             api_key=api_key,
             allow_plaintext=allow_plaintext,

@@ -7,6 +7,30 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+Leftover names from when engagements were "programs" are removed, and `login vardrmap` is
+now `login` — **breaking**. No backend change required. See
+[`changelog/unreleased-rename-leftovers.md`](changelog/unreleased-rename-leftovers.md).
+
+### Breaking
+
+- **`--program` and `-p` are removed.** Use `--engagement`, or its new short form `-e`, on
+  `run`, `pipeline run` and `import`.
+- **The hidden `programs` command is removed.** Use `engagements`.
+- **`login vardrmap` is now `login`.** The one-item `login` group is gone; `vardrrunner login`
+  takes the same `--url`, `--key` and `--allow-plaintext-credentials` options.
+- **`update check --force` is removed.** It did nothing: release checks have always asked
+  PyPI since 0.50.0.
+
+### Changed
+
+- `login` is for replacing the key; `init` is first-time setup. Messages say so: "not set
+  up" points to `vardrrunner init`, and a rejected key or broken config points to
+  `vardrrunner login`.
+- `login`'s URL prompt defaults to the saved backend, so replacing a key is one hidden
+  prompt and Enter.
+- The MCP server no longer repeats its setup hint when the error already names
+  `vardrrunner init` or `vardrrunner login`.
+
 ## [0.51.0] — 2026-10-24
 
 Interactive console, and removal of the legacy daemon and service commands —

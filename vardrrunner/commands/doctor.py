@@ -74,7 +74,7 @@ def _check_credentials(production: bool = False) -> list[Check]:
                 "credentials",
                 Health.FAIL,
                 "no API key configured",
-                "Run `vardrrunner login vardrmap`, or set VARDRMAP_URL and VARDRMAP_API_KEY.",
+                "Run `vardrrunner init`, or set VARDRMAP_URL and VARDRMAP_API_KEY.",
             )
         ]
 
@@ -369,7 +369,7 @@ def _collect(production: bool = False) -> list[Check]:
                 "config file",
                 Health.FAIL,
                 redaction.redact_exception(e),
-                f"Delete {config.CONFIG_FILE} or run `vardrrunner login vardrmap` to reset.",
+                f"Delete {config.CONFIG_FILE} or run `vardrrunner login` to reset.",
             )
         )
     checks.append(_check_identity())
