@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.48.0] — 2026-10-23
+
+Manual invocation only — **breaking**: no startup service or background worker. Also adds
+per-job request-rate and custom-header controls, which **pair with VardrMap's** bulk scope
+import / rate-and-header release (#89). See [`changelog/v0.48.0.md`](changelog/v0.48.0.md).
+
 ### Added
 
 - Queued jobs accept a `rate` key for `httpx`, `nuclei` and `katana` (1–1000 requests per
@@ -29,7 +35,7 @@ Per-version detail notes live in [`changelog/`](changelog/).
   `pipeline run`, and one-shot `jobs run` remain available. Legacy `daemon stop|status`
   and `service uninstall|status` remain for cleanup. Upgrading alone does not remove
   existing OS registrations or stop old running processes.
-  See [migration notes](changelog/unreleased-startup-safety.md).
+  See [migration notes](changelog/v0.48.0.md#existing-installations).
 - `tools install` reports what each tool needed: already up to date (no download),
   installed, updated from an older pinned version, repaired (missing or changed binary,
   or one without a receipt), or reinstalled with `--force`, followed by a summary line.
