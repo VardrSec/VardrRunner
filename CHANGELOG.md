@@ -36,6 +36,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
   `--all` also checks nmap and vardrgate, which it cannot install, and says where to
   get them; a missing external tool warns rather than failing the command.
 
+### Fixed
+
+- `vardrrunner mcp` without the optional `mcp` extra prints its install hint and exits 1
+  instead of crashing with a `ModuleNotFoundError` traceback. The SDK imports are deferred to
+  server construction, so the old guard around importing the module never fired.
+
 ## [0.47.0] — 2026-10-14
 
 API assessment binding, shared guidance and identity/session preflight. Gate

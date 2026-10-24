@@ -5,6 +5,7 @@ Runs security tooling on the operator's machine and syncs results to a VardrSec
 backend (today: VardrMap) over HTTP. See https://github.com/VardrSec/VardrRunner.
 """
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -80,6 +81,9 @@ def mcp() -> None:
     Serves over stdio. Requires the optional extra: `pip install vardrrunner[mcp]`.
     """
     try:
+        # mcp_server defers its SDK imports to build_server(), so importing it alone succeeds
+        # without the extra. Import the SDK here so a missing extra reaches the hint below.
+        importlib.import_module("mcp.server")
         from vardrrunner import mcp_server
     except ImportError as exc:  # the mcp package (and its deps) are opt-in
         # Escape the [mcp] bracket so Rich prints it literally instead of as a tag.

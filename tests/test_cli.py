@@ -750,6 +750,7 @@ class TestMcpCommand:
         from unittest.mock import MagicMock
 
         fake_mod = MagicMock()
+        monkeypatch.setitem(sys.modules, "mcp.server", MagicMock())
         monkeypatch.setitem(sys.modules, "vardrrunner.mcp_server", fake_mod)
         result = invoke("mcp")
         fake_mod.run.assert_called_once_with()
@@ -758,12 +759,14 @@ class TestMcpCommand:
     def test_mcp_without_the_extra_prints_install_hint(self, monkeypatch):
         import sys
 
-        # sys.modules[name] = None makes `from vardrrunner import mcp_server` raise
-        # ImportError, simulating a runner installed without the [mcp] extra.
-        monkeypatch.setitem(sys.modules, "vardrrunner.mcp_server", None)
+        # sys.modules[name] = None makes importing that name raise ImportError. Block only
+        # the SDK and leave the real mcp_server importable: that module imports cleanly
+        # without the extra, which is how a missing extra used to escape as a traceback.
+        monkeypatch.setitem(sys.modules, "mcp.server", None)
         result = invoke("mcp")
         assert result.exit_code == 1
         assert "vardrrunner[mcp]" in result.stdout
+        assert result.exception is None or isinstance(result.exception, SystemExit)
 
 
 class TestTestCasesCommands:
