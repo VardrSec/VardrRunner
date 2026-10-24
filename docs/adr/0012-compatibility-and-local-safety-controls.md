@@ -46,7 +46,7 @@ metadata through `api.py`, writes a 24-hour atomic cache, and never installs sof
 > run it. Release discovery is still never automatic: no other command contacts the
 > registry, and nothing checks in the background.
 
-> **Amendment (2026-10-24, unreleased) — operator-run update.** A day-old cache told an
+> **Amendment (2026-10-24, v0.50.0) — operator-run update.** A day-old cache told an
 > operator "Up to date" hours after a release, and naming a command they then had to retype
 > added nothing. So:
 >
