@@ -913,8 +913,10 @@ class TestManualInvocationOnly:
         result = invoke("--help")
         assert result.exit_code == 0
         # A command row is a name followed by two or more spaces and its help, whatever
-        # border (`│`, `|`, `┃`, none) the environment's Rich rendering draws around it.
-        listed = set(re.findall(r"^[^\w\n]*([a-z][\w-]*)\s{2,}\S", result.output, re.MULTILINE))
+        # border (`│`, `|`, `┃`, none) Rich draws. Typer forces color on GitHub Actions, so
+        # ANSI escapes are stripped first.
+        plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\]8;[^\x1b]*\x1b\\\\", "", result.output)
+        listed = set(re.findall(r"^[^\w\n]*([a-z][\w-]*)\s{2,}\S", plain, re.MULTILINE))
         assert {"daemon", "service", "engagement-list"}.isdisjoint(listed)
         assert "engagements" in listed
 
