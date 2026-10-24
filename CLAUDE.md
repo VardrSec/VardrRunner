@@ -122,9 +122,9 @@ vardrrunner jobs run   # one-shot; nothing runs in the background
 - `daemon stop|status` — stop or inspect a **legacy** worker; `daemon start` always errors, with or without `--run-jobs`/`--detach`
 - `heartbeat` — send single heartbeat
 - `tools install|list|verify|remove|purge` — pinned, verified tool installs in `~/.vardrmap/tools`
-- `status` — installed version (cached release check; outdated → WARN with upgrade command), local config, tool availability and source
-- `doctor` — deep preflight (credentials, disk, identity, journal, tools); exits non-zero on failures (`--json`)
-- `update check` — cached release discovery, also run by `status`; names the upgrade command, never installs. `--version` is offline and only repeats a cached result
+- `status` — installed version (cached release check; outdated → WARN naming `vardrrunner update`), local config, tool availability and source
+- `doctor` — deep preflight (version vs. latest release, credentials, disk, identity, journal, tools); a newer release is a WARN, an unreachable registry never fails it; exits non-zero on failures (`--json`)
+- `update` — installs the newest release in the foreground, pipx installs only (others get the command); `update check` only reports. Both always ask PyPI. `--version` is offline and only repeats a cached result. Never install anything the operator did not ask for with `update` (ADR 0012 amendment)
 - `test-cases draft|save` — draft VardrGate cases from observed operations/OpenAPI into a review file, save only with `--reviewed`
 - `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra.
   Prompts (`brief`/`triage`/`untested`/`methodology`/`retest`/`api_playbook`) are instruction text only — never pre-fetch

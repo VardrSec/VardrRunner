@@ -1,8 +1,10 @@
-"""Cached, opt-in release checks against public package metadata."""
+"""Release checks against public package metadata, and the operator-run upgrade."""
 
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -84,44 +86,102 @@ def cached(
     return _cached(checked_now)
 
 
-def upgrade_command(prefix: str | None = None, base_prefix: str | None = None) -> str:
-    """The command that upgrades this copy, judged from where its interpreter lives.
-
-    Running it stays the operator's decision (ADR 0012); this only names it. A layout that
-    does not identify the installer gets both supported commands, not a confident wrong one.
-    """
+def installer(prefix: str | None = None, base_prefix: str | None = None) -> str | None:
+    """How this copy was installed — "pipx", "uv" or "venv" — judged from where its
+    interpreter lives, or None when the layout does not say."""
     prefix = sys.prefix if prefix is None else prefix
     base_prefix = sys.base_prefix if base_prefix is None else base_prefix
     parts = [part.lower() for part in Path(prefix).parts]
     if "pipx" in parts and "venvs" in parts:
-        return "`pipx upgrade vardrrunner`"
+        return "pipx"
     if "uv" in parts and "tools" in parts:
-        return "`uv tool upgrade vardrrunner`"
+        return "uv"
     if prefix != base_prefix:
-        return "`python -m pip install --upgrade vardrrunner`"
-    return "`pipx upgrade vardrrunner` or `uv tool upgrade vardrrunner`"
+        return "venv"
+    return None
+
+
+def upgrade_command(prefix: str | None = None, base_prefix: str | None = None) -> str:
+    """The installer's own upgrade command for this copy. A layout that does not identify
+    the installer gets both supported commands, not a confident wrong one."""
+    return {
+        "pipx": "`pipx upgrade vardrrunner`",
+        "uv": "`uv tool upgrade vardrrunner`",
+        "venv": "`python -m pip install --upgrade vardrrunner`",
+    }.get(
+        installer(prefix, base_prefix) or "",
+        "`pipx upgrade vardrrunner` or `uv tool upgrade vardrrunner`",
+    )
+
+
+def upgrade_argv() -> list[str] | None:
+    """The argv `vardrrunner update` runs, or None when it should only name the command.
+
+    Only pipx is run: upgrading from inside the running pipx executable is verified on
+    Windows, where the open file is the usual obstacle. pip in a plain virtualenv must
+    replace the very `vardrrunner.exe` that is running, and uv is unverified, so for those
+    the command is printed for the operator instead (ADR 0012 amendment, 2026-10-24).
+    """
+    if installer() != "pipx":
+        return None
+    pipx = shutil.which("pipx")
+    return [pipx, "upgrade", "vardrrunner"] if pipx else None
+
+
+def run_upgrade(argv: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run the installer in the foreground. Output is captured so a harmless pipx note
+    about the shim it cannot overwrite does not read as a failure."""
+    return subprocess.run(
+        argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False
+    )
+
+
+def installed_version() -> str | None:
+    """The version now on disk, read by a fresh interpreter: this process still holds
+    the modules that were loaded before the upgrade replaced them.
+
+    `-I` keeps the working directory and PYTHON* variables off the import path, so a
+    `vardrrunner` folder or stale egg-info where the operator happens to stand can neither
+    answer for, nor run code as, the installed package.
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", "from vardrrunner import __version__; print(__version__)"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    version = result.stdout.strip()
+    return version if result.returncode == 0 and version else None
 
 
 def notice(status: UpdateStatus) -> str:
     """One line naming the newer release and the command that installs it."""
     return (
         f"[yellow]Update available:[/yellow] {status.current} → {status.latest}. "
-        f"Run {upgrade_command()}."
+        "Run `vardrrunner update`."
     )
 
 
 def check(
     *,
     force: bool = False,
+    timeout: int = 10,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> UpdateStatus:
+    """Latest release vs. this copy. `force` skips the 24-hour cache; the explicit commands
+    (`update`, `update check`, `doctor`) always pass it, and every fetch refreshes the cache."""
     checked_now = now()
     if checked_now.tzinfo is None:
         checked_now = checked_now.replace(tzinfo=timezone.utc)
     if not force and (cached := _cached(checked_now)) is not None:
         return cached
     try:
-        payload = api.fetch_release_metadata()
+        payload = api.fetch_release_metadata(timeout=timeout)
         latest = str(payload["info"]["version"])
         result = _status(latest, checked_now.isoformat(), False)
         manifests.write_atomic_json(

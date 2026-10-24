@@ -7,6 +7,22 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+
+- `vardrrunner update` installs the newest release. For a pipx install it runs
+  `pipx upgrade vardrrunner` in the foreground and confirms the new version from a fresh,
+  isolated interpreter; for uv or a plain virtualenv it prints that installer's command
+  instead. It never reports success unless the new version is actually installed. Update
+  notices in `--version`, `status` and `update check` now say `Run vardrrunner update`.
+- `vardrrunner doctor` opens with a `version` check: a newer release is a warning naming
+  `vardrrunner update`; an unreachable registry never makes doctor fail.
+
+### Changed
+
+- `update check` always asks PyPI instead of answering from the 24-hour cache, which could
+  report "Up to date" for hours after a release. `--force` is still accepted and does nothing
+  extra. `status` and `--version` keep using the cache. See the ADR 0012 amendment.
+
 ## [0.49.0] — 2026-10-24
 
 Version visibility: `--version`, a Version section in `status`, and an install-aware upgrade

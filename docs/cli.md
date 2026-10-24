@@ -19,7 +19,7 @@ vardrrunner --version        # or -V: print the installed version and exit
 ```
 
 `--version` makes no network request. If an earlier `status` or `update check` cached a
-newer release (within 24 hours), it adds an `Update available` line with the upgrade command.
+newer release (within 24 hours), it adds an `Update available` line naming `vardrrunner update`.
 
 Every command that acts on an engagement takes `--engagement <uuid>`. `--program` and
 `-p` are accepted as aliases on the same flag, so scripts written before the v0.27.0
@@ -172,10 +172,9 @@ local parts. This is the quick human glance — *"show me where I stand."*
 vardrrunner status
 ```
 
-The Version section runs the same cached release check as `update check`, so it makes at
-most one PyPI request a day. An outdated install shows `WARN` with the newer version and the
-command that upgrades it. An unreachable registry is a warning, never a failure. Nothing
-is installed.
+The Version section runs a cached release check, so it makes at most one PyPI request a
+day. An outdated install shows `WARN` with the newer version and `Run vardrrunner update`.
+An unreachable registry is a warning, never a failure. Nothing is installed.
 
 ---
 
@@ -190,13 +189,16 @@ vardrrunner doctor --json                                  # machine-readable re
 vardrrunner doctor --production                            # strict health profile
 ```
 
-Checks: credential source (env vs file), backend URL validity (HTTPS), config-file
+Checks: installed version against the latest release, credential source (env vs file), backend URL validity (HTTPS), config-file
 permissions, API auth, daemon PID health (running / stale), run-dir writability, free disk,
 effective resource policy, tool versions and sources, and per-pipeline readiness. Output falls back to plain ASCII when the terminal or a redirect can't encode its status symbols (Windows piped output), so a redirected report never crashes.
 **Failures** (no creds, bad URL, auth failure, unwritable run dir, critically low disk, zero
 tools, or a managed tool that **fails hash verification**) set a non-zero exit; missing
 individual tools, unverified `PATH` copies of tools VardrRunner can manage, a missing
-naabu capture library, and low-ish disk are **warnings** that don't block.
+naabu capture library, low-ish disk, and a newer VardrRunner release (`version: 0.48.0,
+update available: 0.49.0`, remediation `Run vardrrunner update`) are **warnings** that don't
+block. The version check always asks PyPI (5-second timeout); if it can't, the line is OK and
+says the check could not run.
 
 `--production` additionally treats plaintext credentials as a failure, raises disk
 thresholds to 1 GiB minimum / 5 GiB warning, verifies the execution journal and stable
@@ -219,19 +221,29 @@ warnings and legacy responses do not.
 
 ---
 
-## `update` — check for runner releases
+## `update` — install or check for runner releases
 
 ```bash
-vardrrunner update check [--force] [--json]
+vardrrunner update                       # install the newest release now
+vardrrunner update check [--json]        # only report whether one exists
 ```
 
-Checks public PyPI metadata and reports whether a newer semantic version exists. Results
-are cached for 24 hours under `~/.vardrmap/update-check.json`; `--force` bypasses the cache.
-This command never installs or upgrades software. When a newer release exists it names the
-upgrade command for how this copy was installed: `pipx upgrade vardrrunner`,
-`uv tool upgrade vardrrunner`, or `python -m pip install --upgrade vardrrunner` in a
-virtualenv. If the install layout is unrecognized, it lists both pipx and uv. Run it after
-reviewing the release.
+Both always ask public PyPI metadata (and refresh the cache under
+`~/.vardrmap/update-check.json` that `status` and `--version` read). `--force` is still
+accepted for old scripts and changes nothing.
+
+`update` installs in the foreground, only when a newer release exists:
+
+- **pipx install** (the documented one): it runs `pipx upgrade vardrrunner`, then confirms
+  the new version from a fresh interpreter: `Updated to VardrRunner 0.49.0.` `pipx upgrade`
+  keeps packages added with `pipx inject`, such as the `mcp` extra.
+- **uv, a plain virtualenv, or an unrecognized layout**: it prints the command for that
+  installer (`uv tool upgrade vardrrunner`, `python -m pip install --upgrade vardrrunner`)
+  and exits 1 without installing. pip would have to replace the running `vardrrunner.exe`.
+- If the installer fails, or exits 0 but leaves the old version, `update` shows its output
+  and exits non-zero.
+
+Nothing updates on its own: only typing `vardrrunner update` installs anything.
 
 ---
 

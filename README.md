@@ -153,7 +153,8 @@ vardrrunner jobs run                                          # claim + execute 
 vardrrunner audit list                                        # inspect durable local job evidence
 vardrrunner identity set-name chicago-runner-1                # durable human label
 vardrrunner --version                                         # installed version
-vardrrunner update check                                      # check; never auto-install
+vardrrunner update                                            # install the newest release (pipx)
+vardrrunner update check                                      # only check for one
 vardrrunner run subfinder --engagement <engagement-id>        # run a single tool and upload results
 vardrrunner import nuclei --engagement <engagement-id> -f out.jsonl
 ```

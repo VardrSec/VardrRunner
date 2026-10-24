@@ -46,6 +46,28 @@ metadata through `api.py`, writes a 24-hour atomic cache, and never installs sof
 > run it. Release discovery is still never automatic: no other command contacts the
 > registry, and nothing checks in the background.
 
+> **Amendment (2026-10-24, unreleased) — operator-run update.** A day-old cache told an
+> operator "Up to date" hours after a release, and naming a command they then had to retype
+> added nothing. So:
+>
+> - **`vardrrunner update`** (bare) installs the newest release in the foreground. It runs
+>   only `pipx upgrade vardrrunner`, resolved with `shutil.which` and passed as an argv
+>   (no shell), and only for a pipx install: upgrading from inside the running pipx
+>   executable is verified on Windows. A plain-virtualenv pip upgrade would have to replace
+>   the running `vardrrunner.exe`, and uv is unverified, so those installs get the command
+>   printed and exit 1. It reports success only when a fresh, isolated (`-I`) interpreter
+>   reads the release it was upgrading to; anything else is reported with the installer's
+>   output and a non-zero exit.
+> - **`update`, `update check` and `doctor` always ask the registry** (and refresh the cache).
+>   `update check --force` is accepted and does nothing extra. `doctor` reports a newer
+>   release as a `version` WARN naming `vardrrunner update` (5-second timeout); an unreachable
+>   registry is an OK line saying the check could not run, so it never makes a machine look
+>   unhealthy. `status` keeps the 24-hour cache and `--version` stays offline.
+> - Update notices everywhere now say `Run vardrrunner update`.
+>
+> This does not reverse the rejection of *automatic* self-update below: nothing installs
+> unless the operator types `vardrrunner update`, and nothing runs in the background.
+
 ## Consequences
 
 - Old backends remain usable and can adopt compatibility constraints incrementally.

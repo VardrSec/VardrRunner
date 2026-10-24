@@ -59,14 +59,11 @@ class TestVersionOption:
         from vardrrunner import updates
 
         newer = updates.UpdateStatus("0.1.0", "9.9.9", True, "2026-10-24T00:00:00+00:00", True)
-        with (
-            patch("vardrrunner.cli.updates.cached", return_value=newer),
-            patch("vardrrunner.updates.upgrade_command", return_value="`pipx upgrade vardrrunner`"),
-        ):
+        with patch("vardrrunner.cli.updates.cached", return_value=newer):
             result = invoke("--version")
         assert result.exit_code == 0
         assert "Update available: 0.1.0 → 9.9.9" in result.stdout
-        assert "pipx upgrade vardrrunner" in result.stdout
+        assert "vardrrunner update" in result.stdout
 
     def test_up_to_date_cache_adds_nothing(self):
         from vardrrunner import __version__, updates
@@ -260,9 +257,21 @@ class TestServiceCommands:
 
 class TestUpdateCommands:
     def test_check_options(self):
-        with patch("vardrrunner.commands.updates.check") as mock:
-            invoke("update", "check", "--force", "--json")
-        mock.assert_called_once_with(force=True, as_json=True)
+        # --force is still accepted, so existing scripts keep working; checks are always fresh.
+        with (
+            patch("vardrrunner.commands.updates.check") as mock,
+            patch("vardrrunner.commands.updates.upgrade") as upgrade,
+        ):
+            result = invoke("update", "check", "--force", "--json")
+        assert result.exit_code == 0
+        mock.assert_called_once_with(as_json=True)
+        upgrade.assert_not_called()  # the group callback must never install on `update check`
+
+    def test_bare_update_installs(self):
+        with patch("vardrrunner.commands.updates.upgrade") as upgrade:
+            result = invoke("update")
+        assert result.exit_code == 0
+        upgrade.assert_called_once_with()
 
 
 class TestAuditCommands:
