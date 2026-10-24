@@ -1,15 +1,15 @@
 """
 vardrrunner status — show whether the local runner is ready to work.
 
-Checks config, API connectivity, and local tool availability without
-crashing on missing config or network errors.
+Checks the installed version, config, API connectivity, and local tool
+availability without crashing on missing config or network errors.
 """
 
 import requests
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import api, config, redaction, runner, toolchain
+from vardrrunner import __version__, api, config, redaction, runner, toolchain, updates
 
 console = Console()
 
@@ -30,6 +30,31 @@ def run_status() -> None:
 
     console.print()
     console.print("[bold]VardrRunner Status[/bold]")
+
+    # ------------------------------------------------------------------
+    # Version
+    # ------------------------------------------------------------------
+    # Asking for status is an explicit request, so it may run the cached release check
+    # (one registry request a day at most, ADR 0012). It never installs, and an unreachable
+    # registry is a warning: release discovery must not fail a health check.
+    version_table = Table(show_header=False, box=None, padding=(0, 1))
+    try:
+        release = updates.check()
+    except updates.UpdateCheckError:
+        version_table.add_row(
+            _WARN,
+            f"VardrRunner {__version__} (could not check for releases; "
+            "run `vardrrunner update check`)",
+        )
+    else:
+        if release.update_available:
+            version_table.add_row(_WARN, f"VardrRunner {__version__}")
+            version_table.add_row("", updates.notice(release))
+        else:
+            _row(version_table, True, f"VardrRunner {__version__} (latest)")
+    console.print()
+    console.print("[bold]Version[/bold]")
+    console.print(version_table)
 
     # ------------------------------------------------------------------
     # Config

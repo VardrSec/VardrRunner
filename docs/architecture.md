@@ -54,7 +54,7 @@ requires VardrMap ≥ v0.22.0.
 | Path | Responsibility |
 |------|----------------|
 | `vardrrunner/cli.py` | Typer application; defines command groups and wires them together. Thin — delegates to `commands/`. |
-| `vardrrunner/api.py` | The **only** module that performs HTTP. A `requests.Session` wrapper exposing typed methods; raises `requests.HTTPError` on non-2xx. Retries transient failures (connection errors, 429/5xx) with exponential backoff on idempotent methods only (never POST/PATCH); sends a `User-Agent: vardrrunner/<version>` header. Also performs the two public, unauthenticated fetches: release metadata for `update check`, and pinned tool archives for `tools install` (HTTPS-only, size-capped; integrity is checked by `toolchain.py`). |
+| `vardrrunner/api.py` | The **only** module that performs HTTP. A `requests.Session` wrapper exposing typed methods; raises `requests.HTTPError` on non-2xx. Retries transient failures (connection errors, 429/5xx) with exponential backoff on idempotent methods only (never POST/PATCH); sends a `User-Agent: vardrrunner/<version>` header. Also performs the two public, unauthenticated fetches: release metadata for `update check` and `status`, and pinned tool archives for `tools install` (HTTPS-only, size-capped; integrity is checked by `toolchain.py`). |
 | `vardrrunner/config.py` | Resolve credentials (key: env > keychain > config file; URL: env > file); atomically persist config; identify whether auth survives a fresh service process; enforce HTTPS. |
 | `vardrrunner/keychain.py` | OS keychain wrapper (`keyring`) for the API key. Degrades gracefully (returns None/False) when no backend is present, so servers fall back to env/file. |
 | `vardrrunner/configs.py` | Typed, validated tool configs (`HttpxConfig`, `NucleiConfig`, `NmapConfig`, `SubfinderConfig`, `DnsxConfig`, `NaabuConfig`, `KatanaConfig`, `GauConfig`, `FfufConfig`, `DalfoxConfig`, `VardrGateConfig`). Raw backend dicts are parsed into frozen dataclasses up front; invalid values raise `ConfigError` and fail the job fast. `FfufConfig` is where a wordlist *name* is validated — never a path, so the backend cannot point ffuf at an arbitrary local file (`runner.resolve_wordlist` re-checks it against `~/.vardrmap/wordlists`). |
@@ -85,7 +85,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
 | `vardrrunner/commands/service.py` | `service status|uninstall` — inspect and remove legacy startup. `install` rejects requests. |
-| `vardrrunner/commands/updates.py` | `update check` — inspect public release metadata; never installs automatically. |
+| `vardrrunner/commands/updates.py` | `update check` — inspect public release metadata and name the upgrade command for the detected installer (`updates.upgrade_command`); never installs automatically. |
 | `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, tool installation, and doctor into one idempotent guided/provisioning workflow. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
 | `vardrrunner/commands/daemon.py` | `daemon stop|status` — inspect and stop legacy processes. `start` rejects requests. |

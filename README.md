@@ -152,6 +152,7 @@ vardrrunner jobs list                                         # show the backend
 vardrrunner jobs run                                          # claim + execute all pending jobs once
 vardrrunner audit list                                        # inspect durable local job evidence
 vardrrunner identity set-name chicago-runner-1                # durable human label
+vardrrunner --version                                         # installed version
 vardrrunner update check                                      # check; never auto-install
 vardrrunner run subfinder --engagement <engagement-id>        # run a single tool and upload results
 vardrrunner import nuclei --engagement <engagement-id> -f out.jsonl

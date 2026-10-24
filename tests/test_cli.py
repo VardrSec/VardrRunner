@@ -40,6 +40,45 @@ class TestStatusCommand:
         mock.assert_called_once()
 
 
+class TestVersionOption:
+    @pytest.mark.parametrize("flag", ["--version", "-V"])
+    def test_prints_version_offline_and_exits(self, flag):
+        from vardrrunner import __version__
+
+        with (
+            patch("vardrrunner.updates.api.fetch_release_metadata") as fetch,
+            patch("vardrrunner.cli.process_runner.cleanup_sensitive_temp_dirs") as cleanup,
+        ):
+            result = invoke(flag)
+        assert result.exit_code == 0
+        assert result.stdout.strip() == f"vardrrunner {__version__}"
+        fetch.assert_not_called()  # ADR 0012: only an explicit check contacts the registry
+        cleanup.assert_not_called()
+
+    def test_names_a_newer_release_already_cached(self):
+        from vardrrunner import updates
+
+        newer = updates.UpdateStatus("0.1.0", "9.9.9", True, "2026-10-24T00:00:00+00:00", True)
+        with (
+            patch("vardrrunner.cli.updates.cached", return_value=newer),
+            patch("vardrrunner.updates.upgrade_command", return_value="`pipx upgrade vardrrunner`"),
+        ):
+            result = invoke("--version")
+        assert result.exit_code == 0
+        assert "Update available: 0.1.0 → 9.9.9" in result.stdout
+        assert "pipx upgrade vardrrunner" in result.stdout
+
+    def test_up_to_date_cache_adds_nothing(self):
+        from vardrrunner import __version__, updates
+
+        current = updates.UpdateStatus(
+            __version__, __version__, False, "2026-10-24T00:00:00+00:00", True
+        )
+        with patch("vardrrunner.cli.updates.cached", return_value=current):
+            result = invoke("--version")
+        assert "Update available" not in result.stdout
+
+
 class TestInitCommand:
     def test_all_options_are_forwarded(self, tmp_path):
         env_file = tmp_path / "runner.env"

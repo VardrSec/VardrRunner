@@ -2,7 +2,7 @@
 
 import pytest
 
-from vardrrunner import config, identity
+from vardrrunner import config, identity, updates
 
 
 @pytest.fixture(autouse=True)
@@ -13,3 +13,5 @@ def isolated_journal(tmp_path, monkeypatch):
     # Never resolve, install, or delete the operator's real managed tools either.
     monkeypatch.setattr(config, "TOOLS_DIR", tmp_path / "tools")
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    # Nor the operator's cached release check, which `--version` and `status` read.
+    monkeypatch.setattr(updates, "cache_file", lambda: tmp_path / "update-check.json")

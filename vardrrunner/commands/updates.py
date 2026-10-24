@@ -22,10 +22,7 @@ def check(force: bool = False, as_json: bool = False) -> None:
         console.print_json(json.dumps(status.payload()))
         return
     if status.update_available:
-        console.print(
-            f"[yellow]Update available:[/yellow] {status.current} → {status.latest}\n"
-            "Run `pipx upgrade vardrrunner` or `uv tool upgrade vardrrunner`."
-        )
+        console.print(updates.notice(status))
     else:
         console.print(f"[green]Up to date.[/green] VardrRunner {status.current}")
     source = "cache" if status.from_cache else "registry"

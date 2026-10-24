@@ -37,6 +37,15 @@ metadata through `api.py`, writes a 24-hour atomic cache, and never installs sof
 > active work but checks the stop signal before every later job, preventing new claims from
 > an already-fetched group.
 
+> **Amendment (2026-10-24, unreleased).** `status` also runs the cached release check,
+> because an operator asking for status is an explicit request and an outdated runner is
+> part of where they stand. It shares `update check`'s 24-hour cache, so it makes at most one
+> registry request a day. A failed check is a warning that never fails the command.
+> `--version` stays offline and only reports a newer release already cached. Both name the
+> upgrade command for the detected installer (pipx, uv, or pip in a virtualenv) and never
+> run it. Release discovery is still never automatic: no other command contacts the
+> registry, and nothing checks in the background.
+
 ## Consequences
 
 - Old backends remain usable and can adopt compatibility constraints incrementally.
