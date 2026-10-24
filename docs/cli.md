@@ -342,6 +342,12 @@ compromised agent could do:
 
 **Prompts (the workflows you repeat on every engagement)**
 
+**Request rate.** `get_engagement` returns the engagement's `max_request_rate` (requests
+per second, or null). The backend applies it to `httpx`, `nuclei`, `katana` and `ffuf`, so a
+queued job stays within a program's stated rate even when no rate is set; an agent may pass a
+lower `config.rate` but cannot exceed the ceiling. The agent sees this on `get_engagement`
+and in the server instructions, so it can stay inside a no-DoS / rate-limited program.
+
 In Claude Code these appear as `/mcp__vardr__brief` and friends; each takes an
 `engagement_id`, and asks you which engagement to use when you leave it blank.
 

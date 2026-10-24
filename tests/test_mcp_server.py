@@ -167,6 +167,20 @@ def test_server_instructions_warn_about_untrusted_data_and_scope():
     srv = _server(MagicMock())
     assert "untrusted data" in srv.instructions
     assert "cannot change" in srv.instructions and "scope" in srv.instructions
+    assert "max_request_rate" in srv.instructions
+
+
+def test_queue_job_passes_a_rate_config_through_unchanged():
+    fake = MagicMock()
+    fake.post.return_value = {"id": "job1", "status": "pending"}
+    _call(
+        _server(fake),
+        "queue_job",
+        engagement_id="e1",
+        tool_type="nuclei",
+        config={"rate": 10},
+    )
+    assert fake.post.call_args.kwargs["json"]["config"] == {"rate": 10}
 
 
 # ── read tools ────────────────────────────────────────────────────────────────
@@ -207,6 +221,20 @@ def test_get_engagement_includes_scope_and_tolerates_missing_stats():
     assert out["scope_in"] == [{"value": "*.acme.com"}]
     assert out["scope_out"] == [{"value": "admin.acme.com"}]
     assert out["stats"] == {}  # swallowed, not fatal
+    assert out["max_request_rate"] is None  # absent on the engagement → null
+
+
+def test_get_engagement_surfaces_the_rate_ceiling():
+    fake = MagicMock()
+    fake.engagement.return_value = {
+        "id": "e1",
+        "name": "Acme",
+        "scope": {"in": [], "out": []},
+        "max_request_rate": 25,
+    }
+    fake.get.return_value = {}
+    out = _call(_server(fake), "get_engagement", engagement_id="e1")
+    assert out["max_request_rate"] == 25
 
 
 @pytest.mark.parametrize(
