@@ -22,7 +22,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
     nothing here re-grades a match, renames a tier or decides what is confirmed, so the tier,
     detection method and confidence reach VardrMap intact. Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
-  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015), plus six instruction-only prompts. Reads shared API playbooks and filtered evidence from Map; `mcp` imported lazily, optional extra
+  - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes (ADR 0015). Cannot apply scope/auth/delete, but can **propose** scope/authorization/rate changes (inert pending rows the operator approves; no approve tool). Plus six instruction-only prompts, shared API playbooks and filtered evidence from Map; `mcp` imported lazily, optional extra
   - `shell.py` — interactive console for a bare `vardrrunner` at a terminal (ADR 0017). Each line runs through the same Typer app; `use` fills `engagement_id` via Click's `default_map`. **History stays in memory** (a typed key must never reach disk), `mcp` is refused, and the banner is offline and never reads the keychain. A quote without a primary source must be `sourced=False` ("attributed to")
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
   - `commands/test_cases.py` — `test-cases draft|save`; review file is created exclusively (never overwritten), literal credentials refused, save needs `--reviewed`
@@ -132,7 +132,10 @@ vardrrunner jobs run   # one-shot; nothing runs in the background
   A prompt may only name tools that exist; a test enforces it. **Never add a tool that saves a
   VardrGate case or writes a client deliverable** — both are assertions only the operator can
   make (human review; an immutable client-facing document), unlike the scope/delete set, which
-  is withheld to bound a compromised agent. Draft and read; stop where a human commits
+  is withheld to bound a compromised agent. Draft and read; stop where a human commits.
+  The `propose_*` tools (scope/authorization/rate) are allowed because a proposal is **inert** —
+  it only creates a pending row the operator approves in VardrMap; there is deliberately **no
+  approve tool**, so the agent still cannot apply a scope or authorization change (ADR 0015 amendment)
 
 Every engagement-scoped command takes `--engagement <uuid>` (short form `-e`). Messages
 point first-time setup at `init` and a rejected or expired key at `login`.
