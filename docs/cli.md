@@ -33,7 +33,7 @@ A bare `vardrrunner` at a terminal opens an interactive console (ADR 0017):
 
 ```text
 PS> vardrrunner
- .::::::::::::::::::::::.    VardrRunner 0.50.0
+ .::::::::::::::::::::::.    VardrRunner 0.51.0
  ::                    ::    A product of VardrSec · https://www.vardrsec.com
  ...
 vardrrunner > heartbeat
