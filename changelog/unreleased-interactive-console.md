@@ -25,7 +25,8 @@ vardrrunner(3f2a9c1e) > exit
   Ctrl+D.
 - **Errors keep the console open.** Ctrl+C cancels the running command, not the console.
 - **`mcp` can't run inside the console.** Run `vardrrunner mcp` from your shell.
-- **After `update`,** the console tells you to restart it if a newer version was installed.
+- **After `update`,** if a newer version was installed, the console says so and closes. Run
+  `vardrrunner` to reopen it on the new version.
 
 ## Banner
 

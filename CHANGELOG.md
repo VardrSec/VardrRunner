@@ -14,9 +14,10 @@ Interactive console. No backend change required. See
 
 - A bare `vardrrunner` at a terminal opens an interactive console where commands are typed
   without the program name. `use <engagement-id>` fills in `--engagement` for every command
-  until `back`. Errors and Ctrl+C keep the console open; `mcp` is refused inside it. The
-  banner shows the version, counts, VardrMap host, a cached update notice, a quote and a
-  tip, offline and without the API key (ADR 0017).
+  until `back`. Errors and Ctrl+C keep the console open; `mcp` is refused inside it, and it
+  closes itself after `update` installs a newer version. The banner shows the version,
+  counts, VardrMap host, a cached update notice, a quote and a tip, offline and without the
+  API key (ADR 0017).
 - Optional `shell` extra (`prompt_toolkit`) for tab completion and in-memory history.
 - `Website` link on the PyPI page.
 
