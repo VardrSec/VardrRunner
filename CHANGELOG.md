@@ -7,10 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.51.0] — 2026-10-24
+
 Interactive console, and removal of the legacy daemon and service commands —
 **breaking**. No backend change required. See
-[`changelog/unreleased-interactive-console.md`](changelog/unreleased-interactive-console.md)
-and [`changelog/unreleased-remove-daemon-service.md`](changelog/unreleased-remove-daemon-service.md).
+[`changelog/v0.51.0.md`](changelog/v0.51.0.md).
 
 ### Breaking
 
