@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.49.0] — 2026-10-24
+
+Version visibility: `--version`, a Version section in `status`, and an install-aware upgrade
+command. Also fixes VardrGate's version showing as `unknown`. No backend change required.
+See [`changelog/v0.49.0.md`](changelog/v0.49.0.md).
+
 ### Added
 
 - `vardrrunner --version` (`-V`) prints the installed version. It makes no network request;
@@ -15,7 +21,6 @@ Per-version detail notes live in [`changelog/`](changelog/).
 - `vardrrunner status` opens with a Version section. It runs the cached release check (at
   most one PyPI request a day), and an outdated install shows `WARN` with the newer version
   and the command that upgrades it. An unreachable registry warns and never fails `status`.
-  See [`changelog/unreleased-version-visibility.md`](changelog/unreleased-version-visibility.md).
 
 ### Fixed
 
