@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.50.0] — 2026-10-24
+
+`vardrrunner update` installs the newest release; `doctor` says when one exists; release
+checks are always fresh. No backend change required. See
+[`changelog/v0.50.0.md`](changelog/v0.50.0.md).
+
 ### Added
 
 - `vardrrunner update` installs the newest release. For a pipx install it runs
