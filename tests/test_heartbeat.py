@@ -26,7 +26,10 @@ def test_tool_version_returns_semver(tmp_path):
 def test_tool_version_asks_vardrgate_with_its_version_subcommand():
     from vardrrunner import runner
 
-    with patch("shutil.which", return_value="/usr/bin/vardrgate"), patch("subprocess.run") as mock_run:
+    with (
+        patch("shutil.which", return_value="/usr/bin/vardrgate"),
+        patch("subprocess.run") as mock_run,
+    ):
         mock_run.return_value = MagicMock(returncode=0, stdout="v0.1.0\n", stderr="")
         version = runner.tool_version("vardrgate_api_test")
     assert version == "v0.1.0"
