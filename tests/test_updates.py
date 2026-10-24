@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
@@ -171,13 +171,144 @@ def test_upgrade_command_unknown_layout_names_both_supported_installers():
     assert "uv tool upgrade vardrrunner" in command
 
 
-def test_update_command_names_the_upgrade_command(capsys):
+def test_update_check_names_the_update_command_and_always_asks_the_registry(capsys):
     available = updates.UpdateStatus("1.0.0", "2.0.0", True, NOW.isoformat(), False)
-    with (
-        patch("vardrrunner.commands.updates.updates.check", return_value=available),
-        patch("vardrrunner.updates.upgrade_command", return_value="`uv tool upgrade vardrrunner`"),
-    ):
+    with patch("vardrrunner.commands.updates.updates.check", return_value=available) as check:
         updates_command.check()
     out = capsys.readouterr().out
     assert "1.0.0 → 2.0.0" in out
-    assert "uv tool upgrade vardrrunner" in out
+    assert "vardrrunner update" in out
+    check.assert_called_once_with(force=True)
+
+
+# ── vardrrunner update ───────────────────────────────────────────────────────
+
+PIPX_PREFIX = str(Path("/", "home", "u", ".local", "share", "pipx", "venvs", "vardrrunner"))
+AVAILABLE = updates.UpdateStatus("1.0.0", "2.0.0", True, NOW.isoformat(), False)
+CURRENT = updates.UpdateStatus("2.0.0", "2.0.0", False, NOW.isoformat(), False)
+
+
+def test_upgrade_argv_runs_pipx_only_for_a_pipx_install(monkeypatch):
+    monkeypatch.setattr(updates.sys, "prefix", PIPX_PREFIX)
+    with patch("vardrrunner.updates.shutil.which", return_value="/usr/bin/pipx"):
+        assert updates.upgrade_argv() == ["/usr/bin/pipx", "upgrade", "vardrrunner"]
+    with patch("vardrrunner.updates.shutil.which", return_value=None):
+        assert updates.upgrade_argv() is None
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        str(Path("/", "home", "u", ".local", "share", "uv", "tools", "vardrrunner")),
+        str(Path("/", "home", "u", "project", ".venv")),
+    ],
+)
+def test_upgrade_argv_leaves_uv_and_plain_venv_installs_to_the_operator(monkeypatch, prefix):
+    monkeypatch.setattr(updates.sys, "prefix", prefix)
+    monkeypatch.setattr(updates.sys, "base_prefix", str(Path("/", "usr")))
+    with patch("vardrrunner.updates.shutil.which", return_value="/usr/bin/pipx"):
+        assert updates.upgrade_argv() is None
+
+
+def test_update_when_current_installs_nothing(capsys):
+    with (
+        patch("vardrrunner.commands.updates.updates.check", return_value=CURRENT),
+        patch("vardrrunner.commands.updates.updates.run_upgrade") as run,
+    ):
+        updates_command.upgrade()
+    assert "Up to date." in capsys.readouterr().out
+    run.assert_not_called()
+
+
+def test_update_runs_pipx_and_reports_the_new_version(capsys):
+    argv = ["/usr/bin/pipx", "upgrade", "vardrrunner"]
+    done = MagicMock(returncode=0, stdout="upgraded", stderr="File exists ... Not modifying.")
+    with (
+        patch("vardrrunner.commands.updates.updates.check", return_value=AVAILABLE) as check,
+        patch("vardrrunner.commands.updates.updates.upgrade_argv", return_value=argv),
+        patch("vardrrunner.commands.updates.updates.run_upgrade", return_value=done) as run,
+        patch("vardrrunner.commands.updates.updates.installed_version", return_value="2.0.0"),
+    ):
+        updates_command.upgrade()
+    out = capsys.readouterr().out
+    check.assert_called_once_with(force=True)
+    run.assert_called_once_with(argv)
+    assert "Updating VardrRunner 1.0.0 → 2.0.0" in out
+    assert "Updated to VardrRunner 2.0.0." in out
+    assert "Not modifying" not in out  # pipx's harmless shim note is not shown on success
+
+
+def test_update_failure_shows_installer_output_and_its_exit_code(capsys):
+    failed = MagicMock(returncode=3, stdout="", stderr="pipx: network error")
+    with (
+        patch("vardrrunner.commands.updates.updates.check", return_value=AVAILABLE),
+        patch("vardrrunner.commands.updates.updates.upgrade_argv", return_value=["pipx"]),
+        patch("vardrrunner.commands.updates.updates.run_upgrade", return_value=failed),
+        pytest.raises(typer.Exit) as exc,
+    ):
+        updates_command.upgrade()
+    assert exc.value.exit_code == 3
+    out = capsys.readouterr().out
+    assert "Update failed" in out
+    assert "pipx: network error" in out
+
+
+def test_update_names_the_command_when_it_cannot_run_the_installer(capsys):
+    with (
+        patch("vardrrunner.commands.updates.updates.check", return_value=AVAILABLE),
+        patch("vardrrunner.commands.updates.updates.upgrade_argv", return_value=None),
+        patch("vardrrunner.updates.upgrade_command", return_value="`uv tool upgrade vardrrunner`"),
+        patch("vardrrunner.commands.updates.updates.run_upgrade") as run,
+        pytest.raises(typer.Exit) as exc,
+    ):
+        updates_command.upgrade()
+    assert exc.value.exit_code == 1
+    assert "uv tool upgrade vardrrunner" in capsys.readouterr().out
+    run.assert_not_called()
+
+
+def test_update_stops_when_the_registry_is_unreachable(capsys):
+    with (
+        patch(
+            "vardrrunner.commands.updates.updates.check",
+            side_effect=updates.UpdateCheckError("release check failed"),
+        ),
+        patch("vardrrunner.commands.updates.updates.run_upgrade") as run,
+        pytest.raises(typer.Exit),
+    ):
+        updates_command.upgrade()
+    assert "Update check failed" in capsys.readouterr().out
+    run.assert_not_called()
+
+
+def test_run_upgrade_and_installed_version_use_argv_without_a_shell():
+    with patch("vardrrunner.updates.subprocess.run") as run:
+        run.return_value = MagicMock(returncode=0, stdout="2.0.0" + chr(10), stderr="")
+        updates.run_upgrade(["pipx", "upgrade", "vardrrunner"])
+        assert updates.installed_version() == "2.0.0"
+    first, second = run.call_args_list
+    assert first.args[0] == ["pipx", "upgrade", "vardrrunner"]
+    assert "shell" not in first.kwargs
+    assert "shell" not in second.kwargs
+    assert second.args[0][:2] == [updates.sys.executable, "-I"]  # cwd never shadows the install
+
+
+def test_installed_version_is_none_when_the_probe_fails():
+    with patch("vardrrunner.updates.subprocess.run", side_effect=OSError("gone")):
+        assert updates.installed_version() is None
+
+
+def test_update_does_not_claim_success_when_the_installer_left_the_old_version(capsys):
+    noop = MagicMock(returncode=0, stdout="vardrrunner is already at latest version", stderr="")
+    with (
+        patch("vardrrunner.commands.updates.updates.check", return_value=AVAILABLE),
+        patch("vardrrunner.commands.updates.updates.upgrade_argv", return_value=["pipx"]),
+        patch("vardrrunner.commands.updates.updates.run_upgrade", return_value=noop),
+        patch("vardrrunner.commands.updates.updates.installed_version", return_value="1.0.0"),
+        pytest.raises(typer.Exit) as exc,
+    ):
+        updates_command.upgrade()
+    assert exc.value.exit_code == 1
+    out = capsys.readouterr().out
+    assert "still 1.0.0, not 2.0.0" in out
+    assert "Updated to" not in out

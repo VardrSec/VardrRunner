@@ -334,17 +334,27 @@ def service_status():
     service_cmd.show_status()
 
 
-update_app = typer.Typer(help="Check for VardrRunner releases.", no_args_is_help=True)
+update_app = typer.Typer(help="Update VardrRunner to the newest release, or check for one.")
 app.add_typer(update_app, name="update")
+
+
+@update_app.callback(invoke_without_command=True)
+def update(ctx: typer.Context):
+    """Install the newest release now (pipx installs; other installers get the command)."""
+    # The callback also runs before `update check`; only a bare `update` installs.
+    if ctx.invoked_subcommand is None:
+        updates_cmd.upgrade()
 
 
 @update_app.command("check")
 def update_check(
-    force: bool = typer.Option(False, "--force", help="Ignore the 24-hour local cache"),
+    force: bool = typer.Option(
+        False, "--force", hidden=True, help="Accepted for compatibility; checks are always fresh"
+    ),
     as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
 ):
-    """Check PyPI for a newer release; never installs automatically."""
-    updates_cmd.check(force=force, as_json=as_json)
+    """Check PyPI for a newer release without installing it."""
+    updates_cmd.check(as_json=as_json)
 
 
 # --------------------------------------------------------------------------- #

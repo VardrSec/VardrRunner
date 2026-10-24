@@ -243,3 +243,53 @@ def test_text_report_uses_symbols_when_supported(monkeypatch, capsys):
 def test_symbols_supported_follows_console_encoding(monkeypatch, encoding, supported):
     monkeypatch.setattr(doctor, "console", MagicMock(encoding=encoding))
     assert doctor._symbols_supported() is supported
+
+
+# ── version ──────────────────────────────────────────────────────────────────
+
+
+def _release(latest: str):
+    from vardrrunner import __version__, updates
+
+    newer = updates.compatibility.version_tuple(latest) > updates.compatibility.version_tuple(
+        __version__
+    )
+    return updates.UpdateStatus(__version__, latest, newer, "2026-10-24T00:00:00+00:00", False)
+
+
+def test_version_warns_and_names_the_update_command_when_a_release_is_newer():
+    with patch("vardrrunner.commands.doctor.updates.check", return_value=_release("99.0.0")) as c:
+        check = doctor._check_version()
+    c.assert_called_once_with(force=True, timeout=5)  # always fresh, never the day-old cache
+    assert check.status is Health.WARN
+    assert "update available: 99.0.0" in check.detail
+    assert check.remediation == "Run `vardrrunner update`."
+
+
+def test_version_is_ok_when_current():
+    from vardrrunner import __version__
+
+    with patch("vardrrunner.commands.doctor.updates.check", return_value=_release(__version__)):
+        check = doctor._check_version()
+    assert check.status is Health.OK
+    assert check.detail == f"{__version__} (latest)"
+
+
+def test_an_unreachable_registry_never_makes_the_machine_look_unhealthy():
+    from vardrrunner import updates
+
+    with patch(
+        "vardrrunner.commands.doctor.updates.check",
+        side_effect=updates.UpdateCheckError("release check failed"),
+    ):
+        check = doctor._check_version()
+    assert check.status is Health.OK
+    assert "could not check for updates" in check.detail
+
+
+def test_doctor_reports_the_version_first():
+    with patch(
+        "vardrrunner.commands.doctor._check_version", return_value=Check("version", Health.OK, "x")
+    ):
+        checks = doctor._collect()
+    assert checks[0].name == "version"

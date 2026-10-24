@@ -8,7 +8,7 @@ non-zero on any actionable failure, and prints a remediation hint per problem.
 
     vardrrunner doctor && vardrrunner jobs run
 
-Checks: credential source, backend URL validity, config-file permissions, API
+Checks: installed version against the latest release, credential source, backend URL validity, config-file permissions, API
 auth, daemon PID health, run-dir writability, free disk, tool versions, and
 per-pipeline readiness. `--json` emits a machine-readable report.
 """
@@ -24,6 +24,7 @@ import typer
 from rich.console import Console
 
 from vardrrunner import (
+    __version__,
     api,
     config,
     credentials,
@@ -33,6 +34,7 @@ from vardrrunner import (
     resources,
     runner,
     toolchain,
+    updates,
 )
 from vardrrunner.commands import daemon
 from vardrrunner.commands import tools as tools_cmd
@@ -176,6 +178,23 @@ def _check_auth() -> Check:
             f"backend unreachable: {redaction.redact_exception(e)}",
             "Check the backend URL and network connectivity.",
         )
+
+
+def _check_version() -> Check:
+    """Name a newer release. It is a warning at most: an old copy still works, and an
+    unreachable registry must not make a machine look unhealthy."""
+    try:
+        status = updates.check(force=True, timeout=5)
+    except updates.UpdateCheckError:
+        return Check("version", Health.OK, f"{__version__} (could not check for updates)")
+    if status.update_available:
+        return Check(
+            "version",
+            Health.WARN,
+            f"{status.current} — update available: {status.latest}",
+            "Run `vardrrunner update`.",
+        )
+    return Check("version", Health.OK, f"{status.current} (latest)")
 
 
 def _check_daemon() -> Check:
@@ -351,7 +370,7 @@ def _check_pipelines() -> list[Check]:
 
 
 def _collect(production: bool = False) -> list[Check]:
-    checks: list[Check] = []
+    checks: list[Check] = [_check_version()]
     # Credential/permissions/auth checks all read the config file — if it's
     # corrupted we surface one clear FAIL and skip the auth attempt (which
     # would crash or mislead with a noisy follow-up error).

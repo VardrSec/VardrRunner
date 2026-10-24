@@ -85,7 +85,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
 | `vardrrunner/commands/service.py` | `service status|uninstall` — inspect and remove legacy startup. `install` rejects requests. |
-| `vardrrunner/commands/updates.py` | `update check` — inspect public release metadata and name the upgrade command for the detected installer (`updates.upgrade_command`); never installs automatically. |
+| `vardrrunner/commands/updates.py` | `update` — install the newest release in the foreground with pipx (`updates.upgrade_argv`/`run_upgrade`), confirm it from an isolated interpreter, or name the installer's command for uv/virtualenv installs; `update check` — report only. Both always ask the registry. Nothing installs unless the operator runs `update`. |
 | `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, tool installation, and doctor into one idempotent guided/provisioning workflow. |
 | `vardrrunner/commands/pipeline.py` | `pipeline list|run` — runs a `pipelines` chain stage by stage (resolve → execute → upload), each stage writing a local handoff file so the next stage reads from it directly rather than the backend recon store. |
 | `vardrrunner/commands/daemon.py` | `daemon stop|status` — inspect and stop legacy processes. `start` rejects requests. |

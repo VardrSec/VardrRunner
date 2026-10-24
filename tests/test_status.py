@@ -209,12 +209,11 @@ def test_status_names_newer_release_and_upgrade_command(capsys, release_check):
         patches[1],
         patches[2],
         patches[3],
-        patch("vardrrunner.updates.upgrade_command", return_value="`pipx upgrade vardrrunner`"),
     ):
         run_status()
     out = capsys.readouterr().out
     assert "Update available: 0.1.0 → 9.9.9" in out
-    assert "pipx upgrade vardrrunner" in out
+    assert "vardrrunner update" in out
 
 
 def test_status_release_check_failure_warns_and_continues(capsys, release_check):
