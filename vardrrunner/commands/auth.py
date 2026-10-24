@@ -7,11 +7,9 @@ from rich.table import Table
 from vardrrunner import api, config, credentials, keychain, redaction
 
 console = Console()
-app = typer.Typer(help="Authentication commands.")
 
 
-@app.command("vardrmap")
-def login_vardrmap(
+def login(
     api_url: str | None = typer.Option(None, "--url", help="VardrMap API base URL"),
     api_key: str | None = typer.Option(None, "--key", help="vmap_ API key"),
     allow_plaintext: bool = typer.Option(
@@ -20,7 +18,7 @@ def login_vardrmap(
         help="Permit storing the key in cleartext when no OS keychain exists",
     ),
 ):
-    """Authenticate vardrrunner with your VardrMap instance.
+    """Save or replace the VardrMap API key, without re-running setup.
 
     The key goes to the OS keychain when one is available. When one is not,
     login **refuses** rather than silently writing cleartext to disk — pass
@@ -34,7 +32,10 @@ def login_vardrmap(
     # Only the literal boolean True is an explicit plaintext opt-in.
     allow_plaintext = allow_plaintext is True
     if not api_url:
-        api_url = typer.prompt("VardrMap API URL").strip().rstrip("/")
+        # Replacing a key keeps the saved backend, so default to it.
+        api_url = (
+            typer.prompt("VardrMap API URL", default=config.get_api_url() or "").strip().rstrip("/")
+        )
     if not api_key:
         api_key = typer.prompt("API key (vmap_...)", hide_input=True).strip()
 
@@ -121,7 +122,7 @@ def logout():
     if url:
         console.print(
             f"API URL [dim]{url}[/dim] left in place. Re-authenticate with "
-            "[bold]vardrrunner login vardrmap[/bold]."
+            "[bold]vardrrunner login[/bold]."
         )
 
 

@@ -181,7 +181,7 @@ def classify_status(status: int, body: object = None) -> RunnerError:
 _DEFAULT_MESSAGES: dict[type[RunnerError], str] = {
     StopWorkError: "stop-work is engaged for this engagement",
     ClaimRace: "another runner claimed this job first",
-    AuthError: "the API key was rejected — re-run `vardrrunner login vardrmap`",
+    AuthError: "the API key was rejected — run `vardrrunner login`",
     NotFoundError: "not found, or it belongs to another account",
     RateLimited: "the backend is rate limiting this runner",
     BackendUnavailable: "the backend is unavailable",

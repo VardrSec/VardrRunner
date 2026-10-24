@@ -67,7 +67,7 @@ def test_login_stores_in_keychain_when_available(monkeypatch):
     client = MagicMock()
     client.whoami.return_value = {"username": "alice"}
     with patch("vardrrunner.commands.auth.api.VardrMapClient", return_value=client):
-        auth.login_vardrmap(
+        auth.login(
             api_url="https://api.example.com",
             api_key="vmap_secret",
             allow_plaintext=True,
@@ -85,7 +85,7 @@ def test_login_falls_back_to_file_without_keychain(monkeypatch):
     client = MagicMock()
     client.whoami.return_value = {"username": "alice"}
     with patch("vardrrunner.commands.auth.api.VardrMapClient", return_value=client):
-        auth.login_vardrmap(
+        auth.login(
             api_url="https://api.example.com",
             api_key="vmap_secret",
             allow_plaintext=True,

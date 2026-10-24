@@ -21,9 +21,8 @@ vardrrunner --version        # or -V: print the installed version and exit
 `--version` makes no network request. If an earlier `status` or `update check` cached a
 newer release (within 24 hours), it adds an `Update available` line naming `vardrrunner update`.
 
-Every command that acts on an engagement takes `--engagement <uuid>`. `--program` and
-`-p` are accepted as aliases on the same flag, so scripts written before the v0.27.0
-rename keep working.
+Every command that acts on an engagement takes `--engagement <uuid>`, or `-e <uuid>`. The
+old `--program` and `-p` names were removed in v0.52.0.
 
 ---
 
@@ -98,24 +97,29 @@ and fail as unknown options. Run scans explicitly with `run`, `pipeline run`, or
 | `--allow-plaintext-credentials` | Explicitly accept config-file key storage if no keychain exists |
 | `--non-interactive` | Never prompt; fail if auth input is missing |
 
-Non-interactive setup accepts existing environment credentials. As with `login`,
-prefer the hidden prompt over `--key` so the credential does not enter shell history.
+Non-interactive setup accepts existing environment credentials. Prefer the hidden prompt
+over `--key` so the credential does not enter shell history. To replace only the key later,
+use `login`.
 
 ---
 
 ## `login`
-Authenticate to a Vardr product. Verifies the key against `GET /me` before saving anything,
-then stores it in the **OS keychain** (macOS Keychain / Windows Credential Locker / Linux
-Secret Service). The backend URL is kept in `~/.vardrmap/config.json`. On a machine with no
-keyring backend, login fails closed unless cleartext storage is explicitly accepted.
+Save or replace the VardrMap API key without re-running setup, for example after rotating
+the key. Use `init` for first-time setup. `login` verifies the key against `GET /me` before
+saving anything, then stores it in the **OS keychain** (macOS Keychain / Windows Credential
+Locker / Linux Secret Service). The backend URL is kept in `~/.vardrmap/config.json`. On a
+machine with no keyring backend, login fails closed unless cleartext storage is explicitly
+accepted.
 
 ```bash
-vardrrunner login vardrmap
+vardrrunner login
 ```
+
+Until v0.52.0 this was `vardrrunner login vardrmap`.
 
 | Option | Purpose |
 |--------|---------|
-| `--url` | Backend base URL; prompted for if omitted |
+| `--url` | Backend base URL; prompted for if omitted, defaulting to the saved one |
 | `--key` | The `vmap_` API key; prompted for (with hidden input) if omitted |
 | `--allow-plaintext-credentials` | Permit cleartext storage when no OS keychain exists |
 
@@ -195,7 +199,6 @@ List every engagement visible to the configured key.
 vardrrunner engagements
 ```
 
-`vardrrunner programs` still runs as a retired alias; it is hidden from `--help`.
 
 ## `scope`
 Show the in-scope and out-of-scope items for one engagement — useful before a run to
@@ -273,8 +276,7 @@ vardrrunner update check [--json]        # only report whether one exists
 ```
 
 Both always ask public PyPI metadata (and refresh the cache under
-`~/.vardrmap/update-check.json` that `status` and `--version` read). `--force` is still
-accepted for old scripts and changes nothing.
+`~/.vardrmap/update-check.json` that `status` and `--version` read).
 
 `update` installs in the foreground, only when a newer release exists:
 
@@ -840,9 +842,9 @@ sequential and each worker uses an isolated API client.
 
 | Outcome | Behaviour |
 |---|---|
-| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. Further claims for that engagement are suppressed during the cooldown; no background retry is started. |
+| **Stop-work** (`403`) | Prints `STOP-WORK — not running this job.`, emits a `blocked` event, runs nothing. The engagement's remaining jobs are skipped for the rest of the run; the next `jobs run` asks again. |
 | **Claim race** (`409`) | Another runner won. Skipped quietly, **not** marked failed — the job is theirs to finish. |
-| **Auth** (`401`) | Reported as `auth`. Re-run `vardrrunner login vardrmap`. |
+| **Auth** (`401`) | Reported as `auth`. Run `vardrrunner login` with a valid key. |
 | **Rate limited** (`429`) | Reported as `rate_limited`; retry with a later explicit invocation. |
 | **Backend down** (`5xx`) | Reported as `backend_unavailable`; retry with a later explicit invocation. |
 | **Anything else** | Reported as `unknown` and logged. The job is left pending. |
@@ -893,8 +895,8 @@ A worker that is still running stops when you end its process; its leftover file
 ---
 
 ## Exit behavior
-- Commands requiring auth exit with a clear "Not logged in. Run: `vardrrunner login vardrmap`"
-  message when no config is present.
+- Commands requiring auth exit with a clear "Not set up. Run: `vardrrunner init`" message
+  when no config is present.
 - A missing or failing tool marks the corresponding job **failed** with a reason — the
   runner never silently skips work.
 

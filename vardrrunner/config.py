@@ -80,7 +80,7 @@ def load() -> dict:
         raise InvalidConfigFile(
             f"Config file contains invalid JSON: {CONFIG_FILE}\n"
             f"  {e}\n"
-            f"  Run `vardrrunner login vardrmap` or delete the file to reset."
+            f"  Run `vardrrunner login` or delete the file to reset."
         ) from e
 
 
@@ -176,8 +176,7 @@ def require_auth() -> tuple[str, str]:
         import typer
 
         raise typer.BadParameter(
-            "Not logged in. Run: vardrrunner login vardrmap "
-            "(or set VARDRMAP_URL and VARDRMAP_API_KEY).",
+            "Not set up. Run: vardrrunner init (or set VARDRMAP_URL and VARDRMAP_API_KEY).",
             param_hint="auth",
         )
     try:

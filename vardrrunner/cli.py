@@ -169,9 +169,7 @@ def initialize(
 # Auth
 # --------------------------------------------------------------------------- #
 
-login_app = typer.Typer(help="Log in to a Vardr product.", no_args_is_help=True)
-app.add_typer(login_app, name="login")
-login_app.command("vardrmap")(auth.login_vardrmap)
+app.command("login")(auth.login)
 
 
 @app.command()
@@ -320,9 +318,6 @@ def update(ctx: typer.Context):
 
 @update_app.command("check")
 def update_check(
-    force: bool = typer.Option(
-        False, "--force", hidden=True, help="Accepted for compatibility; checks are always fresh"
-    ),
     as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
 ):
     """Check PyPI for a newer release without installing it."""
@@ -330,7 +325,7 @@ def update_check(
 
 
 # --------------------------------------------------------------------------- #
-# Programs
+# Engagements
 # --------------------------------------------------------------------------- #
 
 
@@ -338,11 +333,6 @@ def update_check(
 def engagement_list():
     """List all engagements in VardrMap."""
     engagements.list_engagements()
-
-
-# Retired name, kept so existing habits and scripts do not break. Hidden from
-# --help so only the current name is advertised.
-app.command(name="programs", hidden=True)(engagement_list)
 
 
 @app.command()
@@ -361,9 +351,7 @@ app.add_typer(import_app, name="import")
 
 @import_app.command("nuclei")
 def import_nuclei(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     file: Path = typer.Option(..., "--file", "-f", help="Path to nuclei JSONL output"),
 ):
     """Import a nuclei output file."""
@@ -372,9 +360,7 @@ def import_nuclei(
 
 @import_app.command("httpx")
 def import_httpx(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     file: Path = typer.Option(..., "--file", "-f", help="Path to httpx JSON/JSONL output"),
 ):
     """Import an httpx output file."""
@@ -415,9 +401,7 @@ app.add_typer(run_app, name="run")
 
 @run_app.command("httpx")
 def run_httpx(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -449,9 +433,7 @@ def run_httpx(
 
 @run_app.command("subfinder")
 def run_subfinder(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     max_targets: int = typer.Option(
         run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
@@ -463,9 +445,7 @@ def run_subfinder(
 
 @run_app.command("nuclei")
 def run_nuclei(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -505,9 +485,7 @@ def run_nuclei(
 
 @run_app.command("nmap")
 def run_nmap(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -541,9 +519,7 @@ def run_nmap(
 
 @run_app.command("dnsx")
 def run_dnsx(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -571,9 +547,7 @@ def run_dnsx(
 
 @run_app.command("naabu")
 def run_naabu(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -603,9 +577,7 @@ def run_naabu(
 
 @run_app.command("katana")
 def run_katana(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -639,9 +611,7 @@ def run_katana(
 
 @run_app.command("gau")
 def run_gau(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     subs: bool = typer.Option(
         True, "--subs/--no-subs", help="Include subdomains of each wildcard domain"
     ),
@@ -665,9 +635,7 @@ def run_gau(
 
 @run_app.command("ffuf")
 def run_ffuf(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -715,9 +683,7 @@ def run_ffuf(
 
 @run_app.command("dalfox")
 def run_dalfox(
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     scope: bool = typer.Option(False, "--scope", help="Use in-scope assets from VardrMap"),
     from_recon: bool = typer.Option(
         False, "--from-recon", help="Use live recon items from VardrMap"
@@ -772,9 +738,7 @@ def pipeline_list():
 @pipeline_app.command("run")
 def pipeline_run(
     name: str = typer.Argument(..., help="Pipeline name (see `pipeline list`)"),
-    engagement_id: str = typer.Option(
-        ..., "--engagement", "--program", "-p", help="Engagement UUID"
-    ),
+    engagement_id: str = typer.Option(..., "--engagement", "-e", help="Engagement UUID"),
     severity: str | None = typer.Option(
         None, "--severity", help="nuclei severity filter for the scan stage"
     ),

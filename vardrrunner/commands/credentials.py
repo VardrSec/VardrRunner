@@ -33,7 +33,7 @@ def show_credentials() -> None:
     if s.source:
         table.add_row("[dim]Key source[/dim]", f"{s.source} — {_SOURCE_NOTES.get(s.source, '')}")
     else:
-        table.add_row("[dim]Key source[/dim]", "[red]none — run `vardrrunner login vardrmap`[/red]")
+        table.add_row("[dim]Key source[/dim]", "[red]none — run `vardrrunner init`[/red]")
 
     table.add_row(
         "[dim]Encrypted at rest[/dim]",

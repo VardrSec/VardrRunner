@@ -42,19 +42,19 @@ class TestLoginFailsClosed:
     def test_refuses_plaintext_without_the_opt_in(self):
         with _login_env(keychain_ok=False) as (save, _):
             with pytest.raises(typer.Exit) as exc:
-                auth.login_vardrmap(api_url="https://a", api_key=KEY, allow_plaintext=False)
+                auth.login(api_url="https://a", api_key=KEY, allow_plaintext=False)
             assert exc.value.exit_code == 1
             save.assert_not_called()
 
     def test_writes_plaintext_only_with_the_explicit_flag(self):
         with _login_env(keychain_ok=False) as (save, _):
-            auth.login_vardrmap(api_url="https://a", api_key=KEY, allow_plaintext=True)
+            auth.login(api_url="https://a", api_key=KEY, allow_plaintext=True)
             save.assert_called_once()
             assert save.call_args[0][0]["api_key"] == KEY
 
     def test_keychain_path_never_writes_the_key_to_the_file(self):
         with _login_env(keychain_ok=True) as (save, save_url):
-            auth.login_vardrmap(api_url="https://a", api_key=KEY, allow_plaintext=False)
+            auth.login(api_url="https://a", api_key=KEY, allow_plaintext=False)
             save.assert_not_called()
             save_url.assert_called_once_with("https://a")
 
@@ -62,7 +62,7 @@ class TestLoginFailsClosed:
         """An available-but-broken keyring must not silently downgrade to cleartext."""
         with _login_env(keychain_ok=True, set_key_ok=False) as (save, _):
             with pytest.raises(typer.Exit):
-                auth.login_vardrmap(api_url="https://a", api_key=KEY, allow_plaintext=False)
+                auth.login(api_url="https://a", api_key=KEY, allow_plaintext=False)
             save.assert_not_called()
 
     def test_refusal_message_offers_the_env_var_route(self):

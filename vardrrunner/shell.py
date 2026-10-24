@@ -182,7 +182,7 @@ def _vardrmap_line() -> str:
     url = config.get_api_url()
     host = urlparse(url).hostname if url else None
     if not host:
-        return "Not logged in. Run `login vardrmap`."
+        return "Not set up. Run `init`."
     return f"VardrMap: {host}"
 
 
@@ -387,7 +387,7 @@ def _reader(session: Session) -> tuple[Callable[[str], str], bool]:
         return input, False
     tree = completion_tree(session.command)
     tree.update(dict.fromkeys(BUILTINS))
-    # In memory only: a line can carry a secret (`login vardrmap --key ...`), and a history
+    # In memory only: a line can carry a secret (`login --key ...`), and a history
     # file would write it to disk.
     prompt_session: Any = PromptSession(
         history=InMemoryHistory(), completer=NestedCompleter.from_nested_dict(tree)

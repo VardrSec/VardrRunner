@@ -69,7 +69,7 @@ def run_status() -> None:
 
     if not api_url or not api_key:
         console.print()
-        console.print("[dim]Run:[/dim] [bold]vardrrunner login vardrmap[/bold]")
+        console.print("[dim]Run:[/dim] [bold]vardrrunner init[/bold]")
         console.print()
         return
 

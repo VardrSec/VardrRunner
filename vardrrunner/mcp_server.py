@@ -131,11 +131,11 @@ def _get_client() -> api.VardrMapClient:
             from mcp.server.mcpserver.exceptions import ToolError as MCPToolError
 
             reason = redaction.redact_exception(exc)
-            # config.require_auth already says how to log in; don't repeat it.
+            # config.require_auth already names the command to run; don't repeat it.
             hint = (
                 ""
-                if "login" in reason.lower()
-                else " Run `vardrrunner login vardrmap` or set VARDRMAP_URL and VARDRMAP_API_KEY."
+                if "vardrrunner init" in reason or "vardrrunner login" in reason
+                else " Run `vardrrunner init` or set VARDRMAP_URL and VARDRMAP_API_KEY."
             )
             raise MCPToolError(f"VardrRunner is not configured: {reason}.{hint}") from exc
     return _client
