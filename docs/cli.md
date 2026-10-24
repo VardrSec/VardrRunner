@@ -195,7 +195,7 @@ effective resource policy, tool versions and sources, and per-pipeline readiness
 **Failures** (no creds, bad URL, auth failure, unwritable run dir, critically low disk, zero
 tools, or a managed tool that **fails hash verification**) set a non-zero exit; missing
 individual tools, unverified `PATH` copies of tools VardrRunner can manage, a missing
-naabu capture library, low-ish disk, and a newer VardrRunner release (`version: 0.48.0 —
+naabu capture library, low-ish disk, and a newer VardrRunner release (`version: 0.48.0,
 update available: 0.49.0`, remediation `Run vardrrunner update`) are **warnings** that don't
 block. The version check always asks PyPI (5-second timeout); if it can't, the line is OK and
 says the check could not run.

@@ -191,7 +191,7 @@ def _check_version() -> Check:
         return Check(
             "version",
             Health.WARN,
-            f"{status.current} — update available: {status.latest}",
+            f"{status.current}, update available: {status.latest}",
             "Run `vardrrunner update`.",
         )
     return Check("version", Health.OK, f"{status.current} (latest)")
