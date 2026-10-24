@@ -68,6 +68,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/service.py` | Legacy status/removal plans and argv-only native manager execution for systemd, launchd, and Windows Scheduled Tasks. No registration generation or installation. |
 | `vardrrunner/compatibility.py` | Version/capability advertisement and total evaluation of optional backend constraints. Legacy responses remain compatible; definite mismatches block queue claims. |
 | `vardrrunner/resources.py` | Bounded environment-driven target, artifact, concurrency, and free-disk policy shared by direct, pipeline, and queue execution. |
+| `vardrrunner/shell.py` | Interactive console for a bare `vardrrunner` at a terminal: banner, line splitting, `use`/`back` engagement defaults (Click `default_map`), optional `prompt_toolkit` completion with in-memory history. Every line runs through the same Typer app as a one-shot call; nothing runs between lines (ADR 0017). |
 | `vardrrunner/updates.py` | Explicit release-check orchestration and 24-hour atomic cache. Network access remains isolated in `api.py`. |
 | `vardrrunner/policy.py` | All parsing and presentation of the backend's advisory `warnings` array. Isolated so a backend shape change touches one file; parsing is total and never raises. |
 | `vardrrunner/target_safety.py` | Classifies resolved targets (public / private / loopback / link-local / cloud metadata) and evaluates locally-configured deny rules. Classification is lexical — no DNS — so it stays fast, offline-safe, and free of a TOCTOU gap against the tool's own resolution. |

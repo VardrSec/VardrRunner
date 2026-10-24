@@ -40,6 +40,70 @@ class TestStatusCommand:
         mock.assert_called_once()
 
 
+class TestBareInvocation:
+    def test_without_a_terminal_prints_help_and_exits_2(self):
+        # CliRunner's streams are not terminals, which is what a script or pipe sees.
+        with patch("vardrrunner.cli.shell.run") as run:
+            result = invoke()
+        assert result.exit_code == 2
+        assert "Usage" in result.stdout
+        assert "heartbeat" in result.stdout
+        run.assert_not_called()
+
+    def test_in_a_terminal_opens_the_console(self):
+        with (
+            patch("vardrrunner.cli._interactive", return_value=True),
+            patch("vardrrunner.cli.shell.run") as run,
+        ):
+            result = invoke()
+        assert result.exit_code == 0
+        run.assert_called_once_with(app)
+
+    @pytest.mark.parametrize(("stdin_tty", "stdout_tty"), [(False, True), (True, False)])
+    def test_interactive_needs_both_streams_to_be_terminals(self, stdin_tty, stdout_tty):
+        from vardrrunner import cli
+
+        with (
+            patch("vardrrunner.cli.sys.stdin") as stdin,
+            patch("vardrrunner.cli.sys.stdout") as stdout,
+        ):
+            stdin.isatty.return_value = stdin_tty
+            stdout.isatty.return_value = stdout_tty
+            assert cli._interactive() is False
+            stdin.isatty.return_value = stdout.isatty.return_value = True
+            assert cli._interactive() is True
+
+    def test_input_from_a_pipe_does_not_open_the_console(self):
+        with (
+            patch("vardrrunner.cli._interactive", return_value=False),
+            patch("vardrrunner.cli.shell.run") as run,
+        ):
+            result = invoke()
+        assert result.exit_code == 2
+        run.assert_not_called()
+
+    def test_a_subcommand_never_opens_the_console(self):
+        with (
+            patch("vardrrunner.cli._interactive", return_value=True),
+            patch("vardrrunner.cli.shell.run") as run,
+            patch("vardrrunner.cli.heartbeat_cmd.send_heartbeat") as send,
+        ):
+            result = invoke("heartbeat")
+        assert result.exit_code == 0
+        send.assert_called_once_with(quiet=False)
+        run.assert_not_called()
+
+    def test_inside_the_console_does_not_nest(self):
+        with (
+            patch("vardrrunner.cli._interactive", return_value=True),
+            patch("vardrrunner.cli.shell.is_running", return_value=True),
+            patch("vardrrunner.cli.shell.run") as run,
+        ):
+            result = invoke()
+        assert result.exit_code == 2
+        run.assert_not_called()
+
+
 class TestVersionOption:
     @pytest.mark.parametrize("flag", ["--version", "-V"])
     def test_prints_version_offline_and_exits(self, flag):

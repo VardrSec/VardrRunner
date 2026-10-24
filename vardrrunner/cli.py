@@ -12,7 +12,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner import __version__, configs, updates
+from vardrrunner import __version__, configs, shell, updates
 from vardrrunner import runner as process_runner
 from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run, tools
 from vardrrunner.commands import credentials as credentials_cmd
@@ -64,7 +64,9 @@ _MAX_TARGETS_HELP = "Abort if resolved targets exceed this count (0 disables the
 app = typer.Typer(
     name="vardrrunner",
     help="Local runner for VardrMap. Runs tools locally, uploads results to your VardrMap instance.",
-    no_args_is_help=True,
+    # A bare `vardrrunner` opens the console in a terminal and prints help elsewhere;
+    # `_startup_cleanup` decides which, so Typer must not answer it first.
+    no_args_is_help=False,
 )
 
 
@@ -79,8 +81,15 @@ def _print_version(value: bool) -> None:
     raise typer.Exit()
 
 
-@app.callback()
+def _interactive() -> bool:
+    """Only a person at a terminal gets the console: a script or pipe calling a bare
+    `vardrrunner` keeps the help text and exit code 2 rather than waiting for input."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+@app.callback(invoke_without_command=True)
 def _startup_cleanup(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False,
         "--version",
@@ -92,6 +101,13 @@ def _startup_cleanup(
 ) -> None:
     """Remove sensitive temp state left by a previously interrupted process."""
     process_runner.cleanup_sensitive_temp_dirs()
+    if ctx.invoked_subcommand is not None:
+        return
+    if _interactive() and not shell.is_running():
+        shell.run(app)
+        raise typer.Exit()
+    console.print(ctx.get_help())
+    raise typer.Exit(2)
 
 
 @app.command("mcp")

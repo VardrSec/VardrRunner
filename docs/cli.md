@@ -27,6 +27,50 @@ rename keep working.
 
 ---
 
+## Console — type commands without `vardrrunner`
+
+A bare `vardrrunner` at a terminal opens an interactive console (ADR 0017):
+
+```text
+PS> vardrrunner
+ .::::::::::::::::::::::.    VardrRunner 0.50.0
+ ::                    ::    A product of VardrSec · https://www.vardrsec.com
+ ...
+vardrrunner > heartbeat
+vardrrunner > use 3f2a9c1e-…
+vardrrunner(3f2a9c1e) > scope
+vardrrunner(3f2a9c1e) > exit
+```
+
+- Every command, flag and `--help` works as it does on the command line. A leading
+  `vardrrunner` is accepted (`vardrrunner jobs list`).
+- When stdin or stdout is not a terminal (a script, pipe or CI job), bare `vardrrunner`
+  prints help and exits 2, as before.
+- Quotes work as in a shell. Backslashes are kept, so Windows paths need no escaping.
+
+| Console command | Effect |
+|---|---|
+| `use <engagement-id>` | Fill in `--engagement`, and the ID `scope` takes, for every command. A value typed on the line still wins. |
+| `back` | Clear the engagement |
+| `banner` | Show the banner again |
+| `help`, `?` | Console commands, then the full command list |
+| `exit`, `quit`, Ctrl+D | Leave |
+
+- **Errors keep the console open.** Ctrl+C cancels the running command, not the console.
+- **`mcp` is refused,** because it serves over the terminal the console reads from. Run
+  `vardrrunner mcp` from your shell.
+- **After `update`,** if a newer version was installed, the console says so and asks you to
+  `exit` and reopen it. The open session still runs the old code.
+- **The banner** shows the version, tool, pipeline and job-type counts, the VardrMap host,
+  a cached update notice, a quote and a tip. It makes no network request and never shows
+  the API key. Quotes without a primary source are credited "attributed to". In a window
+  narrower than 84 columns the shield is left out.
+- **Tab completion and history** need the optional `shell` extra
+  (`pipx inject vardrrunner prompt_toolkit`). History is kept in memory only, so a key typed
+  on the line is never written to disk. Without the extra the console uses a plain prompt.
+
+---
+
 ## `init` — guided host setup
 
 ```bash

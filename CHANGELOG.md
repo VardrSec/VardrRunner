@@ -7,6 +7,24 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+Interactive console. No backend change required. See
+[`changelog/unreleased-interactive-console.md`](changelog/unreleased-interactive-console.md).
+
+### Added
+
+- A bare `vardrrunner` at a terminal opens an interactive console where commands are typed
+  without the program name. `use <engagement-id>` fills in `--engagement` for every command
+  until `back`. Errors and Ctrl+C keep the console open; `mcp` is refused inside it. The
+  banner shows the version, counts, VardrMap host, a cached update notice, a quote and a
+  tip, offline and without the API key (ADR 0017).
+- Optional `shell` extra (`prompt_toolkit`) for tab completion and in-memory history.
+- `Website` link on the PyPI page.
+
+### Changed
+
+- A bare `vardrrunner` at a terminal opens the console instead of printing help. In a
+  script, pipe or CI job (no terminal) it still prints help and exits 2.
+
 ## [0.50.0] — 2026-10-24
 
 `vardrrunner update` installs the newest release; `doctor` says when one exists; release
