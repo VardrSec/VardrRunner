@@ -321,8 +321,14 @@ For Claude Desktop, add to its MCP config:
 
 | Kind | Tools |
 |------|-------|
-| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_authorizations`, `list_findings`, `get_finding_activity`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `list_deliverables`, `get_deliverable_revision`, `list_methodologies`, `get_methodology`, `list_api_playbooks`, `get_api_playbook`, `list_evidence`, `preview_job`, `draft_test_cases` |
-| Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding`, `draft_report` |
+| Read (no change) | `list_engagements`, `get_engagement`, `list_scope`, `list_authorizations`, `list_findings`, `get_finding_activity`, `list_assets`, `list_api_endpoints`, `list_recon`, `list_jobs`, `get_job_events`, `list_reports`, `list_deliverables`, `get_deliverable_revision`, `list_methodologies`, `get_methodology`, `list_api_playbooks`, `get_api_playbook`, `list_evidence`, `list_proposals`, `preview_job`, `draft_test_cases` |
+| Write (client asks you to approve each) | `queue_job`, `queue_pipeline`, `create_finding`, `draft_report`, `propose_scope_item`, `propose_authorization`, `propose_rate_ceiling` |
+
+The three `propose_*` tools create a **pending proposal** in VardrMap — a scope item, an
+authorization, or a request-rate ceiling — that you approve in the console's Scope section.
+The agent cannot apply one: there is no approve tool, so a prompt-injected agent can only file
+a proposal you see and reject. Each takes a `reason` and a `source`. Needs a VardrMap with the
+agent-proposals endpoints.
 
 `draft_test_cases` is grouped as a read because it stores and queues nothing — it is
 VardrMap's `test-cases/preview`, which returns drafts and says so.

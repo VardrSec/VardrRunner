@@ -252,3 +252,24 @@ recording and immutable client revisions still require the operator. Narrate
 major findings, blockers and decisions, keeping routine steps quiet. Claim/hash
 binding lets guidance cite the run's expectations; it does not turn a reported
 outcome into professional sign-off.
+
+
+## Amendment (unreleased): propose tools for scope, authorization and rate
+
+The original decision withheld every scope- and authorization-editing tool, because an agent
+that cannot change scope cannot act on a planted "add x to scope" instruction. That left a
+real gap: when the agent correctly spots a missing scope item, authorization or rate ceiling
+(for example reconciling an engagement against its HackerOne listing), the operator had to
+re-enter every value by hand.
+
+The server now exposes `propose_scope_item`, `propose_authorization` and `propose_rate_ceiling`,
+plus a `list_proposals` read. These create a **pending proposal** in VardrMap and nothing more.
+Applying one is a separate operator action in the console that requires a full-access key, and
+**this server exposes no approve tool**. So the prompt-injection defence is unchanged in
+substance: the worst a compromised or misled agent can do is file a proposal — carrying its
+own stated reason and source — that the operator sees and rejects. It can never widen its own
+scope or authorization, because the act that applies a change is still withheld.
+
+Each propose tool takes a `reason` and a `source` so the operator can judge the proposal
+without leaving the console. Requires the matching VardrMap release with the
+`/engagements/{id}/proposals` endpoints; older backends return 404 and the tools simply fail.

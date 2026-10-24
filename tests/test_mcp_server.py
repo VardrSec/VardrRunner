@@ -34,6 +34,8 @@ FORBIDDEN = {
     "create_api_key",
     "add_member",
     "update_settings",
+    "approve_proposal",
+    "reject_proposal",
 }
 EXPECTED = {
     "list_engagements",
@@ -61,6 +63,10 @@ EXPECTED = {
     "queue_pipeline",
     "create_finding",
     "draft_report",
+    "list_proposals",
+    "propose_scope_item",
+    "propose_authorization",
+    "propose_rate_ceiling",
 }
 # Writes that exist in VardrMap and are withheld on purpose. The scope/auth/delete
 # set above is withheld so an agent cannot widen what it may test or erase work;
@@ -166,7 +172,8 @@ def test_read_tools_are_marked_read_only_and_writes_are_not():
 def test_server_instructions_warn_about_untrusted_data_and_scope():
     srv = _server(MagicMock())
     assert "untrusted data" in srv.instructions
-    assert "cannot change" in srv.instructions and "scope" in srv.instructions
+    assert "cannot apply" in srv.instructions and "scope" in srv.instructions
+    assert "propose" in srv.instructions and "approve" in srv.instructions
     assert "max_request_rate" in srv.instructions
 
 
@@ -838,3 +845,79 @@ def test_unconfigured_message_does_not_repeat_a_hint_already_given(message):
         _call(srv, "list_engagements")
     text = str(exc.value)
     assert text.count("vardrrunner init") + text.count("vardrrunner login") == 1
+
+
+# ── proposals: an agent proposes, but has no tool to approve ─────────────────
+
+
+def test_propose_scope_item_posts_a_scope_proposal():
+    fake = MagicMock()
+    fake.post.return_value = {"id": "p1", "status": "pending"}
+    _call(
+        _server(fake),
+        "propose_scope_item",
+        engagement_id="e1",
+        value="branch.remitly.com",
+        scope="in",
+        max_severity="critical",
+        reason="HackerOne scope table",
+        source="https://hackerone.com/remitly",
+    )
+    (path,) = fake.post.call_args[0]
+    assert path == "/engagements/e1/proposals"
+    body = fake.post.call_args.kwargs["json"]
+    assert body["kind"] == "scope_in"
+    assert body["payload"]["value"] == "branch.remitly.com"
+    assert body["payload"]["max_severity"] == "critical"
+    assert body["reason"] == "HackerOne scope table"
+    assert body["source"] == "https://hackerone.com/remitly"
+
+
+def test_propose_scope_item_out_uses_scope_out_kind():
+    fake = MagicMock()
+    fake.post.return_value = {"id": "p1"}
+    _call(_server(fake), "propose_scope_item", engagement_id="e1", value="x.com", scope="out")
+    assert fake.post.call_args.kwargs["json"]["kind"] == "scope_out"
+
+
+def test_propose_authorization_posts_an_authorization_proposal():
+    fake = MagicMock()
+    fake.post.return_value = {"id": "p2"}
+    _call(
+        _server(fake),
+        "propose_authorization",
+        engagement_id="e1",
+        reference="https://hackerone.com/remitly",
+        permits="Rate-limited, non-disruptive testing only",
+    )
+    body = fake.post.call_args.kwargs["json"]
+    assert body["kind"] == "authorization"
+    assert body["payload"]["reference"] == "https://hackerone.com/remitly"
+    # Empty dates become null, not "".
+    assert body["payload"]["window_start"] is None
+
+
+def test_propose_rate_ceiling_posts_a_rate_proposal():
+    fake = MagicMock()
+    fake.post.return_value = {"id": "p3"}
+    _call(_server(fake), "propose_rate_ceiling", engagement_id="e1", rate=25)
+    body = fake.post.call_args.kwargs["json"]
+    assert body["kind"] == "rate_ceiling"
+    assert body["payload"] == {"rate": 25}
+
+
+def test_list_proposals_reads_the_proposals_endpoint():
+    fake = MagicMock()
+    fake.get.return_value = {"proposals": [{"id": "p1", "status": "pending"}]}
+    out = _call(_server(fake), "list_proposals", engagement_id="e1")
+    (path,) = fake.get.call_args[0]
+    assert path == "/engagements/e1/proposals?status=pending"
+    assert out["proposals"][0]["id"] == "p1"
+
+
+def test_no_tool_can_approve_or_reject_a_proposal():
+    tools = set(_tools(_server(MagicMock())))
+    assert "approve_proposal" not in tools
+    assert "reject_proposal" not in tools
+    # The propose tools exist, but applying a proposal is the operator's, not a tool.
+    assert {"propose_scope_item", "propose_authorization", "propose_rate_ceiling"} <= tools
