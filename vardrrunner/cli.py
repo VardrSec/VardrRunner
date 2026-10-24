@@ -12,7 +12,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vardrrunner import configs
+from vardrrunner import __version__, configs, updates
 from vardrrunner import runner as process_runner
 from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run, tools
 from vardrrunner.commands import credentials as credentials_cmd
@@ -68,8 +68,28 @@ app = typer.Typer(
 )
 
 
+def _print_version(value: bool) -> None:
+    # Offline by design (ADR 0012): only a release an explicit check already cached is named.
+    if not value:
+        return
+    console.print(f"vardrrunner {__version__}")
+    status = updates.cached()
+    if status is not None and status.update_available:
+        console.print(updates.notice(status))
+    raise typer.Exit()
+
+
 @app.callback()
-def _startup_cleanup() -> None:
+def _startup_cleanup(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=_print_version,
+        is_eager=True,
+        help="Show the installed version and exit.",
+    ),
+) -> None:
     """Remove sensitive temp state left by a previously interrupted process."""
     process_runner.cleanup_sensitive_temp_dirs()
 

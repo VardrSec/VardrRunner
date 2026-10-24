@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -120,3 +121,63 @@ def test_update_command_failure_exits(capsys):
     ):
         updates_command.check()
     assert "Update check failed" in capsys.readouterr().out
+
+
+def test_cached_reads_a_fresh_cache_without_network(update_cache):
+    update_cache.write_text(json.dumps({"checked_at": NOW.isoformat(), "latest": "99.0.0"}))
+    with patch("vardrrunner.updates.api.fetch_release_metadata") as fetch:
+        status = updates.cached(now=lambda: NOW)
+    assert status is not None and status.update_available and status.from_cache
+    fetch.assert_not_called()
+
+
+def test_cached_without_a_cache_is_none_and_offline(update_cache):
+    with patch("vardrrunner.updates.api.fetch_release_metadata") as fetch:
+        assert updates.cached(now=lambda: NOW.replace(tzinfo=None)) is None
+    fetch.assert_not_called()
+
+
+BASE = str(Path("/", "usr"))
+
+
+@pytest.mark.parametrize(
+    ("prefix", "expected"),
+    [
+        (Path("/", "home", "u", ".local", "share", "pipx", "venvs", "vardrrunner"), "pipx upgrade"),
+        (
+            Path("/", "Users", "u", "AppData", "Local", "pipx", "pipx", "venvs", "vardrrunner"),
+            "pipx upgrade",
+        ),
+        (
+            Path("/", "home", "u", ".local", "share", "uv", "tools", "vardrrunner"),
+            "uv tool upgrade",
+        ),
+        (
+            Path("/", "Users", "u", "AppData", "Roaming", "uv", "tools", "vardrrunner"),
+            "uv tool upgrade",
+        ),
+        (Path("/", "work", "project", ".venv"), "python -m pip install --upgrade vardrrunner"),
+    ],
+)
+def test_upgrade_command_follows_the_installer(prefix, expected):
+    command = updates.upgrade_command(prefix=str(prefix), base_prefix=BASE)
+    assert expected in command
+    assert " or " not in command
+
+
+def test_upgrade_command_unknown_layout_names_both_supported_installers():
+    command = updates.upgrade_command(prefix=BASE, base_prefix=BASE)
+    assert "pipx upgrade vardrrunner" in command
+    assert "uv tool upgrade vardrrunner" in command
+
+
+def test_update_command_names_the_upgrade_command(capsys):
+    available = updates.UpdateStatus("1.0.0", "2.0.0", True, NOW.isoformat(), False)
+    with (
+        patch("vardrrunner.commands.updates.updates.check", return_value=available),
+        patch("vardrrunner.updates.upgrade_command", return_value="`uv tool upgrade vardrrunner`"),
+    ):
+        updates_command.check()
+    out = capsys.readouterr().out
+    assert "1.0.0 → 2.0.0" in out
+    assert "uv tool upgrade vardrrunner" in out

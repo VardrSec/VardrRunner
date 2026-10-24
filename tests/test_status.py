@@ -5,9 +5,21 @@ All network calls and tool checks are mocked.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 import requests
 
+from vardrrunner import __version__, updates
 from vardrrunner.commands.status import run_status
+
+CHECKED_AT = "2026-10-24T00:00:00+00:00"
+
+
+@pytest.fixture(autouse=True)
+def release_check():
+    """Status runs the release check; never let it reach the real registry."""
+    current = updates.UpdateStatus(__version__, __version__, False, CHECKED_AT, True)
+    with patch("vardrrunner.commands.status.updates.check", return_value=current) as mock:
+        yield mock
 
 
 def _patch_status(
@@ -170,3 +182,47 @@ def test_status_does_not_print_api_key(capsys):
     captured = capsys.readouterr()
     assert "vmap_supersecret" not in captured.out
     assert "vmap_supersecret" not in captured.err
+
+
+# ---------------------------------------------------------------------------
+# Version
+# ---------------------------------------------------------------------------
+
+
+def test_status_shows_version_even_when_not_logged_in(capsys):
+    with (
+        patch("vardrrunner.commands.status.config.load", return_value={}),
+        patch("vardrrunner.commands.status.config.CONFIG_FILE") as mock_cf,
+    ):
+        mock_cf.exists.return_value = False
+        run_status()
+    out = capsys.readouterr().out
+    assert f"VardrRunner {__version__} (latest)" in out
+    assert "Update available" not in out
+
+
+def test_status_names_newer_release_and_upgrade_command(capsys, release_check):
+    release_check.return_value = updates.UpdateStatus("0.1.0", "9.9.9", True, CHECKED_AT, False)
+    patches, _ = _patch_status()
+    with (
+        patches[0],
+        patches[1],
+        patches[2],
+        patches[3],
+        patch("vardrrunner.updates.upgrade_command", return_value="`pipx upgrade vardrrunner`"),
+    ):
+        run_status()
+    out = capsys.readouterr().out
+    assert "Update available: 0.1.0 → 9.9.9" in out
+    assert "pipx upgrade vardrrunner" in out
+
+
+def test_status_release_check_failure_warns_and_continues(capsys, release_check):
+    release_check.side_effect = updates.UpdateCheckError("release check failed: offline")
+    patches, client = _patch_status()
+    with patches[0], patches[1], patches[2], patches[3]:
+        run_status()
+    out = capsys.readouterr().out
+    assert "could not check for releases" in out
+    assert "WARN" in out
+    client.whoami.assert_called_once()  # the rest of status still ran

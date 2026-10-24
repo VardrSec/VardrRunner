@@ -15,7 +15,11 @@ helpful message otherwise).
 
 ```
 vardrrunner [COMMAND] [SUBCOMMAND] [OPTIONS]
+vardrrunner --version        # or -V: print the installed version and exit
 ```
+
+`--version` makes no network request. If an earlier `status` or `update check` cached a
+newer release (within 24 hours), it adds an `Update available` line with the upgrade command.
 
 Every command that acts on an engagement takes `--engagement <uuid>`. `--program` and
 `-p` are accepted as aliases on the same flag, so scripts written before the v0.27.0
@@ -160,13 +164,18 @@ vardrrunner scope <engagement-id>
 ---
 
 ## `status`
-Show local configuration, runner version, and each external tool's source: a verified
+Show the installed version, local configuration, and each external tool's source: a verified
 managed install, an unverified copy on `PATH`, or missing. Does not require auth for the
 local parts. This is the quick human glance — *"show me where I stand."*
 
 ```bash
 vardrrunner status
 ```
+
+The Version section runs the same cached release check as `update check`, so it makes at
+most one PyPI request a day. An outdated install shows `WARN` with the newer version and the
+command that upgrades it. An unreachable registry is a warning, never a failure. Nothing
+is installed.
 
 ---
 
@@ -218,8 +227,11 @@ vardrrunner update check [--force] [--json]
 
 Checks public PyPI metadata and reports whether a newer semantic version exists. Results
 are cached for 24 hours under `~/.vardrmap/update-check.json`; `--force` bypasses the cache.
-This command never installs or upgrades software. Use `pipx upgrade vardrrunner` or
-`uv tool upgrade vardrrunner` after reviewing the release.
+This command never installs or upgrades software. When a newer release exists it names the
+upgrade command for how this copy was installed: `pipx upgrade vardrrunner`,
+`uv tool upgrade vardrrunner`, or `python -m pip install --upgrade vardrrunner` in a
+virtualenv. If the install layout is unrecognized, it lists both pipx and uv. Run it after
+reviewing the release.
 
 ---
 

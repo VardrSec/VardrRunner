@@ -7,6 +7,21 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+
+- `vardrrunner --version` (`-V`) prints the installed version. It makes no network request;
+  if a release check in the last 24 hours found a newer version, it says so and names the
+  upgrade command.
+- `vardrrunner status` opens with a Version section. It runs the cached release check (at
+  most one PyPI request a day), and an outdated install shows `WARN` with the newer version
+  and the command that upgrades it. An unreachable registry warns and never fails `status`.
+  See [`changelog/unreleased-version-visibility.md`](changelog/unreleased-version-visibility.md).
+
+### Changed
+
+- `update check` names the upgrade command for how this copy was installed (pipx, uv, or pip
+  in a virtualenv) instead of always listing pipx and uv. Nothing is ever installed.
+
 ## [0.48.0] — 2026-10-23
 
 Manual invocation only — **breaking**: no startup service or background worker. Also adds
