@@ -84,10 +84,10 @@ pinned scan tools, then run `doctor`. Setup succeeds only when the final doctor
 profile succeeds. It is safe to rerun; completed local state is reused.
 
 Setup never installs or starts a background service, including in production mode.
-Accepting every interactive prompt cannot enable startup. Legacy `--install-service`,
-`--start-service`, `--no-start-service`, and `--env-file` options are rejected before
-setup changes any state. Run scans explicitly with `run`, `pipeline run`, or `jobs run`.
-Use `service uninstall` to remove a service installed by an older version.
+Accepting every interactive prompt cannot enable startup. The former `--install-service`,
+`--start-service`, `--no-start-service`, and `--env-file` options were removed in 0.51.0
+and fail as unknown options. Run scans explicitly with `run`, `pipeline run`, or
+`jobs run`.
 
 | Option | Purpose |
 |--------|---------|
@@ -192,7 +192,7 @@ Set `VARDRUNNER_NAME` for a deployment-time label override without rewriting the
 List every engagement visible to the configured key.
 
 ```bash
-vardrrunner engagements          # alias of `engagement-list`
+vardrrunner engagements
 ```
 
 `vardrrunner programs` still runs as a retired alias; it is hidden from `--help`.
@@ -234,7 +234,7 @@ vardrrunner doctor --production                            # strict health profi
 ```
 
 Checks: installed version against the latest release, credential source (env vs file), backend URL validity (HTTPS), config-file
-permissions, API auth, daemon PID health (running / stale), run-dir writability, free disk,
+permissions, API auth, identity, journal, run-dir writability, free disk,
 effective resource policy, tool versions and sources, and per-pipeline readiness. Output falls back to plain ASCII when the terminal or a redirect can't encode its status symbols (Windows piped output), so a redirected report never crashes.
 **Failures** (no creds, bad URL, auth failure, unwritable run dir, critically low disk, zero
 tools, or a managed tool that **fails hash verification**) set a non-zero exit; missing
@@ -246,7 +246,7 @@ says the check could not run.
 
 `--production` additionally treats plaintext credentials as a failure, raises disk
 thresholds to 1 GiB minimum / 5 GiB warning, verifies the execution journal and stable
-identity. No background daemon or service is required. JSON output includes
+identity. JSON output includes
 `"profile": "standard" | "production"`.
 
 ---
@@ -875,40 +875,20 @@ secret never reaches the backend. A missing referenced secret fails the job. See
 
 ---
 
-## `daemon` — legacy process cleanup
+## Upgrading from 0.47.0 or earlier
 
-```bash
-vardrrunner daemon status   # inspect a daemon left by an older version
-vardrrunner daemon stop     # request cooperative shutdown of an old daemon
-```
+0.51.0 removed the `daemon` and `service` cleanup commands. If an older version installed
+a startup service, remove it once by hand. Upgrading does not remove it, and the
+registration now calls a command that no longer exists.
 
-`daemon start` exits with an error and starts nothing, including with `--detach` or
-`--run-jobs`. There is no background heartbeat, queue polling, or interrupted-job recovery.
-Use `heartbeat` for a single connectivity check and `jobs run` for explicit queue execution.
+| OS | Remove the startup registration |
+|---|---|
+| Windows | `schtasks /End /TN VardrRunner` then `schtasks /Delete /TN VardrRunner /F` |
+| Linux | `systemctl --user disable --now vardrrunner.service`, delete `~/.config/systemd/user/vardrrunner.service`, then `systemctl --user daemon-reload` |
+| macOS | `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.vardrsec.vardrrunner.plist`, then delete the plist |
 
-`stop` removes the legacy PID file, `~/.vardrrunner.pid`. An old daemon can finish an
-active job before exiting; upgrading a package does not replace an already-running process.
-
----
-
-## `service` — legacy startup cleanup
-
-```bash
-vardrrunner service status
-vardrrunner service uninstall
-```
-
-These commands inspect and remove an existing systemd user unit (Linux), LaunchAgent
-(macOS), or VardrRunner Scheduled Task (Windows). No command creates startup registrations.
-`service install` always exits with an error, including with `--no-start`, `--dry-run`,
-`--env-file`, or `--run-jobs`. To install the program, use `pipx install vardrrunner`;
-to install supported scanning dependencies, use `vardrrunner tools install --all`.
-
-**Upgrading existing installations:** run `daemon stop` and `service uninstall` to stop
-legacy execution and remove its startup registration. Upgrading alone does not remove an
-OS registration or stop an already-running old executable. A legacy registration calling
-the updated `daemon start` gets an error instead of starting a worker, but should still be
-removed. Manual `run`, `pipeline run`, and one-shot `jobs run` remain available.
+A worker that is still running stops when you end its process; its leftover files
+(`~/.vardrrunner.pid`, `~/.vardrrunner.log`, `~/.vardrmap/daemon.jsonl`) can be deleted.
 
 ---
 

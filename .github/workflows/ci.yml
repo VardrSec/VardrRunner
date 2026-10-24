@@ -34,8 +34,8 @@ jobs:
     needs: lint
     strategy:
       fail-fast: false
-      # The daemon is OS-sensitive (Windows ctypes liveness, POSIX signals), so we
-      # run the full matrix on Linux and smoke the other OSes on the prod runtime.
+      # Tool installs, the OS keychain and file paths differ per OS, so we run the
+      # full matrix on Linux and smoke the other OSes on the prod runtime.
       matrix:
         include:
           - { os: ubuntu-latest, python: "3.10" }

@@ -2,8 +2,8 @@
 
 Covers the defect this phase exists to fix: before v0.29.0 a stop-work refusal,
 an expired key, a backend outage and a lost claim race all printed the same
-line and left the job pending, so the daemon re-attempted a halted job every
-polling cycle with no explanation.
+line and left the job pending, so a halted job was re-attempted with no
+explanation.
 """
 
 from unittest.mock import MagicMock, patch
@@ -34,7 +34,7 @@ def _client(claim_result=None, claim_error=None):
     return c
 
 
-def _run(client, tmp_path, blocked=None, monotonic=lambda: 100.0):
+def _run(client, tmp_path):
     """Drive one batch with tools and target resolution stubbed out."""
     con = Console(record=True, width=200)
     with (
@@ -46,13 +46,7 @@ def _run(client, tmp_path, blocked=None, monotonic=lambda: 100.0):
         handler.tool = "httpx"
         handler.resolve_targets.return_value = ["https://app.example.com"]
         handler.execute.return_value = None  # no output → completes without upload
-        jobs_cmd.execute_pending_jobs(
-            client,
-            con,
-            yes=True,
-            blocked_engagements=blocked,
-            monotonic=monotonic,
-        )
+        jobs_cmd.execute_pending_jobs(client, con, yes=True)
     return con.export_text()
 
 
@@ -89,26 +83,30 @@ class TestStopWork:
         kinds = [c.args[1] for c in client.post_event.call_args_list]
         assert "blocked" in kinds
 
-    def test_engagement_is_suppressed_for_subsequent_polls(self, tmp_path):
-        """The daemon's memory: a halted engagement must not be re-claimed every
-        poll_interval seconds forever."""
-        blocked: dict[str, float] = {}
+    def test_engagements_remaining_jobs_are_skipped_in_this_run(self, tmp_path):
+        """One halt is reported once, not once per job; other engagements still run."""
         client = _client(claim_error=errors.StopWorkError("halted"))
-        _run(client, tmp_path, blocked=blocked)
-        assert blocked == {"eng-1": 160.0}
+        client.pending_jobs.return_value = [
+            dict(JOB, id="job-1"),
+            dict(JOB, id="job-2"),
+            dict(JOB, id="job-3", engagement_id="eng-2"),
+        ]
+        out = _run(client, tmp_path)
+        claimed = [c.args[0] for c in client.claim_job.call_args_list]
+        assert claimed == ["job-1", "job-3"]
+        assert "Skipping this engagement's remaining jobs in this run." in out
+        assert "stop-work is engaged for engagement eng-1" in out
+        assert "rechecked" not in out
 
+    def test_next_run_asks_again(self, tmp_path):
+        """Nothing outlives a run, so lifting stop-work takes effect on the next one."""
+        client = _client(claim_error=errors.StopWorkError("halted"))
+        _run(client, tmp_path)
+        client.claim_job.side_effect = None
+        client.claim_job.return_value = {}
         client.claim_job.reset_mock()
-        out = _run(client, tmp_path, blocked=blocked)
-        client.claim_job.assert_not_called()
-        assert "stop-work recheck" in out
-
-    def test_engagement_is_rechecked_after_suppression_expires(self, tmp_path):
-        """Lifting stop-work must restore availability without a daemon restart."""
-        blocked = {"eng-1": 160.0}
-        client = _client(claim_result={})
-        _run(client, tmp_path, blocked=blocked, monotonic=lambda: 161.0)
+        _run(client, tmp_path)
         client.claim_job.assert_called_once_with("job-1")
-        assert blocked == {}
 
 
 class TestClaimRace:
@@ -118,11 +116,13 @@ class TestClaimRace:
         client.complete_job.assert_not_called()
 
     def test_does_not_suppress_the_engagement(self, tmp_path):
-        """A race is normal contention, not a halt — the next poll should retry."""
-        blocked: dict[str, float] = {}
+        """A race is normal contention, not a halt: the engagement's next job is still tried."""
         client = _client(claim_error=errors.ClaimRace("raced"))
-        _run(client, tmp_path, blocked=blocked)
-        assert blocked == {}
+        client.pending_jobs.return_value = [dict(JOB, id="job-1"), dict(JOB, id="job-2")]
+        out = _run(client, tmp_path)
+        claimed = [c.args[0] for c in client.claim_job.call_args_list]
+        assert claimed == ["job-1", "job-2"]
+        assert "remaining jobs" not in out
 
 
 class TestOtherClaimFailures:
@@ -194,7 +194,6 @@ class TestAdvisoryWarnings:
     def test_stop_work_warning_blocks_even_after_successful_claim(self, tmp_path):
         """Defence in depth for backend paths that return stop-work as a warning."""
         client = _client(claim_result={"warnings": [{"reason": "stop_work_active"}]})
-        blocked: dict[str, float] = {}
         con = Console(record=True, width=200)
         with (
             patch("vardrrunner.commands.jobs.runner.tool_available", return_value=True),
@@ -204,14 +203,9 @@ class TestAdvisoryWarnings:
             handler = reg.get.return_value
             handler.tool = "httpx"
             handler.resolve_targets.return_value = ["https://a.com"]
-            jobs_cmd.execute_pending_jobs(
-                client,
-                con,
-                yes=True,
-                blocked_engagements=blocked,
-                monotonic=lambda: 100.0,
-            )
+            jobs_cmd.execute_pending_jobs(client, con, yes=True)
             handler.execute.assert_not_called()
-        assert blocked == {"eng-1": 160.0}
-        assert "STOP-WORK" in con.export_text()
+        out = con.export_text()
+        assert "Skipping this engagement's remaining jobs in this run." in out
+        assert "STOP-WORK" in out
         client.complete_job.assert_called_once_with("job-1", "pending")

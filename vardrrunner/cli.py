@@ -16,11 +16,9 @@ from vardrrunner import __version__, configs, shell, updates
 from vardrrunner import runner as process_runner
 from vardrrunner.commands import audit, auth, engagements, identity, imports, jobs, run, tools
 from vardrrunner.commands import credentials as credentials_cmd
-from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import doctor as doctor_cmd
 from vardrrunner.commands import heartbeat as heartbeat_cmd
 from vardrrunner.commands import pipeline as pipeline_cmd
-from vardrrunner.commands import service as service_cmd
 from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
 from vardrrunner.commands import test_cases as test_cases_cmd
@@ -141,11 +139,6 @@ def initialize(
     production: bool = typer.Option(
         False, "--production", help="Require strict credential, disk, and durable-state checks"
     ),
-    install_service: bool = typer.Option(False, "--install-service", hidden=True),
-    start_service: bool | None = typer.Option(
-        None, "--start-service/--no-start-service", hidden=True
-    ),
-    env_file: Path | None = typer.Option(None, "--env-file", hidden=True),
     allow_plaintext: bool = typer.Option(
         False,
         "--allow-plaintext-credentials",
@@ -166,9 +159,6 @@ def initialize(
         api_key=api_key,
         name=name,
         production=production,
-        install_service=install_service,
-        start_service=start_service,
-        env_file=env_file,
         allow_plaintext=allow_plaintext,
         non_interactive=non_interactive,
         install_tools=install_tools,
@@ -316,40 +306,6 @@ def tools_purge(yes: bool = typer.Option(False, "--yes", "-y", help="Skip the co
     tools.purge(yes=yes)
 
 
-service_app = typer.Typer(
-    help="Inspect or remove legacy startup services. Installation is no longer supported.",
-    no_args_is_help=True,
-)
-app.add_typer(service_app, name="service")
-
-
-@service_app.command("install")
-def service_install(
-    env_file: Path | None = typer.Option(None, "--env-file", hidden=True),
-    start: bool = typer.Option(True, "--start/--no-start", hidden=True),
-    dry_run: bool = typer.Option(False, "--dry-run", hidden=True),
-    run_jobs: bool = typer.Option(
-        False,
-        "--run-jobs",
-        hidden=True,
-    ),
-):
-    """Unavailable: install the program with pipx; invoke scans manually."""
-    service_cmd.install(env_file=env_file, start=start, dry_run=dry_run, run_jobs=run_jobs)
-
-
-@service_app.command("uninstall")
-def service_uninstall():
-    """Stop and remove the installed background service."""
-    service_cmd.uninstall()
-
-
-@service_app.command("status")
-def service_status():
-    """Query the native service manager."""
-    service_cmd.show_status()
-
-
 update_app = typer.Typer(help="Update VardrRunner to the newest release, or check for one.")
 app.add_typer(update_app, name="update")
 
@@ -378,14 +334,12 @@ def update_check(
 # --------------------------------------------------------------------------- #
 
 
-@app.command()
+@app.command(name="engagements")
 def engagement_list():
     """List all engagements in VardrMap."""
     engagements.list_engagements()
 
 
-# Alias `engagements` → `engagement-list` for a more natural UX
-app.command(name="engagements")(engagement_list)
 # Retired name, kept so existing habits and scripts do not break. Hidden from
 # --help so only the current name is advertised.
 app.command(name="programs", hidden=True)(engagement_list)
@@ -425,78 +379,6 @@ def import_httpx(
 ):
     """Import an httpx output file."""
     imports.import_file("httpx", engagement_id, file)
-
-
-# --------------------------------------------------------------------------- #
-# Run
-# --------------------------------------------------------------------------- #
-
-# --------------------------------------------------------------------------- #
-# Jobs
-# --------------------------------------------------------------------------- #
-
-# --------------------------------------------------------------------------- #
-# Daemon
-# --------------------------------------------------------------------------- #
-
-daemon_app = typer.Typer(
-    help="Inspect or stop legacy daemons. Starting background workers is no longer supported.",
-    no_args_is_help=True,
-)
-app.add_typer(daemon_app, name="daemon")
-
-
-@daemon_app.command("start")
-def daemon_start(
-    detach: bool = typer.Option(False, "--detach", "-d", hidden=True, help="Run in background"),
-    poll_interval: int = typer.Option(
-        5, "--poll-interval", min=1, max=3600, hidden=True, help="Seconds between job polls"
-    ),
-    heartbeat_interval: int = typer.Option(
-        60,
-        "--heartbeat-interval",
-        min=1,
-        max=86400,
-        hidden=True,
-        help="Seconds between heartbeats",
-    ),
-    log_file: Path | None = typer.Option(
-        None, "--log-file", hidden=True, help="Append output to file"
-    ),
-    log_format: daemon_cmd.LogFormat = typer.Option(
-        daemon_cmd.LogFormat.TEXT,
-        "--log-format",
-        hidden=True,
-        help="Log encoding: text or newline-delimited JSON",
-    ),
-    run_jobs: bool = typer.Option(
-        False,
-        "--run-jobs",
-        hidden=True,
-        help="Opt in to polling, executing, and recovering scan jobs",
-    ),
-):
-    """Unavailable: invoke scans manually; no background worker is started."""
-    daemon_cmd.start(
-        detach=detach,
-        poll_interval=poll_interval,
-        heartbeat_interval=heartbeat_interval,
-        log_file=log_file,
-        log_format=log_format,
-        run_jobs=run_jobs,
-    )
-
-
-@daemon_app.command("stop")
-def daemon_stop():
-    """Stop a running daemon."""
-    daemon_cmd.stop()
-
-
-@daemon_app.command("status")
-def daemon_status():
-    """Show whether the daemon is running."""
-    daemon_cmd.status()
 
 
 # --------------------------------------------------------------------------- #
@@ -939,6 +821,7 @@ def draft_cases(
     offset: int = typer.Option(0, "--offset", min=0),
     limit: int = typer.Option(50, "--limit", min=1, max=100),
 ) -> None:
+    """Draft VardrGate cases from an OpenAPI file or observed operations into a review file."""
     test_cases_cmd.draft_cases(
         engagement_id, openapi, endpoint_ids, output, base_url, offset, limit
     )
@@ -952,4 +835,5 @@ def save_cases(
         False, "--reviewed", help="Confirm review of targets, identities and access decisions"
     ),
 ) -> None:
+    """Save reviewed cases to VardrMap (requires --reviewed)."""
     test_cases_cmd.save_cases(engagement_id, file, reviewed)

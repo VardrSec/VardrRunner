@@ -73,25 +73,6 @@ def test_env_used_when_no_file(monkeypatch):
     assert config.require_auth() == ("https://env.example.com", "vmap_env")
 
 
-def test_persistent_credential_source_ignores_shell_only_auth(monkeypatch):
-    monkeypatch.setenv(config.ENV_API_URL, "https://env.example.com")
-    monkeypatch.setenv(config.ENV_API_KEY, "vmap_env")
-    assert config.persistent_credential_source() is None
-
-
-def test_persistent_credential_source_detects_file_and_keychain(monkeypatch):
-    config.save({"api_url": "https://file.example.com", "api_key": "vmap_file"})
-    assert config.persistent_credential_source() == "config file"
-    config.save({"api_url": "https://file.example.com"})
-    monkeypatch.setattr("vardrrunner.keychain.get_key", lambda _url: "vmap_keychain")
-    assert config.persistent_credential_source() == "keychain"
-
-
-def test_persistent_credential_source_rejects_insecure_saved_url():
-    config.save({"api_url": "http://remote.example.com", "api_key": "vmap_file"})
-    assert config.persistent_credential_source() is None
-
-
 # --------------------------------------------------------------------------- #
 # URL validation
 # --------------------------------------------------------------------------- #

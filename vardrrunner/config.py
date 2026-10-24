@@ -29,7 +29,7 @@ DATA_DIR = CONFIG_DIR / "data"
 # runner at an arbitrary file to read and replay at a target.
 WORDLISTS_DIR = CONFIG_DIR / "wordlists"
 
-# Environment overrides — useful for containers, CI, and headless VPS daemons,
+# Environment overrides — useful for containers, CI, and headless hosts,
 # where a config file is awkward. Env always takes precedence over the file.
 ENV_API_URL = "VARDRMAP_URL"
 ENV_API_KEY = "VARDRMAP_API_KEY"
@@ -122,27 +122,6 @@ def credential_source() -> str | None:
     if url and keychain.get_key(url):
         return "keychain"
     if load().get("api_key"):
-        return "config file"
-    return None
-
-
-def persistent_credential_source() -> str | None:
-    """Return a credential source that survives a fresh service process.
-
-    Environment variables in the current shell do not count. The URL must also be in the
-    config file because a per-user supervisor does not inherit the invoking shell.
-    """
-    data = load()
-    url = data.get("api_url")
-    if not isinstance(url, str) or not url:
-        return None
-    try:
-        validate_api_url(url)
-    except InvalidApiUrl:
-        return None
-    if keychain.get_key(url):
-        return "keychain"
-    if data.get("api_key"):
         return "config file"
     return None
 

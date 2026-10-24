@@ -56,7 +56,7 @@ installs a startup service or starts a background scan worker.
 - **Live job events** — emits `started → targets_resolved → running → uploaded → done/failed`
   so the backend Terminal shows real-time logs
 - **Preflight (`doctor`)** — one command validates the whole machine (creds, URL, perms,
-  auth, daemon, disk, tools, pipelines) and exits non-zero on actionable failures, for
+  auth, identity, journal, disk, tools, pipelines) and exits non-zero on actionable failures, for
   scripted host preflight
 - **Safe by default** — missing tools fail the job loudly, targets are normalized before
   use, risky target classes can be denied locally, and the API key is stored locally with
@@ -142,13 +142,11 @@ Add tab completion with `pipx inject vardrrunner prompt_toolkit`. See
 
 Installation and normal setup create no startup task, launch no daemon, and do not offer
 background startup in a prompt. VardrRunner runs when you invoke it. Use `vardrrunner jobs run`
-to execute queued jobs manually. If an older setup installed automatic startup, remove it
-with `vardrrunner service uninstall`; upgrading alone does not remove an existing service.
+to execute queued jobs manually. Install the program with `pipx install vardrrunner`;
+install scan dependencies with `tools install`.
 
-`service install`, `daemon start`, and legacy setup service flags are no longer
-supported, including their former opt-in flags. Install the program with `pipx install
-vardrrunner`; install scan dependencies with `tools install`. See
-[legacy cleanup instructions](docs/cli.md#service--legacy-startup-cleanup).
+If an older version (0.47.0 or earlier) installed automatic startup, upgrading does not
+remove it; see [removing a legacy startup service](docs/cli.md#upgrading-from-0470-or-earlier).
 
 ### One-shot usage
 ```bash

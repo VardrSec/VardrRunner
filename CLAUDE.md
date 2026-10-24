@@ -37,9 +37,9 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
     deferred, and each methodology says so in `scope`
   - `toolchain.py` — pinned, verified tool installs into `~/.vardrmap/tools` from `tool_manifest.json`; re-hashes managed binaries before use (ADR 0014)
   - `journal.py` / `recovery.py` / `manifests.py` — durable job state, crash reconciliation, artifact hashes and atomic run evidence (ADR 0010)
-  - `identity.py` / `service.py` — stable installation identity, and plans that only inspect or remove **legacy** startup services (ADR 0011, superseded in part by ADR 0016)
+  - `identity.py` — stable installation identity (ADR 0011; its service portions were superseded by ADR 0016 and the code removed in v0.51.0)
   - `compatibility.py` / `resources.py` / `updates.py` — wire negotiation, bounded local policy, and cached release checks (ADR 0012)
-  - `commands/` — one module per group: `audit`, `auth`, `daemon`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `service`, `setup`, `tools`, `updates`, `engagements`, `run`, `status`
+  - `commands/` — one module per group: `audit`, `auth`, `doctor`, `heartbeat`, `identity`, `imports`, `jobs`, `pipeline`, `setup`, `tools`, `updates`, `engagements`, `run`, `status`
 - `tests/` — pytest suite with a 95% coverage floor. Default tests mock backend/scanner calls; opt-in real-binary smoke tests use bounded loopback fixtures. The real three-repository acceptance harness lives in VardrMap; see its `scripts/integration/README.md`
 - `docs/` — architecture, development setup, CLI reference, ADRs
 - `scripts/pin_tools.py` — the only way tool pins change: downloads, hashes, cross-checks upstream checksums (`--check` for drift)
@@ -107,7 +107,7 @@ vardrrunner jobs run   # one-shot; nothing runs in the background
 
 ## Commands
 - `login vardrmap` — authenticate; store key in OS keychain
-- `init` — guided/provisioned auth, identity, and doctor acceptance gate; never installs a startup service and rejects the legacy `--install-service`/`--start-service`/`--env-file` options
+- `init` — guided/provisioned auth, identity, and doctor acceptance gate; never installs a startup service (the old `--install-service`/`--start-service`/`--env-file` options are gone, so they fail as unknown options)
 - `logout` — remove credentials, keep URL
 - `whoami` — identity behind the configured key
 - `credentials` — credential source/posture; never shows the key
@@ -119,12 +119,10 @@ vardrrunner jobs run   # one-shot; nothing runs in the background
 - `jobs list|run` — inspect and execute backend job queue (one-shot)
 - `audit list|show|export` — inspect/export sanitized local execution evidence
 - `identity show|set-name` — stable UUID and human runner label
-- `service status|uninstall` — inspect or remove a **legacy** startup service; `service install` always errors
-- `daemon stop|status` — stop or inspect a **legacy** worker; `daemon start` always errors, with or without `--run-jobs`/`--detach`
 - `heartbeat` — send single heartbeat
 - `tools install|list|verify|remove|purge` — pinned, verified tool installs in `~/.vardrmap/tools`
 - `status` — installed version (cached release check; outdated → WARN naming `vardrrunner update`), local config, tool availability and source
-- `doctor` — deep preflight (version vs. latest release, credentials, disk, identity, journal, tools); a newer release is a WARN, an unreachable registry never fails it; exits non-zero on failures (`--json`)
+- `doctor` — deep preflight (version vs. latest release, credentials, disk, identity, journal, tools; no daemon check); a newer release is a WARN, an unreachable registry never fails it; exits non-zero on failures (`--json`)
 - `update` — installs the newest release in the foreground, pipx installs only (others get the command); `update check` only reports. Both always ask PyPI. `--version` is offline and only repeats a cached result. Never install anything the operator did not ask for with `update` (ADR 0012 amendment)
 - `test-cases draft|save` — draft VardrGate cases from observed operations/OpenAPI into a review file, save only with `--reviewed`
 - bare `vardrrunner` — interactive console at a terminal; help and exit 2 without one. Optional `[shell]` extra adds completion

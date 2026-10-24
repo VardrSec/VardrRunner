@@ -2,7 +2,7 @@
 
 Every claimed backend job is represented by an explicit state machine in a
 small SQLite database.  Transactions make each phase transition atomic; WAL
-mode lets audit readers inspect state while the daemon is active.  The journal
+mode lets audit readers inspect state while a `jobs run` is active.  The journal
 contains sanitized metadata only—never targets, credentials, headers, or raw
 tool output.
 """

@@ -91,16 +91,6 @@ def test_no_tools_at_all_is_fatal(monkeypatch):
         assert _run() == 1
 
 
-def test_stale_daemon_pid_warns(monkeypatch):
-    check = None
-    with (
-        patch("vardrrunner.commands.doctor.daemon._read_pid", return_value=4242),
-        patch("vardrrunner.commands.doctor.daemon._process_alive", return_value=False),
-    ):
-        check = doctor._check_daemon()
-    assert check.status is Health.WARN and "stale" in check.detail
-
-
 def test_json_output_is_structured(monkeypatch, capsys):
     monkeypatch.setenv("VARDRMAP_URL", "https://api.example.com")
     monkeypatch.setenv("VARDRMAP_API_KEY", "vmap_ok")
@@ -137,13 +127,11 @@ def test_production_profile_requires_secure_storage_without_background_service(
     with (
         patch("vardrrunner.commands.doctor.api.VardrMapClient", return_value=client),
         patch("vardrrunner.runner.tool_available", return_value=True),
-        patch("vardrrunner.service.build_plan") as service_plan,
     ):
         checks = doctor._collect(production=True)
     storage = next(check for check in checks if check.name == "credential storage")
     assert storage.status is Health.FAIL
-    assert not any(check.name == "background service" for check in checks)
-    service_plan.assert_not_called()
+    assert not any(check.name in ("background service", "daemon") for check in checks)
 
 
 def test_identity_and_journal_failures_are_fatal():

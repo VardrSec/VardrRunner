@@ -7,8 +7,21 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
-Interactive console. No backend change required. See
-[`changelog/unreleased-interactive-console.md`](changelog/unreleased-interactive-console.md).
+Interactive console, and removal of the legacy daemon and service commands —
+**breaking**. No backend change required. See
+[`changelog/unreleased-interactive-console.md`](changelog/unreleased-interactive-console.md)
+and [`changelog/unreleased-remove-daemon-service.md`](changelog/unreleased-remove-daemon-service.md).
+
+### Breaking
+
+- **The `daemon` and `service` commands are removed.** `daemon start|stop|status` and
+  `service install|uninstall|status` are now unknown commands. Since 0.48.0 none of them
+  could start work; they only cleaned up older installs. A startup service left by 0.47.0
+  or earlier is removed by hand (`docs/cli.md`, "Upgrading from 0.47.0 or earlier").
+- **The hidden `init` options are removed.** `--install-service`, `--start-service`,
+  `--no-start-service` and `--env-file` fail as unknown options (exit 2) instead of a
+  custom error.
+- **`engagement-list` is removed.** Use `engagements`; the hidden `programs` alias stays.
 
 ### Added
 
@@ -25,6 +38,14 @@ Interactive console. No backend change required. See
 
 - A bare `vardrrunner` at a terminal opens the console instead of printing help. In a
   script, pipe or CI job (no terminal) it still prints help and exits 2.
+- `doctor` no longer has a `daemon` check.
+- When stop-work refuses a claim, `jobs run` skips that engagement's remaining jobs for the
+  rest of the run and says so ("Skipping this engagement's remaining jobs in this run."). It
+  no longer promises a 60-second recheck that a one-shot run never performed; the next
+  `jobs run` asks again.
+- `test-cases draft` and `test-cases save` have help text.
+- A tool that can't be replaced during `tools install` now says "stop any running *tool*
+  and retry", without mentioning a daemon.
 
 ## [0.50.0] — 2026-10-24
 

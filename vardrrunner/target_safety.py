@@ -269,8 +269,9 @@ def override_enabled() -> bool:
     """Whether the operator has explicitly opted out of local deny rules.
 
     An environment variable rather than a CLI flag, deliberately: deny rules
-    matter most on the unattended daemon path, where there is no command line to
-    put a flag on. It mirrors ``VARDRRUNNER_ALLOW_INSECURE`` and, being part of
-    the service environment, it is visible to anyone auditing the host.
+    must also cover queued jobs run by `jobs run`, where the backend chooses the
+    targets and there is no per-target command line to put a flag on. It mirrors
+    ``VARDRRUNNER_ALLOW_INSECURE`` and, being part of the host environment, it is
+    visible to anyone auditing the host.
     """
     return os.environ.get(ENV_ALLOW_DENIED, "").strip() in {"1", "true", "yes"}

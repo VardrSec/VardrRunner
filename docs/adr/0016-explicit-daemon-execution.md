@@ -39,3 +39,14 @@ updated daemon entry point receive an error and cannot launch a worker.
 
 Tests verify rejected commands have no execution side effects and preserve cleanup and
 manual queue behavior across platforms.
+
+## Amendment (2026-10-24): cleanup commands removed
+
+The compatibility errors and cleanup commands kept above served one release cycle. v0.51.0
+removes them: `daemon` and `service` are unknown commands, and the hidden `init` options
+`--install-service`, `--start-service`/`--no-start-service` and `--env-file` are unknown
+options. Nothing changes in behavior, because none of them could start work. `doctor` no
+longer checks for a daemon PID file. A one-shot `jobs run` no longer carries the daemon's
+60-second stop-work recheck: a halted engagement's remaining jobs are skipped for the rest of
+the run, and the next run asks again. Leftover registrations are removed by hand, as
+documented in `docs/cli.md`.

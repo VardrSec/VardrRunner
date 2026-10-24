@@ -5,6 +5,7 @@ This covers cli.py which is otherwise 0% — the logic lives in the command modu
 (tested elsewhere); here we only verify the wiring.
 """
 
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,7 +14,6 @@ from typer.testing import CliRunner
 
 from vardrrunner import configs
 from vardrrunner.cli import app
-from vardrrunner.commands import daemon as daemon_cmd
 from vardrrunner.commands import run as run_cmd
 
 runner = CliRunner()
@@ -141,8 +141,7 @@ class TestVersionOption:
 
 
 class TestInitCommand:
-    def test_all_options_are_forwarded(self, tmp_path):
-        env_file = tmp_path / "runner.env"
+    def test_all_options_are_forwarded(self):
         with patch("vardrrunner.commands.setup.initialize") as mock:
             invoke(
                 "init",
@@ -153,10 +152,6 @@ class TestInitCommand:
                 "--name",
                 "runner-a",
                 "--production",
-                "--install-service",
-                "--no-start-service",
-                "--env-file",
-                str(env_file),
                 "--allow-plaintext-credentials",
                 "--non-interactive",
             )
@@ -165,9 +160,6 @@ class TestInitCommand:
             api_key="vmap_secret",
             name="runner-a",
             production=True,
-            install_service=True,
-            start_service=False,
-            env_file=env_file,
             allow_plaintext=True,
             non_interactive=True,
             install_tools=None,
@@ -182,21 +174,6 @@ class TestInitCommand:
             invoke("init", "--non-interactive", *flags)
         _, kwargs = mock.call_args
         assert kwargs["install_tools"] is expected
-
-    @pytest.mark.parametrize(
-        "args",
-        [
-            ("--poll-interval", "0"),
-            ("--heartbeat-interval", "0"),
-            ("--poll-interval", "3601"),
-            ("--heartbeat-interval", "86401"),
-        ],
-    )
-    def test_daemon_intervals_are_bounded(self, args):
-        with patch("vardrrunner.commands.daemon.start") as start:
-            result = invoke("daemon", "start", *args)
-        assert result.exit_code != 0
-        start.assert_not_called()
 
 
 class TestDoctorCommand:
@@ -290,35 +267,6 @@ class TestToolsCommands:
         mock.assert_called_once_with(yes=True)
 
 
-class TestServiceCommands:
-    def test_install_options(self, tmp_path):
-        env_file = tmp_path / "runner.env"
-        with patch("vardrrunner.commands.service.install") as mock:
-            invoke(
-                "service",
-                "install",
-                "--env-file",
-                str(env_file),
-                "--no-start",
-                "--dry-run",
-            )
-        mock.assert_called_once_with(env_file=env_file, start=False, dry_run=True, run_jobs=False)
-
-    @pytest.mark.parametrize("flags, expected", [([], False), (["--run-jobs"], True)])
-    def test_service_scan_opt_in(self, flags, expected):
-        with patch("vardrrunner.commands.service.install") as mock:
-            invoke("service", "install", *flags)
-        mock.assert_called_once_with(env_file=None, start=True, dry_run=False, run_jobs=expected)
-
-    def test_status_and_uninstall(self):
-        with patch("vardrrunner.commands.service.show_status") as status:
-            invoke("service", "status")
-        status.assert_called_once()
-        with patch("vardrrunner.commands.service.uninstall") as uninstall:
-            invoke("service", "uninstall")
-        uninstall.assert_called_once()
-
-
 class TestUpdateCommands:
     def test_check_options(self):
         # --force is still accepted, so existing scripts keep working; checks are always fresh.
@@ -362,11 +310,6 @@ class TestAuditCommands:
 
 
 class TestProgramListCommand:
-    def test_program_list(self):
-        with patch("vardrrunner.commands.engagements.list_engagements") as mock:
-            invoke("engagement-list")
-        mock.assert_called_once()
-
     def test_programs_alias(self):
         with patch("vardrrunner.commands.engagements.list_engagements") as mock:
             invoke("engagements")
@@ -416,44 +359,6 @@ class TestImportCommands:
         assert "nuclei" in result.output
         assert "httpx" in result.output
         assert "ffuf" not in result.output
-
-
-# ---------------------------------------------------------------------------
-# Daemon sub-app
-# ---------------------------------------------------------------------------
-
-
-class TestDaemonCommands:
-    @pytest.mark.parametrize("flags, expected", [([], False), (["--run-jobs"], True)])
-    def test_daemon_start(self, flags, expected):
-        with patch("vardrrunner.commands.daemon.start") as mock:
-            invoke("daemon", "start", *flags)
-        mock.assert_called_once_with(
-            detach=False,
-            poll_interval=5,
-            heartbeat_interval=60,
-            log_file=None,
-            log_format=daemon_cmd.LogFormat.TEXT,
-            run_jobs=expected,
-        )
-
-    def test_daemon_stop(self):
-        with patch("vardrrunner.commands.daemon.stop") as mock:
-            invoke("daemon", "stop")
-        mock.assert_called_once()
-
-    def test_daemon_status(self):
-        with patch("vardrrunner.commands.daemon.status") as mock:
-            invoke("daemon", "status")
-        mock.assert_called_once()
-
-    def test_daemon_start_detach_flag(self):
-        with patch("vardrrunner.commands.daemon.start") as mock:
-            invoke("daemon", "start", "--detach")
-        _, kwargs = mock.call_args
-        assert (
-            kwargs.get("detach") is True or mock.call_args[0][0] is True or True
-        )  # just verify invoked
 
 
 # ---------------------------------------------------------------------------
@@ -960,16 +865,21 @@ class TestTestCasesCommands:
 
 
 class TestManualInvocationOnly:
+    """The background modes were removed (ADR 0016, v0.51.0). Their old entry points must
+    fail as unknown commands or options before anything runs."""
+
     @pytest.mark.parametrize(
         "args",
         [
             ("service", "install"),
             ("service", "install", "--run-jobs"),
-            ("service", "install", "--dry-run"),
-            ("service", "install", "--no-start", "--env-file", "legacy.env"),
+            ("service", "uninstall"),
+            ("service", "status"),
             ("daemon", "start"),
             ("daemon", "start", "--detach", "--run-jobs"),
-            ("daemon", "start", "--log-file", "legacy.log", "--log-format", "json"),
+            ("daemon", "stop"),
+            ("daemon", "status"),
+            ("engagement-list",),
             ("init", "--install-service"),
             ("init", "--start-service"),
             ("init", "--no-start-service"),
@@ -977,7 +887,7 @@ class TestManualInvocationOnly:
             ("init", "--production", "--non-interactive", "--install-service"),
         ],
     )
-    def test_legacy_entrypoints_cannot_start_work(self, args):
+    def test_removed_entrypoints_are_unknown_and_start_nothing(self, args):
         from contextlib import ExitStack
 
         with ExitStack() as stack:
@@ -986,32 +896,32 @@ class TestManualInvocationOnly:
                 for target in (
                     "subprocess.Popen",
                     "subprocess.run",
-                    "vardrrunner.service.build_plan",
-                    "vardrrunner.commands.setup._ensure_auth",
-                    "vardrrunner.commands.setup._ensure_identity",
-                    "vardrrunner.commands.setup._ensure_journal",
-                    "vardrrunner.commands.setup._ensure_tools",
+                    "vardrrunner.commands.setup.initialize",
                     "vardrrunner.commands.jobs.execute_pending_jobs",
                     "vardrrunner.recovery.reconcile",
                     "vardrrunner.commands.heartbeat.send_heartbeat",
+                    "vardrrunner.commands.engagements.list_engagements",
                 )
             ]
             result = invoke(*args)
-        assert result.exit_code == (1 if args[0] == "init" else 2)
-        assert "no longer supported" in result.output
+        assert result.exit_code == 2
+        assert "No such command" in result.output or "No such option" in result.output
         for mock in blocked:
             mock.assert_not_called()
 
-    @pytest.mark.parametrize(
-        "args, hidden_flags",
-        [
-            (("daemon", "start"), ("--run-jobs", "--detach", "--poll-interval")),
-            (("service", "install"), ("--run-jobs", "--env-file", "--no-start")),
-            (("init",), ("--install-service", "--start-service", "--env-file")),
-        ],
-    )
-    def test_help_does_not_offer_retired_options(self, args, hidden_flags):
-        result = invoke(*args, "--help")
+    def test_help_lists_no_removed_commands(self):
+        result = invoke("--help")
         assert result.exit_code == 0
-        for flag in hidden_flags:
+        # A command row is a name followed by two or more spaces and its help, whatever
+        # border (`│`, `|`, `┃`, none) Rich draws. Typer forces color on GitHub Actions, so
+        # ANSI escapes are stripped first.
+        plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\]8;[^\x1b]*\x1b\\\\", "", result.output)
+        listed = set(re.findall(r"^[^\w\n]*([a-z][\w-]*)\s{2,}\S", plain, re.MULTILINE))
+        assert {"daemon", "service", "engagement-list"}.isdisjoint(listed)
+        assert "engagements" in listed
+
+    def test_init_help_offers_no_service_options(self):
+        result = invoke("init", "--help")
+        assert result.exit_code == 0
+        for flag in ("--install-service", "--start-service", "--env-file"):
             assert flag not in result.output

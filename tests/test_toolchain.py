@@ -339,7 +339,7 @@ def test_binary_in_use_cannot_be_replaced(fake, monkeypatch):
         raise PermissionError("in use")
 
     monkeypatch.setattr(toolchain.os, "replace", locked)
-    with pytest.raises(toolchain.ToolchainError, match="stop the daemon"):
+    with pytest.raises(toolchain.ToolchainError, match="stop any running"):
         toolchain.install("faketool")
 
 
