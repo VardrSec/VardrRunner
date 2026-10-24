@@ -132,7 +132,13 @@ above does. Inside a venv you'll need it activated; `pipx`/`uv` avoid that entir
 ```bash
 vardrrunner init               # guided setup for manual use; no background startup
 vardrrunner tools install --all   # pinned, verified tools into ~/.vardrmap/tools
+vardrrunner                    # open the console: type `heartbeat`, `jobs list`, `exit`
 ```
+
+A bare `vardrrunner` at a terminal opens an interactive console where commands are typed
+without the program name, and `use <engagement-id>` fills in `--engagement` until `back`.
+Add tab completion with `pipx inject vardrrunner prompt_toolkit`. See
+[the console reference](docs/cli.md#console--type-commands-without-vardrrunner).
 
 Installation and normal setup create no startup task, launch no daemon, and do not offer
 background startup in a prompt. VardrRunner runs when you invoke it. Use `vardrrunner jobs run`

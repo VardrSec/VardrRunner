@@ -23,6 +23,7 @@ Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs securi
     detection method and confidence reach VardrMap intact. Includes `vardrgate_api_test`, which drives VardrGate over a binary/JSON contract (ADR 0006) and resolves credential references locally (ADR 0007)
   - `pipelines.py` — named recon pipelines (ordered `Stage(tool, source)` chains)
   - `mcp_server.py` — optional MCP server (`vardrrunner mcp`); adapts the VardrMap API to agent tools, read + guarded writes, no scope/auth/delete (ADR 0015), plus six instruction-only prompts. Reads shared API playbooks and filtered evidence from Map; `mcp` imported lazily, optional extra
+  - `shell.py` — interactive console for a bare `vardrrunner` at a terminal (ADR 0017). Each line runs through the same Typer app; `use` fills `engagement_id` via Click's `default_map`. **History stays in memory** (a typed key must never reach disk), `mcp` is refused, and the banner is offline and never reads the keychain. A quote without a primary source must be `sourced=False` ("attributed to")
   - `runner.py` — subprocess execution (timeouts, allowlist), output capture, run directory management; `program()` is the only way a command gets its executable
   - `commands/test_cases.py` — `test-cases draft|save`; review file is created exclusively (never overwritten), literal credentials refused, save needs `--reviewed`
   - `methodologies.py` — versioned checklists from `methodologies.json` (OWASP API Top 10
@@ -126,6 +127,7 @@ vardrrunner jobs run   # one-shot; nothing runs in the background
 - `doctor` — deep preflight (version vs. latest release, credentials, disk, identity, journal, tools); a newer release is a WARN, an unreachable registry never fails it; exits non-zero on failures (`--json`)
 - `update` — installs the newest release in the foreground, pipx installs only (others get the command); `update check` only reports. Both always ask PyPI. `--version` is offline and only repeats a cached result. Never install anything the operator did not ask for with `update` (ADR 0012 amendment)
 - `test-cases draft|save` — draft VardrGate cases from observed operations/OpenAPI into a review file, save only with `--reviewed`
+- bare `vardrrunner` — interactive console at a terminal; help and exit 2 without one. Optional `[shell]` extra adds completion
 - `mcp` — serve the engagement to an MCP client (Claude Code/Desktop); optional `[mcp]` extra.
   Prompts (`brief`/`triage`/`untested`/`methodology`/`retest`/`api_playbook`) are instruction text only — never pre-fetch
   engagement data into one, or target-controlled strings land in the trusted prompt position.

@@ -34,6 +34,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/VardrSec/VardrRunner"
+Website = "https://www.vardrsec.com"
 Repository = "https://github.com/VardrSec/VardrRunner"
 Changelog = "https://github.com/VardrSec/VardrRunner/blob/main/CHANGELOG.md"
 Issues = "https://github.com/VardrSec/VardrRunner/issues"
@@ -44,6 +45,11 @@ Security = "https://github.com/VardrSec/VardrRunner/security/policy"
 # anyio, starlette and friends, which the lean core deliberately avoids.
 mcp = [
     "mcp>=2,<3",
+]
+# Tab completion and in-session history for the interactive console. Without it the
+# console still works with a plain prompt.
+shell = [
+    "prompt_toolkit>=3",
 ]
 dev = [
     "pytest>=8",
@@ -58,6 +64,8 @@ dev = [
     # tests run, mypy can resolve its (lazy) `mcp` imports, and coverage counts the
     # module. Keeping it here means no change to the CI workflow is needed.
     "mcp>=2,<3",
+    # Same reasoning for the console's optional completion: its tests and types need it.
+    "prompt_toolkit>=3",
 ]
 
 [project.scripts]

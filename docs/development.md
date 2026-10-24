@@ -119,6 +119,7 @@ required for shared playbook reads or case binding.
 | `tests/test_toolchain.py` | pinned installs: manifest validation, hash mismatch, single-member extraction, hostile archives, version checks, antivirus quarantine, receipts, tamper detection, PATH fallback |
 | `tests/test_upload_provenance.py` | every tool's upload carries the producing `job_id` (files, services, and each katana/gau chunk) and sends none when there is no job |
 | `tests/test_test_cases_command.py` | `test-cases draft|save`: never overwrites the review file, refuses literal credentials, needs `--reviewed`, accepts a BOM and a bare list, forwards server refusals |
+| `tests/test_shell.py` | the interactive console: line splitting, `use`/`back` engagement defaults, error and Ctrl+C handling, refused `mcp`, restart notice after `update`, banner content (no key, offline, attributed quotes), completion tree, in-memory history |
 | `tests/test_mcp_server.py` | the MCP server: tool surface and read/write hints, that no scope/auth/delete tool exists, output capping, severity/source/status filters, writes posting the right body, and 404/400/connection error mapping (skipped if the `mcp` extra is absent) |
 | `tests/test_katana_gau.py` | katana/gau configs, argv construction (incl. `--` before gau domains), katana body stripping, tar.gz installs refusing links and directories, and that every installable tool is runnable |
 | `tests/test_tools_commands.py` | `tools` commands, runner resolution of managed binaries, `doctor` tool checks, HTTPS-only size-capped asset download |

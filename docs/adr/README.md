@@ -28,3 +28,4 @@ the way it does.
 | [0014](0014-pinned-verified-tool-installs.md) | Pinned, verified tool installs in one managed directory | Accepted |
 | [0015](0015-mcp-server.md) | MCP server for agent-driven engagements | Accepted |
 | [0016](0016-explicit-daemon-execution.md) | Manual invocation and removal of startup workers | Accepted |
+| [0017](0017-interactive-console.md) | Interactive console | Accepted |
