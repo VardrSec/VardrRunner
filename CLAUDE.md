@@ -181,8 +181,7 @@ unreachable target).
 ## Communication
 
 Report major results, blockers and required decisions; omit routine command-by-command
-updates to conserve tokens. Refresh the ars0n comparison when platform changes warrant
-it, using inspected code and dated evidence. No weekly review is requested.
+updates to conserve tokens.
 
 ## Wiring tests
 `tests/test_cli.py` is the only thing that checks Typer wiring, and asserting
