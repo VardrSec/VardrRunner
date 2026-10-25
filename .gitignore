@@ -23,6 +23,10 @@ runs/
 # Scratch space (never commit work-in-progress experiments)
 scratch/
 
+# Isolated validation dependencies and disposable pytest fixtures.
+/.validation-deps/
+/.pytest-evidence-validation-*/
+
 # OS / editor
 .DS_Store
 Thumbs.db

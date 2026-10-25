@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Resolve independent Gate write-verifier credentials locally and validate their
+  declared principal preflight alongside caller diagnostics. Preserve additive
+  semantic/readback metadata in the existing result upload and unresolved hash.
+  Requires companion Gate evidence and Map semantic upload support. See
+  [unreleased notes](changelog/unreleased-gate-evidence.md).
+
 ## [0.53.0] — 2026-10-24
 
 Agent proposals and request-rate visibility in the MCP server. MCP only; the CLI is

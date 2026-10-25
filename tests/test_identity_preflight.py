@@ -106,6 +106,84 @@ def test_runner_requires_new_binary_before_any_request(tmp_path):
     assert "--require-identity-preflight" in spawn.call_args.args[0]
 
 
+@pytest.mark.parametrize("failed", [False, True])
+def test_independent_reader_preflight_and_secret_are_retained(monkeypatch, tmp_path, failed):
+    monkeypatch.setenv("OWNER_TOKEN", "local-secret")
+    monkeypatch.setenv("READER_TOKEN", "reader-secret")
+    config = cfg()
+    config.test_case["write_verification"] = {
+        "identity": {
+            "id": "reader",
+            "credential": {"type": "bearer", "value_env": "READER_TOKEN"},
+            "preflight": {
+                "url": "https://api.test/session",
+                "expected_status": 200,
+                "json_fields": {"id": "reader"},
+            },
+        }
+    }
+    diagnostic = {
+        "identity_id": "reader",
+        "status": "failed" if failed else "passed",
+        "reason": "credential_rejected" if failed else "identity_verified",
+        "status_code": 401 if failed else 200,
+    }
+    artifact = {
+        **result(),
+        "preflight": [*result()["preflight"], diagnostic],
+        "assessments": [
+            {
+                "identity_id": "owner",
+                "decision": "inconclusive",
+                "credential_status": "preflight_passed",
+            }
+        ],
+    }
+
+    def run(job, out, timeout=None):
+        assert (
+            job["config"]["test_case"]["write_verification"]["identity"]["credential"]["value"]
+            == "reader-secret"
+        )
+        out.write_text(json.dumps(artifact), encoding="utf-8")
+        return 3 if failed else 0
+
+    with patch("vardrrunner.runner.run_vardrgate", side_effect=run):
+        out = handlers.VardrGateHandler().execute([], tmp_path, config)
+    assert "reader-secret" not in out.read_text()
+    assert config.test_case["write_verification"]["identity"]["credential"] == {
+        "type": "bearer",
+        "value_env": "READER_TOKEN",
+    }
+    client = MagicMock()
+    handlers.VardrGateHandler().upload(client, "eng", out, job_id="job")
+    assert client.post.call_args.kwargs["json"]["assessments"] == artifact["assessments"]
+
+
+def test_reader_only_preflight_still_requires_capable_gate(tmp_path):
+    job = {
+        "config": {
+            "test_case": {
+                "identities": [],
+                "write_verification": {
+                    "identity": {"id": "reader", "preflight": {"expected_status": 200}}
+                },
+            }
+        }
+    }
+    p = MagicMock()
+    p.wait.return_value = 1
+    with patch("vardrrunner.runner._spawn_tool", return_value=p) as spawn:
+        with pytest.raises(runner.ToolError):
+            runner.run_vardrgate(job, tmp_path / "result.json")
+    assert "--require-identity-preflight" in spawn.call_args.args[0]
+
+
+@pytest.mark.parametrize("callers", [None, "invalid", {}, [None]])
+def test_optional_reader_collection_preserves_invalid_caller_handling(callers):
+    assert configs.gate_identities({"identities": callers}) == []
+
+
 def test_recovery_uploads_failed_diagnostics_and_keeps_job_failed(tmp_path):
     store = Journal(tmp_path / "journal.db")
     run_dir = tmp_path / "run"

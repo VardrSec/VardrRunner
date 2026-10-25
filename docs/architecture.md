@@ -270,3 +270,13 @@ UTF-8) of the unresolved spec to its result artifact after binary execution.
 Credential resolution does not affect the binding; the hash survives recovery
 without storing resolved secrets. This is correlation, not a signed attestation.
 Old artifacts remain uploadable, but Map treats an absent binding as inconclusive.
+
+## Independent Gate verifier identity
+
+The Gate handler resolves `write_verification.identity` credential references
+locally alongside caller references, leaving the reviewed case/hash unresolved.
+Its optional principal preflight participates in the existing capability guard
+and complete-diagnostics validation. Result artifacts preserve additive semantic
+assessment/readback metadata for Map's companion upload handler, without treating
+scanner conclusions as operator-confirmed findings. Failed checks retain safe
+evidence and fail the job. Deploy the matching Map support before this feature.
