@@ -520,3 +520,13 @@ class VardrGateConfig:
             execution=execution,
             policy_id=str(policy_id) if policy_id else None,
         )
+
+
+def gate_identities(test_case: dict) -> list[dict]:
+    """Caller identities plus the optional independent readback identity."""
+    callers = test_case.get("identities")
+    identities = [i for i in callers if isinstance(i, dict)] if isinstance(callers, list) else []
+    verification = test_case.get("write_verification")
+    if isinstance(verification, dict) and isinstance(verification.get("identity"), dict):
+        identities.append(verification["identity"])
+    return identities

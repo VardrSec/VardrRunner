@@ -539,12 +539,10 @@ def _resolve_identity_secrets(test_case: dict) -> dict:
     instead of silently running with a blank credential.
     """
     resolved = copy.deepcopy(test_case)
-    identities = resolved.get("identities")
-    if isinstance(identities, list):
-        for idx, identity in enumerate(identities):
-            cred = identity.get("credential") if isinstance(identity, dict) else None
-            if isinstance(cred, dict):
-                _resolve_one_credential(cred, str(identity.get("id", f"#{idx}")))
+    for idx, identity in enumerate(configs.gate_identities(resolved)):
+        cred = identity.get("credential")
+        if isinstance(cred, dict):
+            _resolve_one_credential(cred, str(identity.get("id", f"#{idx}")))
     return resolved
 
 
@@ -1029,7 +1027,7 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
             raise runner.ToolError("VardrGate returned an unexpected result shape")
         declared = {
             identity["id"]: identity["preflight"]
-            for identity in config.test_case.get("identities", [])
+            for identity in configs.gate_identities(config.test_case)
             if isinstance(identity, dict) and identity.get("preflight") is not None
         }
         if declared:

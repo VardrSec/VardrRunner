@@ -951,7 +951,7 @@ def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> i
     ]
     preflight = any(
         identity.get("preflight") is not None
-        for identity in job.get("config", {}).get("test_case", {}).get("identities", [])
+        for identity in configs.gate_identities(job.get("config", {}).get("test_case", {}))
         if isinstance(identity, dict)
     )
     if preflight:
