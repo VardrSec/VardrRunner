@@ -21,7 +21,7 @@ JOURNAL_FILE = CONFIG_DIR / "runner-journal.sqlite3"
 # Managed tool binaries and their install receipt, and the data those tools need
 # (nuclei templates). Kept beside the rest of the runner's state so an operator
 # can find, audit, or delete every installed tool in one place.
-TOOLS_DIR = CONFIG_DIR / "tools"
+TOOLS_DIR = Path(os.environ.get("VARDRRUNNER_TOOLS_DIR", str(CONFIG_DIR / "tools")))
 DATA_DIR = CONFIG_DIR / "data"
 # Wordlists the operator supplies, for the tools that fuzz (ffuf). A queued job
 # names a wordlist; it never sends a path. The name is resolved against this one

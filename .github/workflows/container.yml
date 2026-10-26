@@ -12,6 +12,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build development image
         run: docker build -t vardrrunner:smoke .
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: VardrSec/VardrGate
+          ref: af29a93140b54cf5b684a06f552a05cd92f6dee6
+          path: .gate-source
+      - name: Build tool-enabled image and verify immutable tools
+        run: |
+          docker build --target toolkit --build-context gate=./.gate-source -t vardrrunner:toolkit .
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and shutil.which("nmap")'
       - name: Verify one-shot defaults and fail-closed diagnostics
         shell: bash
         run: |

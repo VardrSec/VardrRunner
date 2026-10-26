@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -17,3 +17,22 @@ USER 10001:10001
 WORKDIR /home/runner
 ENTRYPOINT ["vardrrunner"]
 CMD ["--help"]
+
+# Optional tool-enabled target; the default final target remains CLI-only.
+# Supply the pinned Gate source as BuildKit's named `gate` context.
+FROM golang:1.25 AS gate-build
+WORKDIR /src
+COPY --from=gate . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/vardrgate ./cmd/vardrgate
+
+FROM base AS toolkit
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
+RUN vardrrunner tools install --all \
+    && chmod -R a+rX /opt/vardrtools
+COPY --from=gate-build /out/vardrgate /usr/local/bin/vardrgate
+USER 10001:10001
+
+FROM base AS core

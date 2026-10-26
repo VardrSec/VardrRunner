@@ -32,3 +32,5 @@ scratch/
 Thumbs.db
 .idea/
 .vscode/
+
+/.pytest-compose-validation/
