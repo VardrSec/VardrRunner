@@ -76,6 +76,11 @@ Identity preflight additionally requires [VardrGate v0.1.0 or newer](https://git
 Install its verified binary on your `PATH` before enabling preflight cases.
 See [API assessment guidance](docs/cli.md#api-assessment-guidance).
 
+## Container development
+
+The initial Compose packaging uses a non-root, explicitly invoked Runner container.
+See [container setup and limitations](docs/container.md). Native installation remains supported.
+
 ## Install
 
 ```bash

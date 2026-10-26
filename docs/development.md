@@ -1,5 +1,7 @@
 # VardrRunner — Development
 
+Container development: see [the container guide](container.md) for build, persistent state, credentials and trust configuration.
+
 Identity preflight requires the matching Gate/Map feature builds before use.
 Run `tests/test_identity_preflight.py` during edits, then the normal full suite and
 the Map three-repository acceptance harness against disposable loopback fixtures.

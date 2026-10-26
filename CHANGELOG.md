@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add a non-root, one-shot development container; startup prints help, persistent
+  state remains operator-owned and scanning tools are not bundled. See
+  [container notes](changelog/unreleased-container.md).
+
 - Add opt-in `doctor --platform` for Map's v1 `/ready` database/migration
   contract and `doctor --offline` to skip release discovery while checking the
   configured backend. Missing/unsupported/inconsistent readiness fails the
