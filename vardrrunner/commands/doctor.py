@@ -196,6 +196,59 @@ def _check_version() -> Check:
     return Check("version", Health.OK, f"{status.current} (latest)")
 
 
+def _check_platform() -> list[Check]:
+    url, key = config.get_api_url(), config.get_api_key()
+    if not url or not key:
+        return [
+            Check(
+                "platform readiness",
+                Health.FAIL,
+                "not checked: no credentials",
+                "Configure Runner authentication first.",
+            )
+        ]
+    try:
+        config.validate_api_url(url)
+        # A 503 is an observation to report, rather than a reason to retry probes.
+        result = api.VardrMapClient(url, key, retries=0).platform_readiness()
+    except requests.HTTPError as exc:
+        code = exc.response.status_code if exc.response is not None else "unknown"
+        detail = "not supported by this Map" if code == 404 else f"HTTP {code}"
+        return [
+            Check(
+                "platform readiness",
+                Health.FAIL,
+                detail,
+                "Use a Map backend supporting the v1 /ready contract; check authentication and deployment.",
+            )
+        ]
+    except (requests.RequestException, ValueError):
+        return [
+            Check(
+                "platform readiness",
+                Health.FAIL,
+                "unreachable or unsupported response",
+                "Check the configured backend, TLS trust and readiness contract.",
+            )
+        ]
+    return [
+        Check(
+            "platform database",
+            Health.OK if result["database"] == "ok" else Health.FAIL,
+            result["database"],
+            "Check the Map database connection." if result["database"] != "ok" else "",
+        ),
+        Check(
+            "platform migrations",
+            Health.OK if result["migrations"] == "current" else Health.FAIL,
+            result["migrations"],
+            "Use the distribution's migration/update procedure; diagnostics never apply migrations."
+            if result["migrations"] != "current"
+            else "",
+        ),
+    ]
+
+
 def _check_run_dir() -> Check:
     runs = config.runs_dir()
     try:
@@ -354,8 +407,14 @@ def _check_pipelines() -> list[Check]:
     return checks
 
 
-def _collect(production: bool = False) -> list[Check]:
-    checks: list[Check] = [_check_version()]
+def _collect(
+    production: bool = False, *, platform: bool = False, offline: bool = False
+) -> list[Check]:
+    checks: list[Check] = [
+        Check("version", Health.OK, f"{__version__} (release discovery skipped)")
+        if offline
+        else _check_version()
+    ]
     # Credential/permissions/auth checks all read the config file — if it's
     # corrupted we surface one clear FAIL and skip the auth attempt (which
     # would crash or mislead with a noisy follow-up error).
@@ -363,6 +422,8 @@ def _collect(production: bool = False) -> list[Check]:
         checks += _check_credentials(production=production)
         checks.append(_check_permissions())
         checks.append(_check_auth())
+        if platform:
+            checks += _check_platform()
     except config.InvalidConfigFile as e:
         checks.append(
             Check(
@@ -434,9 +495,15 @@ def _print_text(checks: list[Check], failed: list[Check], warned: list[Check]) -
         )
 
 
-def run_doctor(as_json: bool = False, production: bool = False) -> None:
+def run_doctor(
+    as_json: bool = False,
+    production: bool = False,
+    *,
+    platform: bool = False,
+    offline: bool = False,
+) -> None:
     """Run all checks, report, and exit non-zero if any check failed."""
-    checks = _collect(production=production)
+    checks = _collect(production=production, platform=platform, offline=offline)
     failed = [c for c in checks if c.status is Health.FAIL]
     warned = [c for c in checks if c.status is Health.WARN]
 

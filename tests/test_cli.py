@@ -193,13 +193,19 @@ class TestDoctorCommand:
         with patch("vardrrunner.commands.doctor.run_doctor") as mock:
             mock.side_effect = SystemExit(0)
             invoke("doctor", "--json")
-        mock.assert_called_once_with(as_json=True, production=False)
+        mock.assert_called_once_with(as_json=True, production=False, platform=False, offline=False)
 
     def test_production_flag_passed(self):
         with patch("vardrrunner.commands.doctor.run_doctor") as mock:
             mock.side_effect = SystemExit(0)
             invoke("doctor", "--production")
-        mock.assert_called_once_with(as_json=False, production=True)
+        mock.assert_called_once_with(as_json=False, production=True, platform=False, offline=False)
+
+    def test_platform_and_offline_flags_passed(self):
+        with patch("vardrrunner.commands.doctor.run_doctor") as mock:
+            mock.side_effect = SystemExit(0)
+            invoke("doctor", "--platform", "--offline", "--json")
+        mock.assert_called_once_with(as_json=True, production=False, platform=True, offline=True)
 
 
 class TestHeartbeatCommand:

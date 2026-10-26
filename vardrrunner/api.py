@@ -133,6 +133,40 @@ class VardrMapClient:
     def whoami(self) -> dict:
         return self.get("/me")
 
+    def platform_readiness(self) -> dict:
+        """Read the value-free v1 readiness contract, including explicit 503 states."""
+        response = self.session.get(self._url("/ready"), timeout=(3.05, 10), allow_redirects=False)
+        if response.status_code not in (200, 503):
+            response.raise_for_status()
+            raise ValueError("unsupported readiness HTTP response")
+        data = response.json()
+        if (
+            not isinstance(data, dict)
+            or type(data.get("schema_version")) is not int
+            or data["schema_version"] != 1
+            or data.get("component") != "vardrmap-api"
+            or data.get("status") not in ("ready", "not_ready")
+            or not isinstance(data.get("checks"), dict)
+        ):
+            raise ValueError("unsupported readiness contract")
+        checks = data["checks"]
+        database, migrations = checks.get("database"), checks.get("migrations")
+        if database not in ("ok", "unavailable") or migrations not in (
+            "current",
+            "not_current",
+            "unavailable",
+            "not_checked",
+        ):
+            raise ValueError("unsupported readiness checks")
+        ready = database == "ok" and migrations == "current"
+        if (
+            (data["status"] == "ready") != ready
+            or (response.status_code == 200) != ready
+            or (database == "unavailable") != (migrations == "not_checked")
+        ):
+            raise ValueError("inconsistent readiness contract")
+        return {"database": database, "migrations": migrations}
+
     def engagements(self) -> list[dict]:
         data = self.get("/engagements")
         # VardrMap returns both keys during the programs → engagements
