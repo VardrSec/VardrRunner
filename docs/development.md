@@ -1,4 +1,4 @@
-# VardrRunner â€” Development
+# VardrRunner — Development
 
 Container development: see [the container guide](container.md) for build, persistent state, credentials and trust configuration.
 
@@ -17,7 +17,7 @@ No new dependency, setup secret or environment variable is required.
   come from your OS or `PATH`. None are needed for the default tests; real scanners
   are used only by the explicitly enabled smoke tests below.
 - (Optional, for real `ffuf` runs) at least one wordlist in `~/.vardrmap/wordlists`, named
-  without the extension â€” `common.txt` backs `--wordlist common`. A symlink to an existing
+  without the extension — `common.txt` backs `--wordlist common`. A symlink to an existing
   list (SecLists, dirb) is fine. None ship with VardrRunner, and a job names a wordlist
   rather than giving a path, so the file has to exist on the machine running the scan.
 
@@ -48,8 +48,8 @@ pytest tests --cov=vardrrunner --cov-report=term-missing   # with coverage (as C
 
 ### Smoke tests against the real binaries (opt-in)
 Mocked subprocesses cannot show that a flag is
-accepted or what a tool's exit code means â€” dalfox exits `1` when it *finds* something, which
-mocked tests could never have revealed â€” so `tests/test_smoke_*.py` run the actual pinned
+accepted or what a tool's exit code means — dalfox exits `1` when it *finds* something, which
+mocked tests could never have revealed — so `tests/test_smoke_*.py` run the actual pinned
 binaries through the real handlers.
 
 ```bash
@@ -94,11 +94,11 @@ required for shared playbook reads or case binding.
 | `tests/test_handlers.py` | per-tool handlers + the registry |
 | `tests/test_jobs.py` | job lifecycle, malformed envelope, claim race, execution core |
 | `tests/test_pipelines.py` | pipeline definitions + the sequential runner (incl. continue-on-error, target cap) |
-| `tests/test_pipeline.py` | `pipeline` command internals â€” `_run_stage`, `_StageResult`, the live TUI |
+| `tests/test_pipeline.py` | `pipeline` command internals — `_run_stage`, `_StageResult`, the live TUI |
 | `tests/test_run_commands.py` | direct `run` commands validate options like jobs do |
 | `tests/test_imports.py` | `SUPPORTED_TOOLS` gating and file import |
 | `tests/test_engagements.py` | `engagements` list + `scope` display |
-| `tests/test_cli.py` | Typer wiring â€” every command route reaches its command module |
+| `tests/test_cli.py` | Typer wiring — every command route reaches its command module |
 | `tests/test_api.py` | API client headers, HTTP methods + retry configuration |
 | `tests/test_heartbeat.py` | heartbeat payload + posting |
 | `tests/test_job_events.py` | lifecycle event emission |
@@ -141,8 +141,8 @@ Config lives in `pyproject.toml` (`[tool.ruff]`, `[tool.mypy]`).
 ### What CI runs
 | Job | Contents |
 |-----|----------|
-| **Lint + types** | ruff check, ruff format --check, mypy, bandit â€” on Python 3.12 |
-| **Tests** | pytest with `--cov-fail-under=95` on Ubuntu 3.10â€“3.14, plus Python 3.14 on Windows and macOS (tool installs, the OS keychain and file paths differ per OS) |
+| **Lint + types** | ruff check, ruff format --check, mypy, bandit — on Python 3.12 |
+| **Tests** | pytest with `--cov-fail-under=95` on Ubuntu 3.10–3.14, plus Python 3.14 on Windows and macOS (tool installs, the OS keychain and file paths differ per OS) |
 | **Dependency audit** | `pip-audit` against the installed dependency set |
 
 Tests only run if the lint job passes (`needs: lint`).
@@ -150,18 +150,18 @@ Tests only run if the lint job passes (`needs: lint`).
 ## Branch & commit workflow
 1. Branch off `main` for any non-trivial change.
 2. Implement **with tests**; keep the suite green.
-3. Update docs and `CHANGELOG.md` in the **same commit** (Charter Â§2).
+3. Update docs and `CHANGELOG.md` in the **same commit** (Charter §2).
 4. For a non-trivial design decision, add an ADR in `docs/adr/`.
 5. Never add "Co-Authored-By: Claude" to commits.
 6. Open a PR; CI must pass before merge.
 
 ## Releasing
-Releases are **tag-driven** â€” pushing a `vX.Y.Z` tag runs `release.yml` (verify tag and
-source â†’ build + SBOM â†’ provenance attestation â†’ GitHub Release, with opt-in PyPI). The
+Releases are **tag-driven** — pushing a `vX.Y.Z` tag runs `release.yml` (verify tag and
+source → build + SBOM → provenance attestation → GitHub Release, with opt-in PyPI). The
 jobs are split by privilege and all third-party actions are pinned to commit SHAs. See
 [ADR 0003](adr/0003-distribution-and-release.md).
 
-1. In a PR: bump `__version__` in `vardrrunner/__init__.py` â€” the **single source of truth**
+1. In a PR: bump `__version__` in `vardrrunner/__init__.py` — the **single source of truth**
    (`pyproject.toml` reads it dynamically; the heartbeat reports it to the backend).
 2. Roll `Unreleased` into a dated `## [X.Y.Z]` section in `CHANGELOG.md`; add a
    `changelog/vX.Y.Z.md` rollup note.
@@ -186,7 +186,7 @@ that hash matches the tool's own published checksums file and the archive contai
 expected binary. The `Tool pin drift` workflow runs `--check` weekly and on any PR that
 touches the manifest; a drifted hash means an upstream release changed after pinning and
 must be investigated, not re-pinned. This is the only place the project downloads real
-tool archives â€” the test suite never does.
+tool archives — the test suite never does.
 
 ## Configuration during development
 The CLI reads/writes `~/.vardrmap/config.json`. To point at a local backend:

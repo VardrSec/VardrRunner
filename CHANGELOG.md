@@ -24,7 +24,7 @@ Per-version detail notes live in [`changelog/`](changelog/).
   Requires companion Gate evidence and Map semantic upload support. See
   [unreleased notes](changelog/unreleased-gate-evidence.md).
 
-## [0.53.0] â€” 2026-10-24
+## [0.53.0] — 2026-10-24
 
 Agent proposals and request-rate visibility in the MCP server. MCP only; the CLI is
 unchanged. The propose tools require a VardrMap with the agent-proposals endpoints. See
@@ -36,7 +36,7 @@ unchanged. The propose tools require a VardrMap with the agent-proposals endpoin
   tools, and a `list_proposals` read. An agent can now propose a scope item, an authorization
   or the request-rate ceiling when it spots one missing; each creates a **pending proposal**
   the operator approves in VardrMap. The server still exposes **no approve tool**, so a
-  prompt-injected agent can only file a proposal the operator sees and rejects â€” it cannot
+  prompt-injected agent can only file a proposal the operator sees and rejects — it cannot
   apply a scope or authorization change (ADR 0015 amendment). Each propose tool takes a
   `reason` and `source`. **Requires** a VardrMap with the `/engagements/{id}/proposals`
   endpoints (agent-proposals release); older backends return 404 and the tools fail.
@@ -47,12 +47,12 @@ unchanged. The propose tools require a VardrMap with the agent-proposals endpoin
   returns `max_request_rate`, the `queue_job` and `queue_pipeline` tool descriptions name the
   `config.rate` key and the automatic ceiling, and the server instructions tell an agent to
   respect it. The backend already enforced the ceiling; the agent just could not see it. No
-  backend change, and no new or writable tool â€” scope and authorization stay operator-only.
+  backend change, and no new or writable tool — scope and authorization stay operator-only.
 
-## [0.52.0] â€” 2026-10-24
+## [0.52.0] — 2026-10-24
 
 Leftover names from when engagements were "programs" are removed, and `login vardrmap` is
-now `login` â€” **breaking**. No backend change required. See
+now `login` — **breaking**. No backend change required. See
 [`changelog/v0.52.0.md`](changelog/v0.52.0.md).
 
 ### Breaking
@@ -75,9 +75,9 @@ now `login` â€” **breaking**. No backend change required. See
 - The MCP server no longer repeats its setup hint when the error already names
   `vardrrunner init` or `vardrrunner login`.
 
-## [0.51.0] â€” 2026-10-24
+## [0.51.0] — 2026-10-24
 
-Interactive console, and removal of the legacy daemon and service commands â€”
+Interactive console, and removal of the legacy daemon and service commands —
 **breaking**. No backend change required. See
 [`changelog/v0.51.0.md`](changelog/v0.51.0.md).
 
@@ -116,7 +116,7 @@ Interactive console, and removal of the legacy daemon and service commands â€
 - A tool that can't be replaced during `tools install` now says "stop any running *tool*
   and retry", without mentioning a daemon.
 
-## [0.50.0] â€” 2026-10-24
+## [0.50.0] — 2026-10-24
 
 `vardrrunner update` installs the newest release; `doctor` says when one exists; release
 checks are always fresh. No backend change required. See
@@ -138,7 +138,7 @@ checks are always fresh. No backend change required. See
   report "Up to date" for hours after a release. `--force` is still accepted and does nothing
   extra. `status` and `--version` keep using the cache. See the ADR 0012 amendment.
 
-## [0.49.0] â€” 2026-10-24
+## [0.49.0] — 2026-10-24
 
 Version visibility: `--version`, a Version section in `status`, and an install-aware upgrade
 command. Also fixes VardrGate's version showing as `unknown`. No backend change required.
@@ -164,20 +164,20 @@ See [`changelog/v0.49.0.md`](changelog/v0.49.0.md).
 - `update check` names the upgrade command for how this copy was installed (pipx, uv, or pip
   in a virtualenv) instead of always listing pipx and uv. Nothing is ever installed.
 
-## [0.48.0] â€” 2026-10-23
+## [0.48.0] — 2026-10-23
 
-Manual invocation only â€” **breaking**: no startup service or background worker. Also adds
+Manual invocation only — **breaking**: no startup service or background worker. Also adds
 per-job request-rate and custom-header controls, which **pair with VardrMap's** bulk scope
 import / rate-and-header release (#89). See [`changelog/v0.48.0.md`](changelog/v0.48.0.md).
 
 ### Added
 
-- Queued jobs accept a `rate` key for `httpx`, `nuclei` and `katana` (1â€“1000 requests per
+- Queued jobs accept a `rate` key for `httpx`, `nuclei` and `katana` (1–1000 requests per
   second, passed as `-rate-limit`), to honor a program's request-rate limit. Left unset, each
   tool keeps its own default; `ffuf` keeps its separate always-on rate cap. **Pairs with
   VardrMap**, which validates the key and applies a per-engagement ceiling when the job is
   queued.
-- Queued jobs accept a `headers` key for `httpx`, `nuclei`, `katana`, `ffuf` and `dalfox` â€”
+- Queued jobs accept a `headers` key for `httpx`, `nuclei`, `katana`, `ffuf` and `dalfox` —
   custom request headers as an object or a list, each passed as its own `-H`, e.g. the
   identification header some bug bounty programs ask researchers to send. Header names must be
   HTTP tokens and values may not contain control characters, so a value cannot inject a second
@@ -205,10 +205,10 @@ import / rate-and-header release (#89). See [`changelog/v0.48.0.md`](changelog/v
   instead of crashing with a `ModuleNotFoundError` traceback. The SDK imports are deferred to
   server construction, so the old guard around importing the module never fired.
 
-## [0.47.0] â€” 2026-10-14
+## [0.47.0] — 2026-10-14
 
 API assessment binding, shared guidance and identity/session preflight. Gate
-preflight requires **VardrGate â‰¥ v0.1.0** and the matching deployed Map endpoints.
+preflight requires **VardrGate ≥ v0.1.0** and the matching deployed Map endpoints.
 See [`changelog/v0.47.0.md`](changelog/v0.47.0.md).
 
 ### Fixed
@@ -234,7 +234,7 @@ See [`changelog/v0.47.0.md`](changelog/v0.47.0.md).
 - Local `VARDRRUNNER_ALLOW_PRIVATE_TARGETS=1` opt-in for VardrGate jobs. Private
   targets remain blocked by default, including when job config requests access.
 
-## [0.46.0] â€” 2026-10-09
+## [0.46.0] — 2026-10-09
 
 dalfox XSS scanning. **Pairs with VardrMap v0.41.0**, which adds the job type and importer. See
 [`changelog/v0.46.0.md`](changelog/v0.46.0.md).
@@ -242,9 +242,9 @@ dalfox XSS scanning. **Pairs with VardrMap v0.41.0**, which adds the job type an
 ### Added
 
 - **`vardrrunner run dalfox`** and the `dalfox` job type. Uploads dalfox's report as the tool
-  wrote it, so its tier, detection method and confidence reach VardrMap intact â€” nothing here
+  wrote it, so its tier, detection method and confidence reach VardrMap intact — nothing here
   re-grades a match or decides what is confirmed, and the summary says "XSS candidate(s)".
-  Options: `--worker` (1â€“100, per target), `--delay` (0â€“10000 ms, per worker),
+  Options: `--worker` (1–100, per target), `--delay` (0–10000 ms, per worker),
   `--mining/--no-mining`.
 - `dalfox` pinned at **3.2.4** for all five platforms.
 - **The MCP server knows about ffuf and dalfox.** `queue_job` lists both job types, and the
@@ -257,13 +257,13 @@ dalfox XSS scanning. **Pairs with VardrMap v0.41.0**, which adds the job type an
 - **dalfox's load is bounded in two places.** `--workers` is per target and dalfox scans
   several targets at once, so left at its defaults a job could put ~2,500 requests in flight at
   a client's host. `--max-concurrent-targets` is pinned low and `--worker` caps the per-target
-  half, making the ceiling `worker Ã— 5`. `--include-all`/`--include-request`/
+  half, making the ceiling `worker × 5`. `--include-all`/`--include-request`/
   `--include-response` are never passed: they attach a client's request and response bodies to
   every finding.
 - **dalfox's exit code is read as information, not just pass/fail.** dalfox exits `0` (completed,
   nothing found), `1` (completed, findings reported) or `2` (error). `0` and `1` are both a
   completed scan; anything else fails the job. The first version of this change failed every
-  job in which dalfox *found* something, because it treated any non-zero exit as a failure â€”
+  job in which dalfox *found* something, because it treated any non-zero exit as a failure —
   missed by 1165 tests since they mock the subprocess, and caught by running the real binary.
   Every other tool keeps the stricter rule. **Behaviour change** relative to the first revision of
   this PR (never merged or released): jobs in which dalfox found XSS used to fail and now succeed.
@@ -293,22 +293,22 @@ dalfox XSS scanning. **Pairs with VardrMap v0.41.0**, which adds the job type an
   instead; its format differs between Unix and Windows within one release, so the digest is
   located by shape, requiring exactly one SHA-256 in a file that names the asset it attests.
 
-## [0.45.0] â€” 2026-10-09
+## [0.45.0] — 2026-10-09
 
-MCP phase 6 â€” versioned methodology checklists, with coverage kept out of the data. See
+MCP phase 6 — versioned methodology checklists, with coverage kept out of the data. See
 [`changelog/v0.45.0.md`](changelog/v0.45.0.md).
 
 ### Added
 
 - **Two methodology checklists ship in the package**: the OWASP API Security Top 10 (2023) and
   the OWASP Web Security Testing Guide 4.2 (its twelve top-level categories).
-  `list_methodologies` and `get_methodology` serve them, and neither makes an API call â€” the
+  `list_methodologies` and `get_methodology` serve them, and neither makes an API call — the
   data is local, so a checklist cannot be influenced by anything a target says. Each is pinned
   to an exact edition and each item carries its source URL, so a write-up can cite what it was
   assessed against.
 - **A `methodology` prompt** that sorts every item into evidenced (naming job or finding ids),
   not evidenced where a job would help, or not evidenced where hands-on work is needed, and is
-  told to report no percentage or score â€” a methodology is not something you can be 70%
+  told to report no percentage or score — a methodology is not something you can be 70%
   through. It sorts on the engagement's record, not on how an item happens to be tested.
 
 ### Deliberately not representable
@@ -316,13 +316,13 @@ MCP phase 6 â€” versioned methodology checklists, with coverage kept out of
 - **Coverage is not part of the checklist data.** The schema refuses `status`, `covered`,
   `done` and `coverage` at load. A checklist that can hold a tick will get one as soon as a
   scanner runs, and "assessed against the OWASP API Top 10" with ticks earned by a nuclei job
-  is a false claim in a client deliverable. Each item instead carries `method` â€” **how it is
+  is a false claim in a client deliverable. Each item instead carries `method` — **how it is
   tested, not whether it has been**: `tooling` (a job type can produce evidence of a
   *candidate*) or `manual` (tested by hand, so no number of scans will cover it, though
   recorded manual work evidences it as well as a job does). A test asserts both methodologies
   contain items of each kind so the distinction cannot become decorative, and the field's
   former name `evidence` is refused at load because it invited reading "tested by hand" as
-  "unevidenced". See [ADR 0015 Â§ Amendment (v0.45.0)](docs/adr/0015-mcp-server.md).
+  "unevidenced". See [ADR 0015 § Amendment (v0.45.0)](docs/adr/0015-mcp-server.md).
 - **Scope is stated per methodology.** The WSTG entry is a category-level planning guide over
   the guide's twelve top-level categories; OWASP identifies individual scenarios separately as
   `WSTG-<version>-<category>-<number>` (e.g. `WSTG-v42-INFO-02`), and scenario-level mapping is
@@ -332,24 +332,24 @@ MCP phase 6 â€” versioned methodology checklists, with coverage kept out of
   guides are CC BY-SA 4.0 and these repositories are AGPL-3.0, and each methodology carries an
   `attribution` field naming its source and licence.
 
-## [0.44.0] â€” 2026-10-09
+## [0.44.0] — 2026-10-09
 
-MCP phases 4/5 â€” the engagement reads the prompts were missing, and case/report drafting. See
+MCP phases 4/5 — the engagement reads the prompts were missing, and case/report drafting. See
 [`changelog/v0.44.0.md`](changelog/v0.44.0.md).
 
 ### Added
 
 - **Four read tools**: `list_authorizations` (authorization records and testing windows; it
   pages like the others, and raises rather than returning an empty inventory when the response
-  is not the shape it expects â€” "unknown" must not be read as "this engagement has no
+  is not the shape it expects — "unknown" must not be read as "this engagement has no
   authorization"),
   `get_finding_activity` (a finding's revisions, remediation updates and completed retests),
   `list_deliverables` and `get_deliverable_revision` (the client-facing documents and their
   immutable revisions).
-- **`draft_test_cases`** â€” drafts VardrGate authorization cases from observed API operations or
+- **`draft_test_cases`** — drafts VardrGate authorization cases from observed API operations or
   an OpenAPI 3.x document. Exactly one source. Marked read-only: it is VardrMap's
   `test-cases/preview` and stores and queues nothing.
-- **`draft_report`** â€” drafts a per-finding write-up as a guarded write. It takes no `status`
+- **`draft_report`** — drafts a per-finding write-up as a guarded write. It takes no `status`
   argument and always posts `draft`, so an agent cannot mark one final or delivered.
 
 ### Changed
@@ -368,9 +368,9 @@ MCP phases 4/5 â€” the engagement reads the prompts were missing, and case/
   assertions only a person can honestly make. Saving a case declares a human reviewed it, which
   is the whole purpose of `--reviewed`; a deliverable revision is immutable and is what reaches
   the client. The server drafts and reads in both areas and stops where a human has to commit.
-  See [ADR 0015 Â§ Amendment (v0.44.0)](docs/adr/0015-mcp-server.md).
+  See [ADR 0015 § Amendment (v0.44.0)](docs/adr/0015-mcp-server.md).
 
-## [0.43.0] â€” 2026-10-09
+## [0.43.0] — 2026-10-09
 
 ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queueable. See
 [`changelog/v0.43.0.md`](changelog/v0.43.0.md).
@@ -392,7 +392,7 @@ ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queu
 ### Changed
 
 - **ffuf always runs rate-limited and auto-calibrated.** `-rate` has a default of 50/s, a ceiling
-  of 1000 and no way to disable it â€” this is the one tool here that puts sustained load on a
+  of 1000 and no way to disable it — this is the one tool here that puts sustained load on a
   client's host. `-ac` is always on, so a host answering every path with `200` cannot import
   thousands of phantom endpoints into shared recon. A non-zero exit on any one target fails the
   job rather than skipping that host, and so does a report that cannot be read: a valid empty
@@ -423,14 +423,14 @@ ffuf content discovery. **Pairs with VardrMap v0.40.0**, which makes `ffuf` queu
   `javascript:` entry parsed as userinfo plus a host once `https://` was prefixed, and a URL
   carrying credentials would have had them replayed at the target. Both are dropped. ffuf is the
   first caller, so nothing shipped affected.
-## [0.42.0] â€” 2026-10-09
+## [0.42.0] — 2026-10-09
 
 Four MCP prompts for the workflows every engagement repeats. See
 [`changelog/v0.42.0.md`](changelog/v0.42.0.md).
 
 ### Added
 
-- **MCP prompts â€” `brief`, `triage`, `untested`, `retest`.** The slash commands an MCP client
+- **MCP prompts — `brief`, `triage`, `untested`, `retest`.** The slash commands an MCP client
   surfaces (`/mcp__vardr__brief`). `brief` reports where an engagement stands and what to do next;
   `triage` pages the whole findings inventory and judges each finding's validity, severity and
   evidence; `untested` compares scope and discovered surface against the jobs actually run and
@@ -441,7 +441,7 @@ Four MCP prompts for the workflows every engagement repeats. See
   `queue_job` takes a target source and so cannot be scoped to one asset, offers
   `vardrrunner run <tool> --target <asset>` as the route that can, names the real finding
   statuses instead of guessing which are "remediated", and admits there is no scan-results
-  tool â€” so it judges by whether an equivalent finding returns and keeps "inconclusive"
+  tool — so it judges by whether an equivalent finding returns and keeps "inconclusive"
   available. `brief` omits the authorization window and the client deliverable, which this
   server cannot read, and labels `list_reports` as the per-finding write-ups. A test requires
   every tool a prompt names to exist, because expansion tests prove phrasing, not feasibility.
@@ -449,11 +449,11 @@ Four MCP prompts for the workflows every engagement repeats. See
   content in the agent's context, while findings, recon URLs and scanner output come from the
   targets under test, so none of that is embedded; the agent gathers it through the read tools,
   where it is already framed as untrusted data. A test asserts expansion never touches the API
-  client. See [ADR 0015 Â§ Amendment (v0.42.0)](docs/adr/0015-mcp-server.md).
+  client. See [ADR 0015 § Amendment (v0.42.0)](docs/adr/0015-mcp-server.md).
 
 No tool, endpoint or backend change: the prompts drive the tools v0.40.0 already exposed.
 
-## [0.41.0] â€” 2026-10-09
+## [0.41.0] — 2026-10-09
 
 Every upload names its job, authorization cases can be drafted for review, and the MCP reads page
 correctly. **Requires VardrMap v0.39.0.** See [`changelog/v0.41.0.md`](changelog/v0.41.0.md).
@@ -485,7 +485,7 @@ correctly. **Requires VardrMap v0.39.0.** See [`changelog/v0.41.0.md`](changelog
   `list_recon(source=...)` filtered the page they had fetched, so matches beyond it were missed and the
   reported total was not the filtered total.
 
-## [0.40.0] â€” 2026-10-08
+## [0.40.0] — 2026-10-08
 
 Optional MCP server so an AI agent can drive an engagement. See
 [`changelog/v0.40.0.md`](changelog/v0.40.0.md) and
@@ -493,7 +493,7 @@ Optional MCP server so an AI agent can drive an engagement. See
 
 ### Added
 
-- **`vardrrunner mcp`** â€” a Model Context Protocol server over stdio that exposes a VardrMap
+- **`vardrrunner mcp`** — a Model Context Protocol server over stdio that exposes a VardrMap
   engagement to an MCP client (Claude Code, Claude Desktop), using the same `vmap_` key this
   runner already holds. The agent's model comes from the client; this only adapts the API.
   - **Read tools:** `list_engagements`, `get_engagement`, `list_scope`, `list_findings`,
@@ -509,14 +509,14 @@ Optional MCP server so an AI agent can drive an engagement. See
 - **Optional `[mcp]` extra.** `pip install 'vardrrunner[mcp]'`; the lean core never imports
   `mcp`. The command prints an install hint when the extra is absent.
 
-## [0.39.0] â€” 2026-10-08
+## [0.39.0] — 2026-10-08
 
 Operability polish on top of katana/gau, plus a pipeline that uses them. See
 [`changelog/v0.39.0.md`](changelog/v0.39.0.md).
 
 ### Added
 
-- **`content` pipeline** (subfinder â†’ httpx â†’ katana â†’ gau): enumerate, keep the live hosts,
+- **`content` pipeline** (subfinder → httpx → katana → gau): enumerate, keep the live hosts,
   crawl them for endpoints, and add archived URLs for the scope domains. Available to
   `vardrrunner pipeline run content` and mirrored in VardrMap's "Content Discovery" composer
   chain.
@@ -538,7 +538,7 @@ Operability polish on top of katana/gau, plus a pipeline that uses them. See
   (`OK`/`WARN`/`FAIL`) when a stream can't encode the symbols, and the CLI reconfigures such
   streams to replace unencodable characters rather than raise.
 
-## [0.38.0] â€” 2026-10-08
+## [0.38.0] — 2026-10-08
 
 Two new recon tools, katana and gau, plus a fix for tools hanging on an inherited stdin.
 See [`changelog/v0.38.0.md`](changelog/v0.38.0.md).
@@ -548,11 +548,11 @@ other tool is unaffected.
 
 ### Added
 
-- **katana** (`run katana`, job type `katana`) â€” crawls target URLs on their root domain,
+- **katana** (`run katana`, job type `katana`) — crawls target URLs on their root domain,
   optionally parsing JavaScript (`--js-crawl`), and uploads each endpoint as recon with
   method, status, size, and content type. katana's raw request/response bodies are dropped
   before upload.
-- **gau** (`run gau`, job type `gau`) â€” passive: fetches URLs that public archives
+- **gau** (`run gau`, job type `gau`) — passive: fetches URLs that public archives
   (Wayback Machine, Common Crawl, AlienVault OTX, urlscan) have recorded for each wildcard
   scope domain. `--no-subs` and `--providers` narrow it. Domains are passed after `--`, so
   none can be read as an option.
@@ -573,7 +573,7 @@ other tool is unaffected.
   supervisor, or CI with a pipe on stdin could block indefinitely. Every tool, and every
   version check, now runs with an empty stdin. Found while testing katana.
 
-## [0.37.0] â€” 2026-10-08
+## [0.37.0] — 2026-10-08
 
 Pinned, verified tool installs in one folder. See
 [`changelog/v0.37.0.md`](changelog/v0.37.0.md) and
@@ -587,19 +587,19 @@ Pinned, verified tool installs in one folder. See
 - **Pinned manifest** (`vardrrunner/tool_manifest.json`, shipped in the package): version,
   per-platform archive URL, and SHA-256 for every managed tool. The hash comes from the
   package, never from the download site.
-- **Fail-closed installs.** HTTPS-only, size-capped download â†’ SHA-256 must match the pin â†’
-  only the expected binary is extracted, bounded in size â†’ it must report the pinned
-  version â†’ moved into place in one rename â†’ receipt written to `tools.lock.json`. Any
+- **Fail-closed installs.** HTTPS-only, size-capped download → SHA-256 must match the pin →
+  only the expected binary is extracted, bounded in size → it must report the pinned
+  version → moved into place in one rename → receipt written to `tools.lock.json`. Any
   failed step installs nothing.
 - **Tamper detection.** The runner re-hashes a managed binary before its first use in each
   process and whenever it changes on disk. One that no longer matches its receipt is never
   executed: the job fails with the reason, and there is no fallback to a `PATH` copy.
 - **Antivirus detection.** A binary that disappears during its version check is reported as
   likely quarantined by antivirus, with the exclusion to add if the operator trusts it.
-- **`scripts/pin_tools.py`** â€” the only way pins change. It downloads every platform
+- **`scripts/pin_tools.py`** — the only way pins change. It downloads every platform
   archive, hashes it locally, and requires a match with the tool's own published checksums
   file before writing a pin; `--check` re-downloads every pin and fails on drift.
-- **`Tool pin drift` workflow** â€” runs `pin_tools.py --check` weekly and on PRs that touch
+- **`Tool pin drift` workflow** — runs `pin_tools.py --check` weekly and on PRs that touch
   the manifest.
 
 ### Changed
@@ -617,22 +617,22 @@ Pinned, verified tool installs in one folder. See
 
 ### Documentation
 
-- **ADR index completed.** ADRs 0010â€“0013 (execution journal, runner identity and service
-  management, compatibility and safety controls, guided setup) were written across v0.32.0â€“
+- **ADR index completed.** ADRs 0010–0013 (execution journal, runner identity and service
+  management, compatibility and safety controls, guided setup) were written across v0.32.0–
   v0.35.0 but never added to [`docs/adr/README.md`](docs/adr/README.md), so four accepted
   decisions were unreachable from the index.
 - **`tests/test_credentials_posture.py` added to the test table** in
-  [`docs/development.md`](docs/development.md) â€” it was the only test file missing.
+  [`docs/development.md`](docs/development.md) — it was the only test file missing.
 - **`CLAUDE.md` module map completed.** `target_safety.py`, `errors.py`, `policy.py`,
   `credentials.py` and `redaction.py` were all missing from the orientation list.
 - **Corrected the credential summary in `CLAUDE.md`**, which still described a "plaintext
   config fallback". Since v0.31.0 that path is opt-in via `--allow-plaintext-credentials`,
-  not a silent fallback â€” the stale wording described exactly the behaviour ADR 0009
+  not a silent fallback — the stale wording described exactly the behaviour ADR 0009
   removed.
 
 
 
-## [0.36.1] â€” 2026-08-21
+## [0.36.1] — 2026-08-21
 
 Reliability and supply-chain hardening for concurrent and unattended runners. See
 [`changelog/v0.36.1.md`](changelog/v0.36.1.md).
@@ -666,28 +666,28 @@ Reliability and supply-chain hardening for concurrent and unattended runners. Se
   crash-residue cleanup, shutdown cancellation, concurrent run isolation, single-pass
   target auditing, and hostile Rich markup.
 
-## [0.36.0] â€” 2026-08-18
+## [0.36.0] — 2026-08-18
 
-Completes roadmap Â§16 (target safety), the one part of Phase 4 that shipped
+Completes roadmap §16 (target safety), the one part of Phase 4 that shipped
 without its security half. See [`changelog/v0.36.0.md`](changelog/v0.36.0.md).
 
 ### Added
 
 - **Target classification.** Every resolved target is classified as `public`, `private`,
-  `loopback`, `link_local`, `cloud_metadata` or `hostname` â€” lexically, with no DNS, so the
+  `loopback`, `link_local`, `cloud_metadata` or `hostname` — lexically, with no DNS, so the
   path stays fast and offline-safe.
 - **Cloud instance-metadata warnings.** `169.254.169.254` and the equivalents for AWS
   IPv6/ECS, GCP, Alibaba and Oracle, plus `metadata.google.internal` and friends. This
   runner is built to sit unattended on a VPS, where that address answers from inside the
   network with instance credentials attached.
 - **Loopback and link-local warnings**, including the `localhost` family by name.
-- **Configurable local deny rules** â€” `deny_targets` in the config file or
+- **Configurable local deny rules** — `deny_targets` in the config file or
   `VARDRRUNNER_DENY_TARGETS`. A rule is a class name, a literal host, or a CIDR.
 - **`VARDRRUNNER_ALLOW_DENIED_TARGETS`** as the explicit override, audited as a
   `deny_override` job event. An environment variable rather than a flag, because deny rules
   matter most on the daemon path where there is no command line.
-- **Target statistics** â€” accepted, duplicates removed, blanks skipped, and a per-class
-  breakdown â€” emitted as a `target_stats` job event. Counts only, never target values.
+- **Target statistics** — accepted, duplicates removed, blanks skipped, and a per-class
+  breakdown — emitted as a `target_stats` job event. Counts only, never target values.
 
 ### Security
 
@@ -700,7 +700,7 @@ without its security half. See [`changelog/v0.36.0.md`](changelog/v0.36.0.md).
   silently halt all work.
 
 
-## [0.35.0] â€” 2026-08-18
+## [0.35.0] — 2026-08-18
 
 Phase 5 completes the enterprise-for-small-teams roadmap with guided setup and final
 host-lifecycle hardening. See [`changelog/v0.35.0.md`](changelog/v0.35.0.md) and
@@ -729,7 +729,7 @@ host-lifecycle hardening. See [`changelog/v0.35.0.md`](changelog/v0.35.0.md) and
 - Malformed/non-positive PID state is treated as stale; PID create/write/remove failures
   are classified and surfaced without silently starting a second daemon.
 
-## [0.34.0] â€” 2026-08-18
+## [0.34.0] — 2026-08-18
 
 Phase 4 of the enterprise-grade roadmap: explicit runner/backend compatibility,
 local resource policy, target-shape validation, bounded queue concurrency, and opt-in
@@ -759,7 +759,7 @@ release checks. See [`changelog/v0.34.0.md`](changelog/v0.34.0.md) and
   findings remain advisory; these controls do not change authorization policy semantics.
 - Fixed the documented legacy `programs` response-key fallback for engagement listing.
 
-## [0.33.0] â€” 2026-08-18
+## [0.33.0] — 2026-08-18
 
 Phase 3 of the enterprise-grade roadmap: stable runner identity, structured daemon logs,
 native user-service management, and production readiness checks. See
@@ -786,7 +786,7 @@ native user-service management, and production readiness checks. See
   converges on one UUID.
 - Structured log messages pass through centralized redaction before serialization.
 
-## [0.32.0] â€” 2026-08-18
+## [0.32.0] — 2026-08-18
 
 Phase 2 of the enterprise-grade roadmap: durable execution, crash reconciliation, run
 manifests, and local audit export. See [`changelog/v0.32.0.md`](changelog/v0.32.0.md) and
@@ -815,7 +815,7 @@ manifests, and local audit export. See [`changelog/v0.32.0.md`](changelog/v0.32.
 - SQLite handles are short-lived and always explicitly closed; WAL permits concurrent
   read-only audit inspection while the daemon runs.
 
-## [0.31.1] â€” 2026-08-18
+## [0.31.1] — 2026-08-18
 
 Phase 1 completion and integration hardening. See
 [`changelog/v0.31.1.md`](changelog/v0.31.1.md).
@@ -841,7 +841,7 @@ Phase 1 completion and integration hardening. See
 - Backend-controlled warning text, engagement metadata, scope values, usernames and result
   summaries can no longer inject Rich markup into the operator terminal.
 
-## [0.31.0] â€” 2026-08-17
+## [0.31.0] — 2026-08-17
 
 Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See
 [`changelog/v0.31.0.md`](changelog/v0.31.0.md) and
@@ -849,7 +849,7 @@ Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See
 
 ### Changed
 
-- **BREAKING â€” `login` no longer writes a cleartext key silently.** When no OS keychain is
+- **BREAKING — `login` no longer writes a cleartext key silently.** When no OS keychain is
   available (or a keychain write fails), `vardrrunner login vardrmap` now verifies the key,
   **saves nothing**, and exits 1 with three routes forward: `VARDRMAP_API_KEY`, install a
   keyring backend, or pass the new `--allow-plaintext-credentials`. The machines without a
@@ -858,14 +858,14 @@ Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See
 
 ### Added
 
-- **`vardrrunner credentials`** â€” reports key source, whether it is encrypted at rest,
+- **`vardrrunner credentials`** — reports key source, whether it is encrypted at rest,
   keychain availability, whether the config file holds cleartext, and file permissions.
   Never displays the key. Exits non-zero when unauthenticated, so it composes into
   provisioning scripts.
 - **`--allow-plaintext-credentials`** on `login vardrmap`, the explicit opt-in.
-- **`doctor` reports credential storage posture** â€” encrypted at rest, environment
-  variable, or cleartext â€” plus a warning when no keyring backend exists.
-- **`vardrrunner/credentials.py`** â€” one module describing credential posture, shared by
+- **`doctor` reports credential storage posture** — encrypted at rest, environment
+  variable, or cleartext — plus a warning when no keyring backend exists.
+- **`vardrrunner/credentials.py`** — one module describing credential posture, shared by
   `doctor` and `credentials` so they cannot describe the same machine differently.
 
 ### Security
@@ -878,16 +878,16 @@ Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See
   not written to disk by the runner, but any process running as that user can read it.
 
 
-## [0.30.0] â€” 2026-08-17
+## [0.30.0] — 2026-08-17
 
 Phase 1b of the enterprise-grade roadmap: one sanitization layer in front of
 every trust boundary. See [`changelog/v0.30.0.md`](changelog/v0.30.0.md).
 
 ### Added
 
-- **`vardrrunner/redaction.py` â€” centralized sanitization.** A single, deterministic
+- **`vardrrunner/redaction.py` — centralized sanitization.** A single, deterministic
   redactor applied before data crosses a trust boundary. Masks by **key name**
-  (`api_key`, `authorization`, `cookie`, `token`, `value_env`, `value_keychain`, â€¦,
+  (`api_key`, `authorization`, `cookie`, `token`, `value_env`, `value_keychain`, …,
   normalising `X-API-KEY` and `Auth-Token` to the same forms) *and* by **value pattern**
   (`vmap_` keys, `Bearer`/`Basic` headers, cookies, secret query parameters, `key=value`
   assignments in free text), plus `redact_url()` for `https://user:pass@host` userinfo and
@@ -903,12 +903,12 @@ every trust boundary. See [`changelog/v0.30.0.md`](changelog/v0.30.0.md).
   sanitization into a denial of service, and a subtree beyond the bound is replaced with a
   marker rather than emitted unchecked.
 - Redaction **never raises**. Sanitizing must not be the reason a job dies, so an
-  unparseable value is returned unchanged â€” but the recursive walker masks by key name as
+  unparseable value is returned unchanged — but the recursive walker masks by key name as
   well as value pattern, so an unrecognised *shape* still cannot become an exfiltration
   path.
 
 
-## [0.29.0] â€” 2026-08-17
+## [0.29.0] — 2026-08-17
 
 Phase 1a of the enterprise-grade roadmap: the runner can now tell a halt order
 from a lost race. See [`changelog/v0.29.0.md`](changelog/v0.29.0.md) and
@@ -919,21 +919,21 @@ from a lost race. See [`changelog/v0.29.0.md`](changelog/v0.29.0.md) and
 - **Stop-work was indistinguishable from a claim race, and retried forever.** The
   job-claim path caught every exception in one handler whose comment anticipated only a
   `409`, so a stop-work refusal (`403`), an expired key (`401`), a backend outage (`5xx`)
-  and a genuine race all printed the same line and left the job pending â€” and the daemon
+  and a genuine race all printed the same line and left the job pending — and the daemon
   re-claimed the halted job every `poll_interval` seconds with no explanation. Each is now
   reported distinctly, and a stop-work engagement is skipped for the life of the daemon
   rather than re-attempted every cycle. Restarting re-checks it.
 
 ### Added
 
-- **`vardrrunner/errors.py` â€” one failure taxonomy.** `FailureCategory` plus a
+- **`vardrrunner/errors.py` — one failure taxonomy.** `FailureCategory` plus a
   `RunnerError` hierarchy, and `classify_status()` as the single place an HTTP status
   becomes a domain meaning. Category values are stable identifiers written to durable
   records from the execution journal onward.
-- **`vardrrunner/policy.py` â€” advisory policy findings are now surfaced.** The backend's
+- **`vardrrunner/policy.py` — advisory policy findings are now surfaced.** The backend's
   `warnings` array (authorization, testing window, scope) was previously never read. It is
   now printed **before any tool runs**, while the operator can still intervene, and emitted
-  as a `policy_warning` job event. Warnings remain advisory and do not block â€” only
+  as a `policy_warning` job event. Warnings remain advisory and do not block — only
   stop-work halts.
 
 ### Changed
@@ -948,17 +948,17 @@ from a lost race. See [`changelog/v0.29.0.md`](changelog/v0.29.0.md) and
 
 - Policy payloads are treated as untrusted display data: rendered and recorded, never used
   for control flow beyond display, never interpolated into a command line. Parsing is total
-  â€” a malformed payload yields no warnings rather than raising, so a display failure cannot
+  — a malformed payload yields no warnings rather than raising, so a display failure cannot
   abort a job the backend already permitted.
 
 
-## [0.28.1] â€” 2026-08-17
+## [0.28.1] — 2026-08-17
 
 ### Fixed
 
 - **A negative `--max-targets` silently disabled the target cap.** Every guard is written
   as `max_targets > 0`, so `--max-targets -1` skipped the check entirely and let an
-  unbounded target list through â€” on a tool that runs nmap and nuclei. Only `0` was ever
+  unbounded target list through — on a tool that runs nmap and nuclei. Only `0` was ever
   documented as disabling the cap. Negative values are now rejected at parse time
   (`min=0`), and `validate_max_targets()` rejects them again inside `_check_target_cap()`
   and at the top of `run_pipeline()` so programmatic callers cannot skip the guard either.
@@ -979,7 +979,7 @@ from a lost race. See [`changelog/v0.29.0.md`](changelog/v0.29.0.md) and
 - **`uv` documented for machines with no Python.** `pipx` presumes a Python installation,
   which a fresh VPS or clean Windows box may not have; `uv` bootstraps its own CPython.
   Also notes `uvx vardrrunner` for one-shot use without installing.
-- **README states plainly that cloning alone does not provide the command** â€” it must be
+- **README states plainly that cloning alone does not provide the command** — it must be
   installed into an environment on `PATH`.
 - **`login --url` / `--key` documented** in `docs/cli.md`, with a warning that passing
   `--key` writes a live credential into shell history and that the hidden-input prompt or
@@ -987,7 +987,7 @@ from a lost race. See [`changelog/v0.29.0.md`](changelog/v0.29.0.md) and
 - **ADR 0003 amended** to record that PyPI publishing went live in v0.28.0, and that the
   original ADR did not account for operators without Python.
 
-## [0.28.0] â€” 2026-08-17
+## [0.28.0] — 2026-08-17
 
 First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.md).
 
@@ -995,7 +995,7 @@ First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.
 
 - **`--max-targets` is now an actual option.** The guardrail shipped in v0.22.1 and the
   500-target cap has been enforced ever since, but the option was never added to the Typer
-  commands â€” so the abort message named a flag that did not parse, and the cap could
+  commands — so the abort message named a flag that did not parse, and the cap could
   neither be raised nor disabled. `--max-targets N` (`0` disables) is now on all six
   `run <tool>` commands and on `pipeline run`.
 - **`import ffuf` removed.** v0.21.1 dropped `ffuf` from `SUPPORTED_TOOLS` but left the
@@ -1022,62 +1022,62 @@ First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.
   `jorge-aquino/*` to `VardrSec/*` (ADR 0001 keeps its original path as a historical
   record).
 - **Missing per-version notes added** for v0.22.2, v0.23.0, and v0.24.0, and ADRs
-  0005â€“0007 added to the ADR index.
+  0005–0007 added to the ADR index.
 - **Two shipped-vs-documented mismatches recorded** rather than papered over: the
   `--max-targets` option (v0.22.1) was never wired into `cli.py`, and `import ffuf`
   (v0.21.1) is still a registered command. Both are noted in `CLAUDE.md`, `docs/cli.md`,
   and the affected changelog entries.
 
-## [0.27.0] â€” 2026-08-04
+## [0.27.0] — 2026-08-04
 
 ### Changed
 
 - **Programs are now Engagements**, following VardrMap's rename. `api.py` calls
-  `/engagements/*`; `VardrMapClient.programs()` â†’ `engagements()`;
-  `commands/programs.py` â†’ `commands/engagements.py`. See
+  `/engagements/*`; `VardrMapClient.programs()` → `engagements()`;
+  `commands/programs.py` → `commands/engagements.py`. See
   [`changelog/v0.27.0.md`](changelog/v0.27.0.md).
-- **Requires VardrMap â‰¥ v0.22.0.** Deploy the backend before upgrading the runner.
+- **Requires VardrMap ≥ v0.22.0.** Deploy the backend before upgrading the runner.
 
 ### Compatibility
 
 - `--program` and `-p` still accepted on every command that takes `--engagement`.
 - `vardrrunner programs` still runs; hidden from `--help`.
 
-## [0.26.0] â€” 2026-07-09
+## [0.26.0] — 2026-07-09
 
 ### Added
-- **Local secret resolution for VardrGate identities.**  A `vardrgate_api_test` job credential may reference a secret instead of embedding it: `value_env` (an environment variable read on the runner) or `value_keychain` (an OS-keychain account). The handler resolves references to real values locally, just before execution, so secrets never travel through â€” or persist in â€” the backend. A referenced-but-missing secret fails the job rather than running with a blank credential. Literal `value` and anonymous credentials are untouched. Adds `keychain.get_secret()`.
+- **Local secret resolution for VardrGate identities.**  A `vardrgate_api_test` job credential may reference a secret instead of embedding it: `value_env` (an environment variable read on the runner) or `value_keychain` (an OS-keychain account). The handler resolves references to real values locally, just before execution, so secrets never travel through — or persist in — the backend. A referenced-but-missing secret fails the job rather than running with a blank credential. Literal `value` and anonymous credentials are untouched. Adds `keychain.get_secret()`.
 
-## [0.25.0] â€” 2026-07-08
+## [0.25.0] — 2026-07-08
 
 ### Added
-- **`vardrgate_api_test` job handler.**  VardrRunner can now run VardrGate API authorization tests as jobs. The handler shells out to the `vardrgate run --job â€¦ --out â€¦` binary (added to the tool allowlist as `vardrgate`), captures the sanitized result JSON, and uploads it to the job via `POST /jobs/{id}/upload`. The job is self-contained â€” the test case travels in the job config, so there are no scope/recon targets to resolve. VardrRunner imports no VardrGate internals; the coupling is the CLI/JSON contract only. See [ADR 0006](docs/adr/0006-vardrgate-api-test-handler.md).
+- **`vardrgate_api_test` job handler.**  VardrRunner can now run VardrGate API authorization tests as jobs. The handler shells out to the `vardrgate run --job … --out …` binary (added to the tool allowlist as `vardrgate`), captures the sanitized result JSON, and uploads it to the job via `POST /jobs/{id}/upload`. The job is self-contained — the test case travels in the job config, so there are no scope/recon targets to resolve. VardrRunner imports no VardrGate internals; the coupling is the CLI/JSON contract only. See [ADR 0006](docs/adr/0006-vardrgate-api-test-handler.md).
 - **`VardrGateConfig`.**  Typed, validated config for the new job type (`test_case`, `execution`, optional `policy_id`).
 
 ### Changed
 - **`ToolHandler.upload()` gained an optional `job_id` parameter.**  Recon handlers import results to a program and ignore it; the VardrGate handler uses it to attach the result to the originating job. Existing call sites and handlers are unaffected (defaults to `""`).
 
-## [0.24.0] â€” 2026-06-26
+## [0.24.0] — 2026-06-26
 
 ### Added
 - **`pipeline run --dry-run`.**  Resolves first-stage targets and prints the planned tool chain without executing any tool. Useful for validating scope and target counts before committing to a long pipeline run.
-- **`pipeline run --json`.**  Emits a machine-readable JSON result after the pipeline completes â€” run ID, per-stage status/targets/summary/elapsed, and an overall `success` flag. Designed for CI scripts that need to inspect pipeline results programmatically.
+- **`pipeline run --json`.**  Emits a machine-readable JSON result after the pipeline completes — run ID, per-stage status/targets/summary/elapsed, and an overall `success` flag. Designed for CI scripts that need to inspect pipeline results programmatically.
 
 ### Fixed
-- **Daemon log files no longer contain Rich markup brackets.** The file-mode `Console` was created with `markup=False`, which caused `[green]`, `[dim]`, and similar tags to appear literally in log files. Removing that flag lets Rich render markup to plain text automatically since the log file is not a terminal. `_RotatingLogFile` now also implements `isatty() â†’ False` explicitly.
-- **Daemon poll backs off exponentially on consecutive errors.** A downed backend was previously retried every `poll_interval` seconds regardless of failure count. The daemon now backs off exponentially (5 s â†’ 10 s â†’ 20 s â€¦ capped at 5 min) and resets on the next successful poll. The error message now includes the retry delay.
+- **Daemon log files no longer contain Rich markup brackets.** The file-mode `Console` was created with `markup=False`, which caused `[green]`, `[dim]`, and similar tags to appear literally in log files. Removing that flag lets Rich render markup to plain text automatically since the log file is not a terminal. `_RotatingLogFile` now also implements `isatty() → False` explicitly.
+- **Daemon poll backs off exponentially on consecutive errors.** A downed backend was previously retried every `poll_interval` seconds regardless of failure count. The daemon now backs off exponentially (5 s → 10 s → 20 s … capped at 5 min) and resets on the next successful poll. The error message now includes the retry delay.
 - **`_extract_jsonl_field` OSError now logged as a warning** instead of silently swallowed. Disk-full or permissions failures are now visible in log aggregation.
 - **Collapsed redundant exception handlers in `_run_stage`.** `ToolTimeout` is a subclass of `Exception`; both handlers returned the same result shape, so the separate branch was dead code.
 
 ### Changed
 - **Subfinder and Dnsx `execute()` use a shared `_write_host_import_jsonl()` helper.** Both handlers duplicated the same JSONL conversion loop. Extracted to a module-level helper in `handlers.py`.
 
-## [0.23.0] â€” 2026-06-23
+## [0.23.0] — 2026-06-23
 
 ### Added
 - **Live TUI for `pipeline run`.** Each stage is now a live-updating table row
   (Rich `Live` + `Table`) with a spinner while running and final status icons
-  (âœ“ done, âœ— failed, âŠ˜ no targets, â€” aborted) plus target count, result summary,
+  (✓ done, ✗ failed, ⊘ no targets, — aborted) plus target count, result summary,
   and elapsed time per stage. Remaining stages are marked aborted immediately when
   a stage stops the pipeline.
 
@@ -1085,7 +1085,7 @@ First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.
 - `_run_stage` now returns a structured `_StageResult` dataclass instead of
   printing directly, keeping all display logic in `_PipelineTUI`.
 
-## [0.22.2] â€” 2026-06-20
+## [0.22.2] — 2026-06-20
 
 ### Changed
 - **Operational logging in silent paths.** `_emit()` in `jobs.py`, `heartbeat.py`
@@ -1112,7 +1112,7 @@ First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.
   job lifecycle edge cases (malformed job, unknown tool, config error, target resolution
   failure, claim race, no output, `ToolTimeout`, generic exception).
 
-## [0.22.1] â€” 2026-06-20
+## [0.22.1] — 2026-06-20
 
 ### Added
 - **Target-count guardrail on `pipeline run` and all `run <tool>` commands.**
@@ -1124,7 +1124,7 @@ First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.
   into `cli.py`, so the cap was fixed at 500 and could not be changed from the command
   line. Fixed in v0.28.0. See [`changelog/v0.22.1.md`](changelog/v0.22.1.md).
 
-## [0.22.0] â€” 2026-06-20
+## [0.22.0] — 2026-06-20
 
 ### Added
 - **Daemon log rotation.** When `--log-file` is specified, log output is now written
@@ -1134,12 +1134,12 @@ First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.
   ISO 8601 timestamp (`YYYY-MM-DDTHH:MM:SS`) so operators can correlate events and
   grep logs by time without relying on filesystem metadata.
 
-## [0.21.1] â€” 2026-06-20
+## [0.21.1] — 2026-06-20
 
 ### Fixed
 - **`import` command no longer lists `ffuf` as supported.** `ffuf` has no handler,
   no backend importer, and would fail at runtime. `SUPPORTED_TOOLS` is now `["httpx",
-  "nuclei"]` â€” the two formats the backend's file-import endpoint actually accepts.
+  "nuclei"]` — the two formats the backend's file-import endpoint actually accepts.
   `subfinder`/`dnsx` are excluded because they convert to httpx-format JSONL before
   uploading; `nmap`/`naabu` use `create_services`, not file import.
   **Correction (2026-08-16):** the `import ffuf` command itself remained registered in
@@ -1151,10 +1151,10 @@ First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.
 
 ### Changed
 - **`pipeline list` now shows each stage's data source.** Output is now
-  `subfinder(scope) â†’ httpx(recon) â†’ nuclei(recon)` so operators can see data flow
+  `subfinder(scope) → httpx(recon) → nuclei(recon)` so operators can see data flow
   at a glance without reading the source code.
 
-## [0.21.0] â€” 2026-06-20
+## [0.21.0] — 2026-06-20
 Run-scoped pipeline isolation. See [changelog/v0.21.0.md](changelog/v0.21.0.md) for details.
 
 ### Added
@@ -1163,20 +1163,20 @@ Run-scoped pipeline isolation. See [changelog/v0.21.0.md](changelog/v0.21.0.md) 
   targets are extracted from the output and written to a local **handoff file**; the next
   stage reads from that file instead of the shared backend recon store. This prevents stale
   recon from earlier runs contaminating later stages.
-- **`ToolHandler.extract_handoff_targets(output)`** â€” new method on every handler, returns
+- **`ToolHandler.extract_handoff_targets(output)`** — new method on every handler, returns
   the targets that stage produced for the next stage. `HttpxHandler` extracts URLs/hosts
   from its JSONL; `SubfinderHandler` and `DnsxHandler` extract hostnames. Terminal handlers
   (nuclei, nmap, naabu) return `[]` and fall back to backend resolution.
-- **`ToolHandler.normalize_handoff_targets(targets)`** â€” new method that strips URL
+- **`ToolHandler.normalize_handoff_targets(targets)`** — new method that strips URL
   scheme/path for host-only tools (nmap, dnsx, naabu), matching what their
   `resolve_targets()` does for backend recon. Default is identity.
 - **ADR 0005** documents the design decision. See `docs/adr/0005-run-scoped-pipelines.md`.
 
 ### Changed
 - `commands/pipeline._run_stage()` return type changed from `bool` to
-  `tuple[bool, Path | None]`. No public API change â€” `_run_stage` is internal.
+  `tuple[bool, Path | None]`. No public API change — `_run_stage` is internal.
 
-## [0.20.1] â€” 2026-06-20
+## [0.20.1] — 2026-06-20
 Reliability hardening. See [changelog/v0.20.1.md](changelog/v0.20.1.md) for details.
 
 ### Fixed
@@ -1196,7 +1196,7 @@ Reliability hardening. See [changelog/v0.20.1.md](changelog/v0.20.1.md) for deta
   `-version`) and falls back to a `X.Y.Z`-style regex in addition to `vX.Y.Z`, so nmap,
   dnsx, and naabu report actual version numbers instead of "unknown".
 
-## [0.20.0] â€” 2026-06-17
+## [0.20.0] — 2026-06-17
 Secure credentials + broader recon coverage. See
 [changelog/v0.20.0.md](changelog/v0.20.0.md) for the rollup.
 
@@ -1206,22 +1206,22 @@ Secure credentials + broader recon coverage. See
     recon targets, so later httpx/nuclei passes don't waste time on dead names.
   - `naabu` (`vardrrunner run naabu`) does a fast top-ports scan and uploads open ports to the
     services API (`source: "naabu"`).
-  - Two new pipelines: `deep` (subfinder â†’ dnsx â†’ httpx â†’ nuclei) and `ports`
-    (subfinder â†’ dnsx â†’ naabu). `doctor`/`status`/heartbeat pick up both tools automatically.
+  - Two new pipelines: `deep` (subfinder → dnsx → httpx → nuclei) and `ports`
+    (subfinder → dnsx → naabu). `doctor`/`status`/heartbeat pick up both tools automatically.
 - **OS keychain credential storage.** `vardrrunner login` now stores your API key in the OS
   keychain (macOS Keychain, Windows Credential Locker, Linux Secret Service) by default, with
   the backend URL kept in `config.json`. Key resolution is `VARDRMAP_API_KEY` env > keychain >
   legacy config file. On a headless box with no keyring backend it falls back to the plaintext
   config file with a warning, so servers keep working. See
   [docs/adr/0004-credential-storage.md](docs/adr/0004-credential-storage.md).
-- **`vardrrunner logout`** â€” removes the stored key from the keychain and config file, leaves
+- **`vardrrunner logout`** — removes the stored key from the keychain and config file, leaves
   the API URL in place, and warns if `VARDRMAP_API_KEY` is still set in the environment.
 ### Changed
 - `doctor` reports the **credential source** (`environment` / `keychain` / `config file`)
   without exposing the secret, and only warns about config-file permissions when the file
   actually holds a plaintext key.
 
-## [0.19.0] â€” 2026-06-17
+## [0.19.0] — 2026-06-17
 First feature release from the standalone repo. See
 [changelog/v0.19.0.md](changelog/v0.19.0.md) for the rollup.
 
@@ -1233,11 +1233,11 @@ First feature release from the standalone repo. See
   auth, daemon PID health, run-dir writability, free disk, tool versions, and pipeline
   readiness. `--json` emits a machine-readable report.
 - **Recon pipelines.** `vardrrunner pipeline run recon --program <id>` chains tools in one
-  command â€” `recon` = subfinder â†’ httpx â†’ nuclei, `quick` = subfinder â†’ httpx. Each stage
+  command — `recon` = subfinder → httpx → nuclei, `quick` = subfinder → httpx. Each stage
   uploads its results so the next pulls them from the recon store; the run preflights tool
   availability, validates the nuclei `--severity` filter up front, stops early on an empty
   stage, and supports `--continue-on-error`. `vardrrunner pipeline list` shows the chains.
-  Built on the handler registry â€” a pipeline is just an ordered list of `Stage(tool, source)`.
+  Built on the handler registry — a pipeline is just an ordered list of `Stage(tool, source)`.
 - **Typed, validated job configs.** Tool configs (`limit`, `status_code`, `severity`,
   `templates`, `top_ports`, `timing`, `timeout`) are parsed into frozen dataclasses
   (`configs.py`) and validated up front. A malformed or drifted backend payload now fails
@@ -1258,8 +1258,8 @@ First feature release from the standalone repo. See
 ### Changed
 - **Tool-handler registry.** `execute_pending_jobs` (~290 lines of per-tool `if` branches)
   is refactored into a `ToolHandler` per job type (`handlers.py`) driven by one uniform
-  lifecycle (`_execute_one`): capability check â†’ config â†’ targets â†’ claim â†’ events â†’ upload
-  â†’ done/fail. Every tool now gets identical claim/event/failure handling, and adding a tool
+  lifecycle (`_execute_one`): capability check → config → targets → claim → events → upload
+  → done/fail. Every tool now gets identical claim/event/failure handling, and adding a tool
   is a one-file change. See
   [docs/adr/0002-tool-handler-registry.md](docs/adr/0002-tool-handler-registry.md).
 - **Direct `run` commands share the typed-config/handler path.** `run httpx|subfinder|nuclei|nmap`
@@ -1269,13 +1269,13 @@ First feature release from the standalone repo. See
 - **Resilient API client.** The HTTP session now retries transient failures
   (connection errors and 429/500/502/503/504) with exponential backoff, so a
   long-running daemon survives network blips and brief backend restarts. Retries
-  are limited to idempotent methods â€” POST/PATCH are never auto-retried, so a
+  are limited to idempotent methods — POST/PATCH are never auto-retried, so a
   dropped response can't cause a double-claim, double-import, or duplicate event.
   Retry count and backoff are constructor-configurable. Requests also send a
   `User-Agent: vardrrunner/<version> (<os>)` header for backend attribution.
 
 ### Fixed
-- **Pipeline `--continue-on-error` is now complete** â€” it also covers tool-execution and
+- **Pipeline `--continue-on-error` is now complete** — it also covers tool-execution and
   upload failures, not just target resolution and timeouts.
 - **Malformed job envelopes fail cleanly.** A job missing a required field is marked failed
   (or skipped if it has no id) via `JobEnvelope`, instead of risking a `KeyError` mid-loop.
@@ -1285,7 +1285,7 @@ First feature release from the standalone repo. See
   over plain HTTP to a non-local host (allowed for `localhost`, or with
   `VARDRRUNNER_ALLOW_INSECURE=1`). Validated at login and on every authenticated call.
 
-## [0.18.0] â€” 2026-06-14
+## [0.18.0] — 2026-06-14
 First release from the standalone repository. See
 [changelog/v0.18.0.md](changelog/v0.18.0.md) for detail.
 
@@ -1297,14 +1297,14 @@ First release from the standalone repository. See
   already carried v0.17.x of features). Version is now single-sourced from
   `vardrrunner/__init__.py` and read dynamically by `pyproject.toml`; the heartbeat reports it.
 - Replaced `pyflakes` with **ruff** (lint + format) and added **mypy** type checking; all
-  three plus coverage now run in CI on Python 3.10â€“3.12.
+  three plus coverage now run in CI on Python 3.10–3.12.
 
 ### Added
 - Standalone repo scaffolding: `CLAUDE.md` (with the shared VardrSec Engineering Charter),
   `README.md`, `docs/` (architecture, development, CLI reference, ADRs), `changelog/`,
   CI workflow, and `.gitignore`.
 - `LICENSE` (MIT).
-- `[project.optional-dependencies] dev` extra in `pyproject.toml` â€” `pip install -e ".[dev]"`.
+- `[project.optional-dependencies] dev` extra in `pyproject.toml` — `pip install -e ".[dev]"`.
 
 ---
 
@@ -1312,32 +1312,32 @@ First release from the standalone repository. See
 The features below shipped while VardrRunner lived inside the VardrMap repo. They are
 recorded here for continuity; their commits are present in this repo's history.
 
-### v0.17.1 â€” Daemon Windows fixes
+### v0.17.1 — Daemon Windows fixes
 - ctypes liveness probe (Windows `os.kill` was terminating the daemon)
 - PID-file-removal graceful stop protocol; `DETACHED_PROCESS` detach; double-start guard
 
-### v0.17.0 â€” Daemon
+### v0.17.0 — Daemon
 - `daemon start/stop/status`; polls jobs every 5 s, heartbeats every 60 s on a dedicated
   thread; `--detach` background mode with PID file; graceful SIGTERM shutdown
 - Extracted `execute_pending_jobs()` so one-shot and daemon share one execution path
 
-### v0.15.0 â€” Radar, AI triage, normalization
+### v0.15.0 — Radar, AI triage, normalization
 - nmap job type; `strip_url_to_host()` target normalization
 
-### v0.14.0 â€” Service discovery
+### v0.14.0 — Service discovery
 - Atomic job claim via `POST /jobs/{id}/claim`; nmap job type (safe profile);
   per-tool config validation
 
-### v0.13.0 â€” Job events
+### v0.13.0 — Job events
 - Emits `started/targets_resolved/running/uploaded/done/failed` lifecycle events
 
-### v0.12.0 â€” Real heartbeat
+### v0.12.0 — Real heartbeat
 - `POST /runner/heartbeat`; reports hostname, version, OS, per-tool availability;
   explicit `heartbeat` command + auto-heartbeat on `jobs run`
 
-### v0.11.0 â€” Job dispatch
-- subfinder job dispatch (wildcard extraction â†’ subfinder â†’ JSONL â†’ httpx import)
+### v0.11.0 — Job dispatch
+- subfinder job dispatch (wildcard extraction → subfinder → JSONL → httpx import)
 
-### v0.9.0 â€” VardrRunner v1
+### v0.9.0 — VardrRunner v1
 - subfinder support for wildcard scope; `jobs list` / `jobs run`; missing tool marks job
   failed instead of silently skipping; `status` command
