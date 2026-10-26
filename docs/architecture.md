@@ -34,6 +34,7 @@ calls, all through `api.py`:
 | Endpoint | Used for |
 |----------|----------|
 | `GET /me` | `whoami`, and the auth check in `doctor` |
+| `GET /ready` | opt-in `doctor --platform`: value-free v1 Map database/migration readiness |
 | `GET /engagements` · `GET /engagements/{id}` | engagement list and scope lookup |
 | `GET /engagements/{id}/recon` | `--from-recon` target resolution (paginated, 500/page) |
 | `POST /engagements/{id}/imports` | httpx/nuclei/subfinder/dnsx/katana/gau/ffuf/dalfox result upload, with the producing `job_id` |

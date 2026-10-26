@@ -234,6 +234,7 @@ non-zero on any actionable failure, and prints a remediation hint per problem.
 vardrrunner doctor && vardrrunner jobs run                 # execute pending jobs once
 vardrrunner doctor --json                                  # machine-readable report
 vardrrunner doctor --production                            # strict health profile
+vardrrunner doctor --platform --offline --json              # Map readiness, no release discovery
 ```
 
 Checks: installed version against the latest release, credential source (env vs file), backend URL validity (HTTPS), config-file
@@ -244,8 +245,25 @@ tools, or a managed tool that **fails hash verification**) set a non-zero exit; 
 individual tools, unverified `PATH` copies of tools VardrRunner can manage, a missing
 naabu capture library, low-ish disk, and a newer VardrRunner release (`version: 0.48.0,
 update available: 0.49.0`, remediation `Run vardrrunner update`) are **warnings** that don't
-block. The version check always asks PyPI (5-second timeout); if it can't, the line is OK and
+block. By default the version check asks PyPI (5-second timeout); if it can't, the line is OK and
 says the check could not run.
+
+`--offline` skips release-registry requests; it still checks the configured
+backend and local tools/state. It does not mean zero network traffic. It neither
+downloads nor installs updates. The JSON/text version row records that release
+discovery was skipped.
+
+`--platform` additionally requires a Map backend implementing the v1 `GET /ready`
+contract (Map ADR 0003). It reports `platform database` and `platform migrations`;
+both must pass for a healthy result. A 503 is read as an explicit unready state,
+without retrying; 404, redirects, malformed/unsupported or inconsistent responses,
+timeouts and TLS failures fail the requested check. Response/error text is not
+echoed. Default doctor runs do not call `/ready`, preserving older Map support.
+
+This checks database connectivity and the reported Alembic revision marker, not
+every table, UI availability, installation-version compatibility or successful
+scan execution. The Map status UI and Compose distribution remain separate work.
+Diagnostics never apply migrations, repair the platform or run queued jobs.
 
 `--production` additionally treats plaintext credentials as a failure, raises disk
 thresholds to 1 GiB minimum / 5 GiB warning, verifies the execution journal and stable

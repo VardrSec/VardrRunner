@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add opt-in `doctor --platform` for Map's v1 `/ready` database/migration
+  contract and `doctor --offline` to skip release discovery while checking the
+  configured backend. Missing/unsupported/inconsistent readiness fails the
+  requested check; ordinary doctor behavior and explicit execution are unchanged.
+  Requires a Map backend implementing ADR 0003; see Runner ADR 0018.
+
 - Resolve independent Gate write-verifier credentials locally and validate their
   declared principal preflight alongside caller diagnostics. Preserve additive
   semantic/readback metadata in the existing result upload and unresolved hash.

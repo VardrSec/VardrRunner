@@ -186,9 +186,21 @@ def doctor(
         "--production",
         help="Require durable state, secure credentials, and disk headroom",
     ),
+    platform: bool = typer.Option(
+        False,
+        "--platform",
+        help="Require Map database and migration readiness (v1 /ready contract)",
+    ),
+    offline: bool = typer.Option(
+        False,
+        "--offline",
+        help="Skip release-registry requests; still check the configured backend",
+    ),
 ):
     """Deep preflight before running scans — exits non-zero on actionable failures."""
-    doctor_cmd.run_doctor(as_json=as_json, production=production)
+    doctor_cmd.run_doctor(
+        as_json=as_json, production=production, platform=platform, offline=offline
+    )
 
 
 @app.command()

@@ -29,3 +29,4 @@ the way it does.
 | [0015](0015-mcp-server.md) | MCP server for agent-driven engagements | Accepted |
 | [0016](0016-explicit-daemon-execution.md) | Manual invocation and removal of startup workers | Accepted; cleanup commands removed in v0.51.0 |
 | [0017](0017-interactive-console.md) | Interactive console | Accepted |
+| [0018](0018-platform-diagnostics.md) | Opt-in platform readiness and offline diagnostics | Accepted |
