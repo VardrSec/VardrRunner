@@ -69,3 +69,17 @@ still not bundled or provisioned; Nuclei's non-root XDG state handling is covere
 by the existing container state test. Dependency upgrades across minor versions can
 change behavior, so the container job, state probe and the distribution's real
 Nuclei fixture must pass before this is pinned.
+
+## 2026-10-27 addendum: reachable advisories newer than the frozen scan database
+
+Go's `govulncheck`, run against locally built binaries of every source-built tool
+with the same recipes, reported two reachable advisories that the frozen image-scan
+database predates: GO-2026-6860 (quadratic HTML parsing in x/net, fixed in 0.62.0;
+reachable in FFUF, Nuclei and the ProjectDiscovery tools) and GO-2026-5320 (goldmark
+cross-site scripting, fixed in 1.7.17; reachable in httpx, Subfinder, Katana, DNSx,
+Naabu and Nuclei). Raise x/net to 0.62.0 for all builds and patch goldmark 1.7.17
+where the binary links it; Go's resolver then requires x/crypto 0.58.0 and x/text
+0.43.0. With these, `govulncheck` reports nothing for httpx, Subfinder, Katana, DNSx,
+FFUF and Gau; Nuclei retains GO-2026-5932 (the unmaintained x/crypto/openpgp
+package, no fixed version), which is inherent to upstream Nuclei and remains open.
+Naabu needs CGO and libpcap and was resolved but not locally scanned.

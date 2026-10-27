@@ -16,15 +16,17 @@ BUILDS = {
     "katana": {
         "module": "github.com/projectdiscovery/katana",
         "patches": {
+            "github.com/yuin/goldmark": "v1.7.17",
             "github.com/jackc/pgx/v5": "v5.9.2",
-            "golang.org/x/net": "v0.60.0",
+            "golang.org/x/net": "v0.62.0",
             "github.com/klauspost/compress": "v1.18.7",
         },
     },
     "dnsx": {
         "module": "github.com/projectdiscovery/dnsx",
         "patches": {
-            "golang.org/x/net": "v0.60.0",
+            "github.com/yuin/goldmark": "v1.7.17",
+            "golang.org/x/net": "v0.62.0",
             "github.com/klauspost/compress": "v1.18.7",
         },
     },
@@ -32,38 +34,42 @@ BUILDS = {
 BUILDS["naabu"] = {
     "module": "github.com/projectdiscovery/naabu/v2",
     "patches": {
-        "golang.org/x/net": "v0.60.0",
-        "golang.org/x/crypto": "v0.57.0",
+        "github.com/yuin/goldmark": "v1.7.17",
+        "golang.org/x/net": "v0.62.0",
+        "golang.org/x/crypto": "v0.58.0",
         "github.com/klauspost/compress": "v1.18.7",
     },
 }
 BUILDS["httpx"] = {
     "module": "github.com/projectdiscovery/httpx",
     "patches": {
-        "golang.org/x/net": "v0.60.0",
+        "github.com/yuin/goldmark": "v1.7.17",
+        "golang.org/x/net": "v0.62.0",
         "github.com/klauspost/compress": "v1.18.7",
     },
 }
 BUILDS["subfinder"] = {
     "module": "github.com/projectdiscovery/subfinder/v2",
     "patches": {
-        "golang.org/x/net": "v0.60.0",
+        "github.com/yuin/goldmark": "v1.7.17",
+        "golang.org/x/net": "v0.62.0",
         "github.com/klauspost/compress": "v1.18.7",
     },
 }
 BUILDS["ffuf"] = {
     "module": "github.com/ffuf/ffuf/v2",
-    "patches": {"golang.org/x/net": "v0.60.0"},
+    "patches": {"golang.org/x/net": "v0.62.0"},
 }
 BUILDS["nuclei"] = {
     "module": "github.com/projectdiscovery/nuclei/v3",
     "patches": {
+        "github.com/yuin/goldmark": "v1.7.17",
         "github.com/getkin/kin-openapi": "v0.149.0",
         "github.com/go-git/go-git/v5": "v5.19.2",
-        "golang.org/x/crypto": "v0.57.0",
+        "golang.org/x/crypto": "v0.58.0",
         "golang.org/x/mod": "v0.41.0",
-        "golang.org/x/net": "v0.60.0",
-        "golang.org/x/text": "v0.42.0",
+        "golang.org/x/net": "v0.62.0",
+        "golang.org/x/text": "v0.43.0",
         "google.golang.org/grpc": "v1.83.2",
     },
 }
@@ -71,7 +77,7 @@ COMPILER = "go1.27.3"
 BUILDS["gau"] = {
     "module": "github.com/lc/gau/v2",
     "patches": {
-        "golang.org/x/net": "v0.60.0",
+        "golang.org/x/net": "v0.62.0",
         "github.com/klauspost/compress": "v1.18.7",
         "github.com/sirupsen/logrus": "v1.9.3",
         "github.com/valyala/fasthttp": "v1.34.0",
