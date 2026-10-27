@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from vardrrunner import config, runner
+from vardrrunner import config, runner, toolchain
 
 root = config.config_dir()
 xdg_config, xdg_cache = [Path(os.environ[name]) for name in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME")]
@@ -13,6 +13,8 @@ assert os.getuid() == 10001
 assert xdg_config == root and xdg_cache == root / "tool-cache"
 assert (Path.home() / ".config").resolve() == root.resolve()
 assert not os.access(config.tools_dir(), os.W_OK)
+assert toolchain.status("katana", "katana").detail == "verified source build"
+assert (config.tools_dir() / "provenance/katana/source.json").is_file()
 result = subprocess.run(
     [runner.program("nuclei"), "-version"], capture_output=True, text=True, timeout=20
 )

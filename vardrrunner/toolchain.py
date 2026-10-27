@@ -16,6 +16,9 @@ Installation never runs a shell, never extracts anything but the one expected
 file, and never leaves a half-written binary in place: the archive is verified
 before it is opened, the binary is staged, version-checked, then moved into
 place in a single rename.
+
+The development toolkit image can register a source-built Katana with explicit
+origin metadata; the same runtime binary hash checks apply (ADR 0020).
 """
 
 from __future__ import annotations
@@ -501,9 +504,14 @@ def status(name: str, binary: str) -> ToolStatus:
             verify(name)
         except ToolIntegrityError as exc:
             return ToolStatus(name, "tampered", path, entry.get("version"), pinned, str(exc))
-        detail = "verified"
+        origin = entry.get("origin")
+        detail = (
+            "verified source build"
+            if isinstance(origin, dict) and origin.get("kind") == "go-module-source"
+            else "verified"
+        )
         if pinned and entry.get("version") != pinned:
-            detail = f"verified; pinned version is now {pinned}"
+            detail += f"; pinned version is now {pinned}"
         return ToolStatus(name, "managed", path, entry.get("version"), pinned, detail)
 
     on_path = shutil.which(binary)
