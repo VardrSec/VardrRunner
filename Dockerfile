@@ -104,6 +104,11 @@ WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
 RUN go mod init vardrrunner-ffuf-build     && go get github.com/ffuf/ffuf/v2@v2.3.0         golang.org/x/net@v0.60.0     && go build -trimpath -o /out/ffuf github.com/ffuf/ffuf/v2     && go version -m /out/ffuf > /out/build-info.txt     && sha256sum /out/ffuf > /out/ffuf.sha256     && cp go.mod go.sum /out/
 
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS nuclei-build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
+RUN go mod init vardrrunner-nuclei-build     && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/crypto@v0.55.0 golang.org/x/mod@v0.40.0 golang.org/x/net@v0.60.0         golang.org/x/text@v0.41.0 google.golang.org/grpc@v1.83.2     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei     && go version -m /out/nuclei > /out/build-info.txt     && sha256sum /out/nuclei > /out/nuclei.sha256     && cp go.mod go.sum /out/
+
 FROM base AS toolkit
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8 ca-certificates \
@@ -115,11 +120,12 @@ COPY --from=naabu-build /out/ /tmp/naabu-build/
 COPY --from=httpx-build /out/ /tmp/httpx-build/
 COPY --from=subfinder-build /out/ /tmp/subfinder-build/
 COPY --from=ffuf-build /out/ /tmp/ffuf-build/
+COPY --from=nuclei-build /out/ /tmp/nuclei-build/
 COPY --from=gau-build /out/ /tmp/gau-build/
 COPY container/go_tool_install.py /tmp/go_tool_install.py
-RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu", "gau", "httpx", "subfinder", "ffuf")]' \
+RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu", "gau", "httpx", "subfinder", "ffuf", "nuclei")]' \
     && python /tmp/go_tool_install.py \
-    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/go_tool_install.py \
+    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/nuclei-build /tmp/go_tool_install.py \
     && chmod -R a+rX /opt/vardrtools \
     && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
     && ln -s /home/runner/.vardrmap /home/runner/.config

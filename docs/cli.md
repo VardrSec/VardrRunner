@@ -532,7 +532,7 @@ and its SHA-256. `install` downloads the archive over HTTPS, refuses it unless t
 matches the pin, extracts only the expected binary, requires it to report the pinned
 version, and moves it into place in one step. Anything that fails installs nothing.
 
-The development toolkit image supplies Katana, DNSx, Naabu, httpx, Subfinder, FFUF and Gau from their pinned upstream versions with
+The development toolkit image supplies Katana, DNSx, Naabu, httpx, Subfinder, FFUF, Nuclei and Gau from their pinned upstream versions with
 patched dependencies, recorded as `verified source build` in tool details. It uses
 the same managed binary hash checks. Native `tools install` still uses the pinned
 upstream archive. See [container build provenance](container.md).

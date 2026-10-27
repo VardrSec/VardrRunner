@@ -57,3 +57,13 @@ the same recorded-source contract and mandatory runtime hash verification. Their
 scan findings were fixed-version standard-library and dependency occurrences; this
 changes only the container build. Native archives, Nuclei (separately reviewed),
 VPN behavior and release scope are unaffected.
+
+## 2026-10-27 addendum: Nuclei
+
+Extend the allowlist to the existing Nuclei 3.11.1 with Go 1.27.3 and the fixed
+versions of kin-openapi 0.149.0, go-git 5.19.2, x/crypto 0.55.0, x/mod 0.40.0,
+x/net 0.60.0, x/text 0.41.0 and gRPC 1.83.2 named by the scanner. Templates are
+still not bundled or provisioned; Nuclei's non-root XDG state handling is covered
+by the existing container state test. Dependency upgrades across minor versions can
+change behavior, so the container job, state probe and the distribution's real
+Nuclei fixture must pass before this is pinned.
