@@ -4,6 +4,9 @@ The first Compose distribution uses a one-shot, non-root Runner container; nativ
 
 The toolkit's existing Katana, DNSx and Naabu use recorded source builds with dependency patches
 and the same runtime hash verification; see [ADR 0020](adr/0020-container-source-katana.md).
+Gau has four explicitly recorded source fixes for provider TLS/errors and extensionless JSON output;
+its modified main module is not presented as unchanged upstream source. See
+[ADR 0021](adr/0021-gau-patched-source.md). Backend contracts are unchanged.
 
 ## Identity/session preflight
 

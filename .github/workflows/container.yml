@@ -10,6 +10,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
       - name: Build development image
         run: docker build -t vardrrunner:smoke .
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -49,3 +52,14 @@ jobs:
           flags=(--rm --network none --cap-drop ALL --security-opt no-new-privileges --mount "source=$volume,target=/home/runner/.vardrmap" --mount "type=bind,source=$PWD/tests,target=/checks,readonly" --entrypoint python)
           docker run "${flags[@]}" vardrrunner:toolkit /checks/container_tool_state.py create
           docker run "${flags[@]}" vardrrunner:toolkit /checks/container_tool_state.py check
+      - name: Verify Gau TLS and producing Runner failure behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'cryptography>=42'
+          fixture="$RUNNER_TEMP/runner-gau-tls-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          python tests/container_gau_certificates.py "$fixture"
+          volume="runner-gau-tls-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker volume create "$volume"
+          trap 'docker volume rm "$volume"' EXIT
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev,noexec --cap-drop ALL --security-opt no-new-privileges --mount "source=$volume,target=/home/runner/.vardrmap" --mount "type=bind,source=$PWD/tests,target=/checks,readonly" --mount "type=bind,source=$fixture,target=/tls-fixture,readonly" --entrypoint python vardrrunner:toolkit /checks/container_gau.py

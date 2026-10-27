@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Fix container Gau's provider TLS verification and zero-exit provider failures
+  through four reviewed source substitutions with explicit patched-source
+  provenance; retain extensionless URLs in JSON output. Preserve valid empty results and native archive pins. See
+  [details](changelog/unreleased-container-gau-security.md).
+
 - Extend recorded source builds to existing container Naabu 2.6.1 with patched
   Go dependencies and its existing libpcap boundary. Preserve native archives
   and unprivileged TCP-connect behavior. See [details](changelog/unreleased-container-naabu.md).
