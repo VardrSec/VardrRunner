@@ -13,7 +13,7 @@ from vardrrunner import toolchain
 helper = runpy.run_path(str(Path(__file__).parents[1] / "container/go_tool_install.py"))
 
 
-@pytest.fixture(params=["katana", "dnsx"])
+@pytest.fixture(params=["katana", "dnsx", "naabu"])
 def source_build(tmp_path, monkeypatch, request):
     name = request.param
     build = helper["BUILDS"][name]

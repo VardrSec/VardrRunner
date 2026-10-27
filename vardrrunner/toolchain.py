@@ -17,7 +17,7 @@ file, and never leaves a half-written binary in place: the archive is verified
 before it is opened, the binary is staged, version-checked, then moved into
 place in a single rename.
 
-The development toolkit image can register source-built Katana/DNSx with explicit
+The development toolkit image can register source-built Katana/DNSx/Naabu with explicit
 origin metadata; the same runtime binary hash checks apply (ADR 0020).
 """
 

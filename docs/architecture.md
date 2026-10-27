@@ -2,7 +2,7 @@
 
 The first Compose distribution uses a one-shot, non-root Runner container; native execution remains supported. See [ADR 0019](adr/0019-container-packaging.md).
 
-The toolkit's existing Katana and DNSx use recorded source builds with dependency patches
+The toolkit's existing Katana, DNSx and Naabu use recorded source builds with dependency patches
 and the same runtime hash verification; see [ADR 0020](adr/0020-container-source-katana.md).
 
 ## Identity/session preflight

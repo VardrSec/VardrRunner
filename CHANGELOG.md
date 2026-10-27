@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Extend recorded source builds to existing container Naabu 2.6.1 with patched
+  Go dependencies and its existing libpcap boundary. Preserve native archives
+  and unprivileged TCP-connect behavior. See [details](changelog/unreleased-container-naabu.md).
+
 - Extend the recorded container source build to existing DNSx 1.3.1 with patched
   Go/x/net/compress and a real isolated DNS lookup regression. Preserve native
   archives and the nine-tool baseline. See [details](changelog/unreleased-container-dnsx.md).

@@ -47,6 +47,19 @@ RUN go mod init vardrrunner-dnsx-build \
     && sha256sum /out/dnsx > /out/dnsx.sha256 \
     && cp go.mod go.sum /out/
 
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS naabu-build
+WORKDIR /src
+ENV CGO_ENABLED=1 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
+RUN apt-get update && apt-get install -y --no-install-recommends libpcap-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN go mod init vardrrunner-naabu-build \
+    && go get github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.6.1 \
+        golang.org/x/net@v0.60.0 golang.org/x/crypto@v0.57.0 github.com/klauspost/compress@v1.18.7 \
+    && go build -trimpath -o /out/naabu github.com/projectdiscovery/naabu/v2/cmd/naabu \
+    && go version -m /out/naabu > /out/build-info.txt \
+    && sha256sum /out/naabu > /out/naabu.sha256 \
+    && cp go.mod go.sum /out/
+
 FROM base AS toolkit
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8 ca-certificates \
@@ -54,10 +67,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8
 ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 COPY --from=katana-build /out/ /tmp/katana-build/
 COPY --from=dnsx-build /out/ /tmp/dnsx-build/
+COPY --from=naabu-build /out/ /tmp/naabu-build/
 COPY container/go_tool_install.py /tmp/go_tool_install.py
-RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx")]' \
+RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu")]' \
     && python /tmp/go_tool_install.py \
-    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/go_tool_install.py \
+    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/go_tool_install.py \
     && chmod -R a+rX /opt/vardrtools \
     && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
     && ln -s /home/runner/.vardrmap /home/runner/.config

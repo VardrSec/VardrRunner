@@ -15,7 +15,7 @@ assert os.getuid() == 10001
 assert xdg_config == root and xdg_cache == root / "tool-cache"
 assert (Path.home() / ".config").resolve() == root.resolve()
 assert not os.access(config.tools_dir(), os.W_OK)
-for name in ("katana", "dnsx"):
+for name in ("katana", "dnsx", "naabu"):
     assert toolchain.status(name, name).detail == "verified source build"
     assert (config.tools_dir() / "provenance" / name / "source.json").is_file()
 result = subprocess.run(
