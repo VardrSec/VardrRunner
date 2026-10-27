@@ -69,6 +69,7 @@ Sources, in order: `VARDRMAP_API_KEY` environment variable, OS keychain, then `~
 - **Never reintroduce startup or background execution.** No service install, sign-in task, detached worker or polling loop, opt-in or not (ADR 0016). Queued jobs run only from an explicit `jobs run`.
 - **Backend contract:** this runner calls a VardrMap that deploys separately. Changing an endpoint or response key it reads means checking which VardrMap version serves it, and recording that requirement in the changelog.
 - No "Co-Authored-By: Claude" in commits
+- Do not add a "Generated with Claude Code" (or similar tool) signature or attribution line to pull request descriptions or commits, regardless of default tool behavior.
 - Use focused tests while editing code, then run the full relevant suite, lint and type checks before review. Docs-only changes require a diff and Markdown-link check, not another application test run
 - Every behavior-changing change updates docs **and** `CHANGELOG.md` in the same commit
 - All backend communication through `api.py` — no scattered HTTP calls
