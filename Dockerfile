@@ -89,6 +89,21 @@ RUN go get golang.org/x/net@v0.60.0 github.com/klauspost/compress@v1.18.7 \
     && sha256sum /out/gau > /out/gau.sha256 \
     && cp go.mod go.sum /out/
 
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS httpx-build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
+RUN go mod init vardrrunner-httpx-build     && go get github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0         golang.org/x/net@v0.60.0 github.com/klauspost/compress@v1.18.7     && go build -trimpath -o /out/httpx github.com/projectdiscovery/httpx/cmd/httpx     && go version -m /out/httpx > /out/build-info.txt     && sha256sum /out/httpx > /out/httpx.sha256     && cp go.mod go.sum /out/
+
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS subfinder-build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
+RUN go mod init vardrrunner-subfinder-build     && go get github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.17.0         golang.org/x/net@v0.60.0 github.com/klauspost/compress@v1.18.7     && go build -trimpath -o /out/subfinder github.com/projectdiscovery/subfinder/v2/cmd/subfinder     && go version -m /out/subfinder > /out/build-info.txt     && sha256sum /out/subfinder > /out/subfinder.sha256     && cp go.mod go.sum /out/
+
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS ffuf-build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
+RUN go mod init vardrrunner-ffuf-build     && go get github.com/ffuf/ffuf/v2@v2.3.0         golang.org/x/net@v0.60.0     && go build -trimpath -ldflags "-X github.com/ffuf/ffuf/v2/pkg/ffuf.VERSION=2.3.0 -X github.com/ffuf/ffuf/v2/pkg/ffuf.VERSION_APPENDIX=" -o /out/ffuf github.com/ffuf/ffuf/v2     && go version -m /out/ffuf > /out/build-info.txt     && sha256sum /out/ffuf > /out/ffuf.sha256     && cp go.mod go.sum /out/
+
 FROM base AS toolkit
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8 ca-certificates \
@@ -97,11 +112,14 @@ ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 COPY --from=katana-build /out/ /tmp/katana-build/
 COPY --from=dnsx-build /out/ /tmp/dnsx-build/
 COPY --from=naabu-build /out/ /tmp/naabu-build/
+COPY --from=httpx-build /out/ /tmp/httpx-build/
+COPY --from=subfinder-build /out/ /tmp/subfinder-build/
+COPY --from=ffuf-build /out/ /tmp/ffuf-build/
 COPY --from=gau-build /out/ /tmp/gau-build/
 COPY container/go_tool_install.py /tmp/go_tool_install.py
-RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu", "gau")]' \
+RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu", "gau", "httpx", "subfinder", "ffuf")]' \
     && python /tmp/go_tool_install.py \
-    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/go_tool_install.py \
+    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/go_tool_install.py \
     && chmod -R a+rX /opt/vardrtools \
     && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
     && ln -s /home/runner/.vardrmap /home/runner/.config

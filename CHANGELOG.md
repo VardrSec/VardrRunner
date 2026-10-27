@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Extend the container toolkit's recorded source-build contract to the existing httpx 1.12.0,
+  Subfinder 2.17.0 and FFUF 2.3.0 (Go 1.27.3, patched x/net and compress). Native archives,
+  runtime hash checks and the nine-tool baseline are unchanged. See ADR 0020.
+
 - Fix container Gau's provider TLS verification and zero-exit provider failures
   through four reviewed source substitutions with explicit patched-source
   provenance; retain extensionless URLs in JSON output. Preserve valid empty results and native archive pins. See

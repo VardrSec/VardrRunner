@@ -48,3 +48,14 @@ builder; keep the existing runtime libpcap package. Its isolated source experime
 passes bounded TCP-connect operation as UID 10001 with no capabilities and removes
 critical/high scan findings. This grants no raw-socket privileges, VPN acceptance,
 native archive clearance or release. Other tool behavior still needs security review.
+
+## 2026-10-27 addendum: httpx, Subfinder and FFUF
+
+Extend the fixed build allowlist to the existing httpx 1.12.0, Subfinder 2.17.0 and
+FFUF 2.3.0 with Go 1.27.3, x/net 0.60.0 and (httpx, Subfinder) compress 1.18.7, using
+the same recorded-source contract and mandatory runtime hash verification. Their
+scan findings were fixed-version standard-library and dependency occurrences; this
+changes only the container build. FFUF release builds inject their version with
+linker flags, so the build sets the same two variables; an unflagged source build
+reports a development version and fails the pinned-version probe. Native archives, Nuclei (separately reviewed),
+VPN behavior and release scope are unaffected.
