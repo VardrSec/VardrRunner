@@ -31,7 +31,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8
     && rm -rf /var/lib/apt/lists/*
 ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 RUN vardrrunner tools install --all \
-    && chmod -R a+rX /opt/vardrtools
+    && chmod -R a+rX /opt/vardrtools \
+    && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
+    && ln -s /home/runner/.vardrmap /home/runner/.config
+# Some tools ignore XDG_CONFIG_HOME; both config paths must reach the state volume.
+ENV XDG_CONFIG_HOME=/home/runner/.vardrmap \
+    XDG_CACHE_HOME=/home/runner/.vardrmap/tool-cache
 COPY --from=gate-build /out/vardrgate /usr/local/bin/vardrgate
 USER 10001:10001
 

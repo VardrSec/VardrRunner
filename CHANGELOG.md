@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Keep toolkit XDG configuration/cache in the persistent user-owned Runner volume
+  and remove root-owned build-probe defaults, fixing Nuclei/Katana runtime permission
+  failures under UID 10001. Immutable managed binaries remain read-only.
+
 - Add a non-root, one-shot development container; startup prints help, persistent
   state persists independently. Add an optional tool-enabled target with Gate,
   nmap/libpcap and verified managed tools in VARDRRUNNER_TOOLS_DIR. See
