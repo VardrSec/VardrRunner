@@ -68,6 +68,16 @@ identity, journal, evidence or data. Rebuild the image to repair/update bundled
 tools; an unprivileged runtime cannot overwrite them. Native installations retain
 `~/.vardrmap/tools` when the override is absent.
 
+The toolkit places XDG configuration in `.vardrmap` and cache in
+`.vardrmap/tool-cache`, inside the persistent user-owned state volume. Its legacy
+`~/.config` path links to `.vardrmap` for clients such as Katana that ignore XDG.
+The link targets the existing volume root, so existing volumes need no migration.
+Build-time version probes may initialize root-owned defaults; those defaults are
+removed before selecting the runtime user. This keeps Nuclei and Katana
+clients writable as UID 10001 without changing native/core paths or making
+`/opt/vardrtools` writable. Review each tool's separate provider credentials and
+data requirements; this does not certify every mode.
+
 Wordlists, nuclei templates, headless browser support and raw-packet capabilities
 are separate operator requirements. Bundled binary availability does not prove
 that every scan mode works. No target requests run during image startup.

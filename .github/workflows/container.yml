@@ -39,3 +39,13 @@ jobs:
           trap 'docker volume rm "$volume"' EXIT
           docker run "${flags[@]}" --mount "source=$volume,target=/home/runner/.vardrmap" --entrypoint python vardrrunner:smoke -c 'import os; from pathlib import Path; assert os.getuid()==10001; (Path.home()/".vardrmap"/"persistence-check").write_text("retained")'
           docker run "${flags[@]}" --mount "source=$volume,target=/home/runner/.vardrmap" --entrypoint python vardrrunner:smoke -c 'from pathlib import Path; assert (Path.home()/".vardrmap"/"persistence-check").read_text()=="retained"'
+      - name: Verify real non-root tool configuration and replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          volume="runner-tool-state-${GITHUB_RUN_ID}"
+          docker volume create "$volume"
+          trap 'docker volume rm "$volume"' EXIT
+          flags=(--rm --network none --cap-drop ALL --security-opt no-new-privileges --mount "source=$volume,target=/home/runner/.vardrmap" --mount "type=bind,source=$PWD/tests,target=/checks,readonly" --entrypoint python)
+          docker run "${flags[@]}" vardrrunner:toolkit /checks/container_tool_state.py create
+          docker run "${flags[@]}" vardrrunner:toolkit /checks/container_tool_state.py check
