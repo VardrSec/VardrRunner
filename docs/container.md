@@ -15,8 +15,10 @@ The default command prints help and exits. The image runs as UID/GID 10001 and
 contains the Runner CLI only: no Gate or scanning binaries, browser, wordlists or
 templates are bundled. Missing tools remain visible in doctor; this image alone
 does not satisfy full installation acceptance. An optional `toolkit` target adds Gate, nmap/libpcap and checksum-verified managed
-tools. Immutable release digests remain a later step. The base tag and Python dependency
-ranges make this a development build, not a reproducible release artifact.
+tools. Python/Debian Trixie and the Gate Go build image use reviewed base digests.
+Python dependency ranges and apt packages still resolve during builds, so this is
+a development build; immutable published releases and reproducibility remain
+separate work. Native Runner's Python support and state paths are unchanged.
 
 Persist `/home/runner/.vardrmap` in a named volume; it contains configuration,
 identity, journal, evidence, managed tools and data. Never remove it during normal

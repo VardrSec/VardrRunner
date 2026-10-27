@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Refresh the container's Python/Debian Trixie base and Gate's Go 1.27.3 build
+  image with reviewed digests, and update the verified Subfinder pin to 2.17.0.
+  This is partial vulnerability remediation; bundled upstream tools and remaining
+  image findings still require review and rescanning before an alpha release.
+
 - Keep toolkit XDG configuration/cache in the persistent user-owned Runner volume
   and remove root-owned build-probe defaults, fixing Nuclei/Katana runtime permission
   failures under UID 10001. Immutable managed binaries remain read-only.
