@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Raise the container source builds to x/net 0.62.0 (GO-2026-6860) and patch goldmark 1.7.17
+  (GO-2026-5320) where linked, with the resolver-required x/crypto 0.58.0 and x/text 0.43.0.
+  `govulncheck` reports no reachable advisory for httpx, Subfinder, Katana, DNSx, FFUF and
+  Gau; Nuclei retains the unfixable unmaintained-openpgp advisory. See ADR 0020.
+
 - Extend the container toolkit's recorded source-build contract to the existing httpx 1.12.0,
   Subfinder 2.17.0 and FFUF 2.3.0 (Go 1.27.3, patched x/net and compress). Native archives,
   runtime hash checks and the nine-tool baseline are unchanged. See ADR 0020.

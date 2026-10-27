@@ -113,7 +113,7 @@ def test_unverified_source_artifact_never_executes_or_installs(source_build, mut
     filename, old, new = {
         "binary": (name, "synthetic", "corrupted"),
         "version": ("build-info.txt", "(devel)" if name == "gau" else "v" + version, "v0.0.0"),
-        "dependency": ("build-info.txt", "v0.60.0", "v0.55.0"),
+        "dependency": ("build-info.txt", "v0.62.0", "v0.55.0"),
         "compiler": ("build-info.txt", "go1.27.3", "go1.26.0"),
         "checksum": (name + ".sha256", "  binary", "invalid-checksum"),
         "module_hash": ("build-info.txt", "h1:", "invalid:"),
