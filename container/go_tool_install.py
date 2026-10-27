@@ -28,6 +28,14 @@ BUILDS = {
         },
     },
 }
+BUILDS["naabu"] = {
+    "module": "github.com/projectdiscovery/naabu/v2",
+    "patches": {
+        "golang.org/x/net": "v0.60.0",
+        "golang.org/x/crypto": "v0.57.0",
+        "github.com/klauspost/compress": "v1.18.7",
+    },
+}
 COMPILER = "go1.27.3"
 
 

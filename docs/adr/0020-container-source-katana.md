@@ -39,3 +39,12 @@ Do not expose a generic installer or new configuration. Preserve native archives
 all nine tools and the previous security/runtime boundaries. Container CI performs
 one bounded .test A lookup against an in-container loopback resolver, with updates
 disabled, one thread/retry and no external DNS or added capability.
+
+## 2026-10-27 addendum: existing Naabu
+
+Extend the fixed build allowlist to Naabu 2.6.1 with Go 1.27.3, x/net 0.60.0,
+x/crypto 0.57.0 and compress 1.18.7. Use CGO with libpcap-dev confined to the
+builder; keep the existing runtime libpcap package. Its isolated source experiment
+passes bounded TCP-connect operation as UID 10001 with no capabilities and removes
+critical/high scan findings. This grants no raw-socket privileges, VPN acceptance,
+native archive clearance or release. Other tool behavior still needs security review.
