@@ -62,10 +62,11 @@ docker build --target toolkit --build-context gate=/path/to/pinned-gate -t vardr
 ```
 
 The default `core` target remains CLI-only and needs no Gate context. `toolkit`
-compiles Gate and retains all nine managed tools. Eight use the existing verified
-archive installer; Katana 1.8.0 is built from Go-checksummed upstream source with
-Go 1.27.3, pgx 5.9.2, x/net 0.60.0 and compress 1.18.7 to remediate its bundled
-runtime/dependencies. Native archive pins and installation are unchanged.
+compiles Gate and retains all nine managed tools. Seven use the existing verified
+archive installer. Katana 1.8.0 and DNSx 1.3.1 use Go-checksummed upstream source
+with Go 1.27.3, x/net 0.60.0 and compress 1.18.7; Katana also selects pgx 5.9.2.
+These remediate bundled runtime/dependencies. Native archive pins and installation
+are unchanged.
 It sets `VARDRRUNNER_TOOLS_DIR=/opt/vardrtools`; that directory and its
 integrity receipt are root-owned image content and remain visible when a state
 volume is mounted. This environment setting affects only tools, not credentials,
@@ -73,8 +74,8 @@ identity, journal, evidence or data. Rebuild the image to repair/update bundled
 tools; an unprivileged runtime cannot overwrite them. Native installations retain
 `~/.vardrmap/tools` when the override is absent.
 
-The Katana receipt explicitly records source origin, module checksums, compiler,
-binary SHA256 and hashes of retained `provenance/katana/` build metadata. It does
+Each source-build receipt explicitly records source origin, module checksums, compiler,
+binary SHA256 and hashes of retained `provenance/TOOL/` build metadata. It does
 not claim an upstream archive checksum. Ordinary managed verification still hashes
 the executable and fails closed on tampering; status reports `verified source
 build`. The helper is restricted to the root image-build directory and is removed

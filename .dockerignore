@@ -6,6 +6,6 @@
 !vardrrunner/
 !vardrrunner/**
 !container/
-!container/katana_install.py
+!container/go_tool_install.py
 **/__pycache__/
 **/*.pyc

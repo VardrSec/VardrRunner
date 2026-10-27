@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from container_dnsx import check as check_dnsx
+
 from vardrrunner import config, runner, toolchain
 
 root = config.config_dir()
@@ -13,8 +15,9 @@ assert os.getuid() == 10001
 assert xdg_config == root and xdg_cache == root / "tool-cache"
 assert (Path.home() / ".config").resolve() == root.resolve()
 assert not os.access(config.tools_dir(), os.W_OK)
-assert toolchain.status("katana", "katana").detail == "verified source build"
-assert (config.tools_dir() / "provenance/katana/source.json").is_file()
+for name in ("katana", "dnsx"):
+    assert toolchain.status(name, name).detail == "verified source build"
+    assert (config.tools_dir() / "provenance" / name / "source.json").is_file()
 result = subprocess.run(
     [runner.program("nuclei"), "-version"], capture_output=True, text=True, timeout=20
 )
@@ -30,6 +33,7 @@ assert katana.returncode == 0 and "could not create runner" not in katana.stderr
     katana.stderr
 )
 assert (xdg_config / "katana" / "form-config.yaml").stat().st_uid == 10001
+check_dnsx()
 xdg_cache.mkdir(parents=True, exist_ok=True)
 marker = xdg_cache / "replacement-check"
 if sys.argv[1] == "create":
@@ -37,5 +41,5 @@ if sys.argv[1] == "create":
 else:
     assert sys.argv[1] == "check" and marker.read_text(encoding="utf-8") == "retained"
 print(
-    "PASS: real Nuclei config and persistent XDG state work as UID 10001; binaries remain immutable"
+    "PASS: real DNSx lookup, Nuclei config and persistent XDG state work as UID 10001; binaries remain immutable"
 )

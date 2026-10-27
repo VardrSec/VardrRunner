@@ -36,16 +36,28 @@ RUN go mod init vardrrunner-katana-build \
     && sha256sum /out/katana > /out/katana.sha256 \
     && cp go.mod go.sum /out/
 
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS dnsx-build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
+RUN go mod init vardrrunner-dnsx-build \
+    && go get github.com/projectdiscovery/dnsx/cmd/dnsx@v1.3.1 \
+        golang.org/x/net@v0.60.0 github.com/klauspost/compress@v1.18.7 \
+    && go build -trimpath -o /out/dnsx github.com/projectdiscovery/dnsx/cmd/dnsx \
+    && go version -m /out/dnsx > /out/build-info.txt \
+    && sha256sum /out/dnsx > /out/dnsx.sha256 \
+    && cp go.mod go.sum /out/
+
 FROM base AS toolkit
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 COPY --from=katana-build /out/ /tmp/katana-build/
-COPY container/katana_install.py /tmp/katana_install.py
-RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n != "katana"]' \
-    && python /tmp/katana_install.py \
-    && rm -rf /tmp/katana-build /tmp/katana_install.py \
+COPY --from=dnsx-build /out/ /tmp/dnsx-build/
+COPY container/go_tool_install.py /tmp/go_tool_install.py
+RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx")]' \
+    && python /tmp/go_tool_install.py \
+    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/go_tool_install.py \
     && chmod -R a+rX /opt/vardrtools \
     && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
     && ln -s /home/runner/.vardrmap /home/runner/.config

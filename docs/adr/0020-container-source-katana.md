@@ -28,3 +28,14 @@ This is still a development build: dependency/build records are not authenticate
 published provenance, and pip/apt inputs retain their existing resolution boundary.
 Do not infer all-tool clearance, all-mode acceptance or a release from this patch.
 Rebuild and rescan the combined distribution before changing its source pin.
+
+## 2026-10-27 addendum: existing DNSx
+
+Apply the same contract to pinned DNSx 1.3.1 with Go 1.27.3, x/net 0.60.0 and
+compress 1.18.7 after its isolated source experiment passes a synthetic DNS lookup
+and removes its critical/high findings. Rename the shared build-only helper and
+keep an explicit two-tool allowlist with separate module/dependency assertions.
+Do not expose a generic installer or new configuration. Preserve native archives,
+all nine tools and the previous security/runtime boundaries. Container CI performs
+one bounded .test A lookup against an in-container loopback resolver, with updates
+disabled, one thread/retry and no external DNS or added capability.
