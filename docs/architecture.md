@@ -2,7 +2,7 @@
 
 The first Compose distribution uses a one-shot, non-root Runner container; native execution remains supported. See [ADR 0019](adr/0019-container-packaging.md).
 
-The toolkit's existing Katana, DNSx, Naabu, httpx, Subfinder and FFUF use recorded source builds with dependency patches
+The toolkit's existing Katana, DNSx, Naabu, httpx, Subfinder, FFUF and Nuclei use recorded source builds with dependency patches
 and the same runtime hash verification; see [ADR 0020](adr/0020-container-source-katana.md).
 Gau has four explicitly recorded source fixes for provider TLS/errors and extensionless JSON output;
 its modified main module is not presented as unchanged upstream source. See

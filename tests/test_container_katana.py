@@ -65,7 +65,7 @@ def _source_build(tmp_path, monkeypatch, name):
     return source, tools, probe, name, version
 
 
-@pytest.fixture(params=["katana", "dnsx", "naabu", "gau", "httpx", "subfinder", "ffuf"])
+@pytest.fixture(params=["katana", "dnsx", "naabu", "gau", "httpx", "subfinder", "ffuf", "nuclei"])
 def source_build(tmp_path, monkeypatch, request):
     return _source_build(tmp_path, monkeypatch, request.param)
 

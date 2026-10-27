@@ -55,6 +55,18 @@ BUILDS["ffuf"] = {
     "module": "github.com/ffuf/ffuf/v2",
     "patches": {"golang.org/x/net": "v0.60.0"},
 }
+BUILDS["nuclei"] = {
+    "module": "github.com/projectdiscovery/nuclei/v3",
+    "patches": {
+        "github.com/getkin/kin-openapi": "v0.149.0",
+        "github.com/go-git/go-git/v5": "v5.19.2",
+        "golang.org/x/crypto": "v0.57.0",
+        "golang.org/x/mod": "v0.41.0",
+        "golang.org/x/net": "v0.60.0",
+        "golang.org/x/text": "v0.42.0",
+        "google.golang.org/grpc": "v1.83.2",
+    },
+}
 COMPILER = "go1.27.3"
 BUILDS["gau"] = {
     "module": "github.com/lc/gau/v2",

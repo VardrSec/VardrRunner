@@ -59,3 +59,13 @@ changes only the container build. FFUF release builds inject their version with
 linker flags, so the build sets the same two variables; an unflagged source build
 reports a development version and fails the pinned-version probe. Native archives, Nuclei (separately reviewed),
 VPN behavior and release scope are unaffected.
+
+## 2026-10-27 addendum: Nuclei
+
+Extend the allowlist to the existing Nuclei 3.11.1 with Go 1.27.3 and the fixed
+versions of kin-openapi 0.149.0, go-git 5.19.2, x/crypto 0.57.0 (required by x/net 0.60.0), x/mod 0.41.0,
+x/net 0.60.0, x/text 0.42.0 (required by x/net and x/crypto) and gRPC 1.83.2 named by the scanner. Templates are
+still not bundled or provisioned; Nuclei's non-root XDG state handling is covered
+by the existing container state test. Dependency upgrades across minor versions can
+change behavior, so the container job, state probe and the distribution's real
+Nuclei fixture must pass before this is pinned.
