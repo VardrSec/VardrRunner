@@ -2,6 +2,12 @@
 
 Container development: see [the container guide](container.md) for build, persistent state, credentials and trust configuration.
 
+The container CI generates disposable Gau TLS fixtures on its host with the
+existing `cryptography` dev dependency and mounts them read-only for the real
+producing-handler regression. Synthetic private keys are neither committed nor
+included in the product image; no host CA enrollment or real provider traffic is
+needed. See [ADR 0021](adr/0021-gau-patched-source.md).
+
 Identity preflight requires the matching Gate/Map feature builds before use.
 Run `tests/test_identity_preflight.py` during edits, then the normal full suite and
 the Map three-repository acceptance harness against disposable loopback fixtures.

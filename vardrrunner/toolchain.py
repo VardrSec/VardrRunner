@@ -510,6 +510,8 @@ def status(name: str, binary: str) -> ToolStatus:
             if isinstance(origin, dict) and origin.get("kind") == "go-module-source"
             else "verified"
         )
+        if isinstance(origin, dict) and origin.get("source_patches"):
+            detail += "; reviewed source patches"
         if pinned and entry.get("version") != pinned:
             detail += f"; pinned version is now {pinned}"
         return ToolStatus(name, "managed", path, entry.get("version"), pinned, detail)

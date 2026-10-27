@@ -60,6 +60,35 @@ RUN go mod init vardrrunner-naabu-build \
     && sha256sum /out/naabu > /out/naabu.sha256 \
     && cp go.mod go.sum /out/
 
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS gau-source
+WORKDIR /src
+ENV GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
+RUN go mod init vardrrunner-gau-source \
+    && go get github.com/lc/gau/v2/cmd/gau@v2.2.4 && go mod verify \
+    && mkdir /out \
+    && go mod download -json github.com/lc/gau/v2@v2.2.4 > /out/upstream-module.json \
+    && cp -a "$(go list -m -f '{{.Dir}}' github.com/lc/gau/v2)" /out/source \
+    && chmod -R u+w /out/source
+
+FROM base AS gau-patch
+USER root
+ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
+COPY --from=gau-source /out/ /build/
+COPY container/go_tool_install.py /build/go_tool_install.py
+RUN python /build/go_tool_install.py --patch-gau
+
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS gau-build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
+COPY --from=gau-patch /build/source/ ./
+COPY --from=gau-patch /build/provenance/ /out/
+RUN go get golang.org/x/net@v0.60.0 github.com/klauspost/compress@v1.18.7 \
+        github.com/sirupsen/logrus@v1.9.3 github.com/valyala/fasthttp@v1.34.0 \
+    && go mod verify && go build -trimpath -o /out/gau ./cmd/gau \
+    && go version -m /out/gau > /out/build-info.txt \
+    && sha256sum /out/gau > /out/gau.sha256 \
+    && cp go.mod go.sum /out/
+
 FROM base AS toolkit
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8 ca-certificates \
@@ -68,10 +97,11 @@ ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 COPY --from=katana-build /out/ /tmp/katana-build/
 COPY --from=dnsx-build /out/ /tmp/dnsx-build/
 COPY --from=naabu-build /out/ /tmp/naabu-build/
+COPY --from=gau-build /out/ /tmp/gau-build/
 COPY container/go_tool_install.py /tmp/go_tool_install.py
-RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu")]' \
+RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu", "gau")]' \
     && python /tmp/go_tool_install.py \
-    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/go_tool_install.py \
+    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/go_tool_install.py \
     && chmod -R a+rX /opt/vardrtools \
     && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
     && ln -s /home/runner/.vardrmap /home/runner/.config

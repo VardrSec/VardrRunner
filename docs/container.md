@@ -62,7 +62,7 @@ docker build --target toolkit --build-context gate=/path/to/pinned-gate -t vardr
 ```
 
 The default `core` target remains CLI-only and needs no Gate context. `toolkit`
-compiles Gate and retains all nine managed tools. Six use the existing verified
+compiles Gate and retains all nine managed tools. Five use the existing verified
 archive installer. Katana 1.8.0, DNSx 1.3.1 and Naabu 2.6.1 use Go-checksummed upstream source
 with Go 1.27.3, x/net 0.60.0 and compress 1.18.7; Katana also selects pgx 5.9.2,
 and Naabu selects x/crypto 0.57.0. Naabu enables CGO and uses libpcap-dev only
@@ -70,6 +70,16 @@ in its build stage; the runtime retains its existing libpcap0.8 package. This ad
 no raw-socket privileges; bounded TCP-connect operation remains unprivileged.
 These remediate bundled runtime/dependencies. Native archive pins and installation
 are unchanged.
+
+Gau 2.2.4 also selects logrus 1.9.3 and fasthttp 1.34.0 plus four reviewed source
+substitutions: enable normal provider TLS verification, make initialization/
+worker errors exit nonzero, and retain extensionless URLs in JSON output.
+Valid empty provider results remain successful.
+The original module checksum/revision and original/patched file hashes are
+recorded separately from the honestly marked `(devel)` main module. Its upstream
+license is retained. Status adds `reviewed source patches`; a failed binary hash
+still blocks execution. Native archive installation does not acquire these fixes.
+See [ADR 0021](adr/0021-gau-patched-source.md) for source and acceptance boundaries.
 It sets `VARDRRUNNER_TOOLS_DIR=/opt/vardrtools`; that directory and its
 integrity receipt are root-owned image content and remain visible when a state
 volume is mounted. This environment setting affects only tools, not credentials,
