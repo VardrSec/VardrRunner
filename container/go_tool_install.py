@@ -37,6 +37,24 @@ BUILDS["naabu"] = {
         "github.com/klauspost/compress": "v1.18.7",
     },
 }
+BUILDS["httpx"] = {
+    "module": "github.com/projectdiscovery/httpx",
+    "patches": {
+        "golang.org/x/net": "v0.60.0",
+        "github.com/klauspost/compress": "v1.18.7",
+    },
+}
+BUILDS["subfinder"] = {
+    "module": "github.com/projectdiscovery/subfinder/v2",
+    "patches": {
+        "golang.org/x/net": "v0.60.0",
+        "github.com/klauspost/compress": "v1.18.7",
+    },
+}
+BUILDS["ffuf"] = {
+    "module": "github.com/ffuf/ffuf/v2",
+    "patches": {"golang.org/x/net": "v0.60.0"},
+}
 COMPILER = "go1.27.3"
 BUILDS["gau"] = {
     "module": "github.com/lc/gau/v2",
