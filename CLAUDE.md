@@ -2,6 +2,23 @@
 
 Local automation runner for VardrSec. Python CLI (Typer + Rich) that runs security tooling locally and syncs results to VardrMap **over HTTP only**. **Runs only when invoked** — no startup service, no background worker (ADR 0016). `jobs run` polls `GET /jobs/pending` once, claims atomically (`POST /jobs/{id}/claim`), executes locally, streams lifecycle events back, uploads results, heartbeats. Zero code coupling to the backend — JSON over wire only. Extracted from VardrMap monorepo 2026-06-14 (see `docs/adr/0001-extract-vardrrunner-from-vardrmap.md`).
 
+## Role in the VardrSec platform
+Runner owns explicit tool execution, orchestration, credentials, diagnostics and result transport. It does **not** own the installer or distribution lifecycle (Compose, HTTPS, backup, updates — the VardrSec repo), the researcher UI or engagement data (VardrMap), or authorization assessment logic (VardrGate, invoked as a subprocess). Do not add installer, orchestration-of-services or assessment logic here. Current release roadmap: `VardrSec/docs/community-alpha.md` in the VardrSec repo.
+
+### Execution modes
+- **Native Runner:** local CLI on the host. Uses host networking (so host VPN routes apply), the OS keychain, and managed tool installs under `~/.vardrmap/tools` (`tools install`). Preferred for VPN or host-only targets.
+- **Containerized Runner:** explicit one-shot commands through the VardrSec Compose distribution (`docs/container.md`, ADR 0019). UID/GID 10001, no added capabilities, no Docker socket, no published ports; state in a persistent volume at `/home/runner/.vardrmap`. The `toolkit` target adds Gate, nmap/libpcap and verified tools; a trusted environment override keeps tools outside the state volume. Containers do not inherit the host keychain or VPN routes; raw-packet modes are unsupported under the capability-free baseline — never "fix" that with `--privileged`. Starting the container never starts a scan.
+
+### Platform diagnostics
+`vardrrunner doctor --platform --offline [--json]` (ADR 0018) calls Map's value-free v1 `GET /ready` and reports database and migration readiness. `--offline` skips release discovery but still contacts the configured backend. It runs no scans, applies no migrations, repairs nothing, and never prints the key. Do not duplicate this logic in the distribution or Map.
+
+### Managed tools: two provenance paths
+- **Native:** pinned, checksum-verified upstream release archives (`tool_manifest.json`, changed only through `scripts/pin_tools.py`; ADR 0014).
+- **Container:** reviewed source-build substitutions that rebuild a tool from a checksum-verified Go module with patched dependencies, recording source and build provenance (Katana: ADR 0020; DNSx and Naabu follow the same Dockerfile build-stage and `container/go_tool_install.py` receipt contract without separate ADRs). Native archive pins are unaffected and do not acquire container fixes. Runtime hash verification stays mandatory; never fall back to a `PATH` copy. Treat a source-build receipt as development provenance, not authenticated release provenance. Current in-flight remediation (e.g. Gau) is tracked in the handoff plan, not here.
+
+### Credentials
+Sources, in order: `VARDRMAP_API_KEY` environment variable, OS keychain, then `~/.vardrmap/config.json` only after explicit `--allow-plaintext-credentials`. Containers use the environment (visible to Docker administrators; never bake keys into images or Compose files). Add no insecure fallback, and never put a key in logs, artifacts or errors.
+
 ## Where things live
 - `vardrrunner/` — Python package
   - `cli.py` — Typer app; wires every sub-command
