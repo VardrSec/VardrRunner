@@ -31,3 +31,4 @@ the way it does.
 | [0017](0017-interactive-console.md) | Interactive console | Accepted |
 | [0018](0018-platform-diagnostics.md) | Opt-in platform readiness and offline diagnostics | Accepted |
 | [0019](0019-container-packaging.md) | Container baseline for the first Compose distribution | Accepted |
+| [0020](0020-container-source-katana.md) | Recorded source build for existing container Katana | Accepted for development security remediation |

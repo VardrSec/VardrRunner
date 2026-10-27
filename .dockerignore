@@ -5,5 +5,7 @@
 !LICENSE
 !vardrrunner/
 !vardrrunner/**
+!container/
+!container/katana_install.py
 **/__pycache__/
 **/*.pyc

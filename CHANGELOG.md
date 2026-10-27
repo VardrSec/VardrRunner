@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Build the existing container Katana with patched dependencies and recorded source
+  origin, retaining runtime integrity checks and native archive installation.
+  See [details](changelog/unreleased-container-katana.md).
+
 - Refresh the container's Python/Debian Trixie base and Gate's Go 1.27.3 build
   image with reviewed digests, and update the verified Subfinder pin to 2.17.0.
   This is partial vulnerability remediation; bundled upstream tools and remaining
