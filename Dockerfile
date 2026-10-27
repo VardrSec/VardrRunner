@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm AS base
+FROM python:3.12-slim-trixie@sha256:12316debbfb86890f6b2d825820612741ba527ad5a44e3902759141d572bfe8f AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -20,7 +20,7 @@ CMD ["--help"]
 
 # Optional tool-enabled target; the default final target remains CLI-only.
 # Supply the pinned Gate source as BuildKit's named `gate` context.
-FROM golang:1.25 AS gate-build
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS gate-build
 WORKDIR /src
 COPY --from=gate . .
 RUN CGO_ENABLED=0 go build -trimpath -o /out/vardrgate ./cmd/vardrgate
