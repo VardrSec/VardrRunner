@@ -1,5 +1,7 @@
 # VardrRunner — Architecture
 
+The first Compose distribution uses a one-shot, non-root Runner container; native execution remains supported. See [ADR 0019](adr/0019-container-packaging.md).
+
 ## Identity/session preflight
 
 The optional reviewed Gate identity `preflight` remains in the unresolved case and

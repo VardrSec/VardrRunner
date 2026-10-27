@@ -1,5 +1,7 @@
 # VardrRunner — Development
 
+Container development: see [the container guide](container.md) for build, persistent state, credentials and trust configuration.
+
 Identity preflight requires the matching Gate/Map feature builds before use.
 Run `tests/test_identity_preflight.py` during edits, then the normal full suite and
 the Map three-repository acceptance harness against disposable loopback fixtures.
@@ -213,3 +215,5 @@ VardrRunner runs only when invoked; `init` installs no startup service. Use `run
 `pipeline run`, or one-shot `jobs run` explicitly, and `heartbeat` for a single
 connectivity check. Environment credentials apply to the invoked command. A startup
 service left by 0.47.0 or earlier is removed by hand; see `docs/cli.md`.
+
+`VARDRRUNNER_TOOLS_DIR` optionally overrides only the managed binary/receipt directory; the container toolkit target uses `/opt/vardrtools`. See [container operations](container.md).

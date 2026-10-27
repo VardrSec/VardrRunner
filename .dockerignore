@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!pyproject.toml
+!README.md
+!LICENSE
+!vardrrunner/
+!vardrrunner/**
+**/__pycache__/
+**/*.pyc
