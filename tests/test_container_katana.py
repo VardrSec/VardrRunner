@@ -192,3 +192,23 @@ def test_gau_builder_applies_only_reviewed_source_substitutions(gau_build, tmp_p
             == helper["GAU_COMMIT"]
         )
     probe.assert_not_called()
+
+
+@pytest.mark.parametrize("version", [None, "v4.1.4", "v4.1.5"])
+def test_nuclei_rejects_missing_or_vulnerable_go_jose(tmp_path, monkeypatch, version):
+    source, tools, probe, name, _ = _source_build(tmp_path, monkeypatch, "nuclei")
+    path = source / "build-info.txt"
+    module = "github.com/go-jose/go-jose/v4"
+    lines = []
+    for line in path.read_text().splitlines():
+        if module in line:
+            if version is None:
+                continue
+            line = line.replace("v4.1.6", version)
+        lines.append(line)
+    path.write_text("\n".join(lines) + "\n")
+    with pytest.raises(ValueError, match="Required source dependency patch is missing"):
+        helper["install_source"](source, name)
+    probe.assert_not_called()
+    assert not (tools / name).exists()
+    assert not (tools / "tools.lock.json").exists()

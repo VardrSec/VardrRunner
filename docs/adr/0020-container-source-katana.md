@@ -83,3 +83,13 @@ where the binary links it; Go's resolver then requires x/crypto 0.58.0 and x/tex
 FFUF and Gau; Nuclei retains GO-2026-5932 (the unmaintained x/crypto/openpgp
 package, no fixed version), which is inherent to upstream Nuclei and remains open.
 Naabu needs CGO and libpcap and was resolved but not locally scanned.
+
+
+## 2026-10-28 addendum: Nuclei go-jose
+
+Keep Nuclei 3.11.1 and rebuild with go-jose/v4 4.1.6 for
+[CVE-2026-116587](https://github.com/go-jose/go-jose/security/advisories/GHSA-mgcc-cww5-fp2q).
+The image's source installer requires the fixed module in binary build information,
+so an omitted or vulnerable version is rejected before the tool is registered.
+Container smoke, the distribution's real Nuclei fixture and refreshed image evidence
+must verify this build. GO-2026-5932 remains unresolved; this patch does not accept it.

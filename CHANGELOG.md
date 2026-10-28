@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Rebuild the existing container Nuclei with go-jose 4.1.6 for CVE-2026-116587 and
+  require that exact dependency in its verified source-build receipt. Native tool pins are unchanged.
+  See [the remediation note](changelog/unreleased-container-go-jose.md).
+
 - Add a report-only CI step that runs `govulncheck` (live database, symbol reachability) against
   the shipped Go binaries in the toolkit image, including Naabu, and writes the result to the job
   summary. It does not gate or suppress anything.
