@@ -47,3 +47,13 @@ This is an explicitly patched development artifact, not authenticated release
 provenance or proof of all provider/platform modes. Native archive pins remain
 unchanged and do not acquire this fix. Preserve the nine-tool baseline, UID10001,
 capability-free runtime, explicit invocation and existing backend/auth contracts.
+
+## Addendum: native Gau is excluded
+
+Native Gau archives still disable provider TLS verification, and a security tool should
+not offer that as a supported option. `toolchain.install` now refuses Gau, `tools install
+--all` skips it with the reason, and `toolchain.resolve` and `status` accept Gau only when
+its receipt records the reviewed source build (`go-module-source` with source patches). There
+is no PATH fallback and no opt-in. Container images are unaffected because their patched
+Gau is registered by the image-build helper, not by the archive installer. Operators who
+need Gau use the container toolkit.

@@ -20,6 +20,7 @@ _SOURCE_STYLE = {
     "path": "[yellow]PATH (unverified)[/yellow]",
     "missing": "[dim]missing[/dim]",
     "system": "[dim]system[/dim]",
+    "excluded": "[yellow]excluded[/yellow]",
 }
 
 
@@ -61,7 +62,12 @@ def install(names: list[str], all_tools: bool, force: bool) -> None:
     With ``--all`` it also reports the tools VardrRunner cannot install for you.
     """
     if all_tools:
-        names = toolchain.manageable_tools()
+        names = [n for n in toolchain.manageable_tools() if n not in toolchain.REVIEWED_SOURCE_ONLY]
+        for skipped in sorted(toolchain.REVIEWED_SOURCE_ONLY):
+            console.print(
+                f"[yellow]SKIP {skipped}:[/yellow] "
+                f"{redaction.redact_rich_text(toolchain.REVIEWED_SOURCE_ONLY[skipped])}"
+            )
     if not names:
         console.print("[red]Name the tools to install, or pass --all.[/red]")
         raise typer.Exit(1)

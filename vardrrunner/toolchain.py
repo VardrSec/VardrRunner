@@ -69,11 +69,33 @@ class ToolIntegrityError(ToolchainError):
     """A managed tool binary does not match the hash recorded when it was installed."""
 
 
+# The upstream Gau archive disables TLS verification for its provider connections
+# (ADR 0021). Only the reviewed container source build, which enables it, may be
+# installed or run: there is no PATH fallback and no opt-in for the native archive.
+REVIEWED_SOURCE_ONLY = {
+    "gau": (
+        "the native Gau archive is excluded because it disables TLS certificate "
+        "verification for its providers; use the container toolkit, which builds a "
+        "reviewed patched Gau (ADR 0021)"
+    ),
+}
+
+
+def _reviewed_source_build(entry: Any) -> bool:
+    origin = entry.get("origin") if isinstance(entry, dict) else None
+    return (
+        isinstance(origin, dict)
+        and origin.get("kind") == "go-module-source"
+        and bool(origin.get("source_patches"))
+    )
+
+
 @dataclass(frozen=True)
 class ToolStatus:
     name: str
     # "managed" (installed here and verified), "tampered" (installed here, hash
-    # mismatch), "path" (unmanaged copy on PATH), "missing", or "system" (not
+    # mismatch), "path" (unmanaged copy on PATH), "missing", "excluded" (never
+    # installable here, e.g. native Gau), or "system" (not
     # installable by VardrRunner — e.g. nmap — and found or not on PATH).
     source: str
     path: str | None
@@ -250,6 +272,8 @@ class InstallResult:
 
 def install(name: str, *, force: bool = False) -> InstallResult:
     """Download, verify, and install the pinned build of ``name`` for this platform."""
+    if name in REVIEWED_SOURCE_ONLY:
+        raise ToolchainError(f"{name}: {REVIEWED_SOURCE_ONLY[name]}")
     tools = load_manifest()["tools"]
     if name not in tools:
         raise ToolchainError(f"{name} is not a tool VardrRunner can install")
@@ -470,6 +494,8 @@ def resolve(name: str, binary: str) -> str:
     back to an unverified PATH copy.
     """
     entry = _read_lock().get(name)
+    if name in REVIEWED_SOURCE_ONLY and not _reviewed_source_build(entry):
+        raise ToolchainError(f"{name}: {REVIEWED_SOURCE_ONLY[name]}")
     managed_file = config.tools_dir() / _member_name(binary, platform_key())
     if not entry:
         if managed_file.exists():
@@ -498,6 +524,8 @@ def resolve(name: str, binary: str) -> str:
 def status(name: str, binary: str) -> ToolStatus:
     pinned = load_manifest()["tools"].get(name, {}).get("version")
     entry = _read_lock().get(name)
+    if name in REVIEWED_SOURCE_ONLY and not _reviewed_source_build(entry):
+        return ToolStatus(name, "excluded", None, None, pinned, REVIEWED_SOURCE_ONLY[name])
     if entry:
         path = str(config.tools_dir() / str(entry.get("binary", "")))
         try:

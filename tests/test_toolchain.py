@@ -476,3 +476,30 @@ def test_purge_removes_tools_and_data(fake):
     assert not config.tools_dir().exists()
     assert not config.data_dir().exists()
     toolchain.purge()  # nothing left: still fine
+
+
+# ── native Gau is excluded (ADR 0021) ───────────────────────────────────────
+
+
+def test_native_gau_archive_cannot_be_installed():
+    with pytest.raises(toolchain.ToolchainError, match="TLS certificate verification"):
+        toolchain.install("gau")
+    assert not (config.tools_dir() / "tools.lock.json").exists()
+
+
+def test_gau_has_no_path_fallback():
+    with pytest.raises(toolchain.ToolchainError, match="excluded"):
+        toolchain.resolve("gau", "gau")
+
+
+def test_gau_with_an_archive_style_receipt_is_refused():
+    config.tools_dir().mkdir(parents=True)
+    toolchain._write_lock({"gau": {"binary": "gau", "version": "2.2.4", "origin": None}})
+    with pytest.raises(toolchain.ToolchainError, match="excluded"):
+        toolchain.resolve("gau", "gau")
+    st = toolchain.status("gau", "gau")
+    assert st.source == "excluded" and "TLS certificate verification" in st.detail
+
+
+def test_only_gau_is_reviewed_source_only():
+    assert set(toolchain.REVIEWED_SOURCE_ONLY) == {"gau"}
