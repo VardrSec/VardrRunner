@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add a report-only CI step that runs `govulncheck` (live database, symbol reachability) against
+  the shipped Go binaries in the toolkit image, including Naabu, and writes the result to the job
+  summary. It does not gate or suppress anything.
+
 - Exclude the native Gau archive (breaking for native Gau users): `tools install gau` is
   refused, `tools install --all` skips it, and `run gau` executes only the reviewed container
   source build. The upstream archive disables provider TLS verification (ADR 0021).
