@@ -23,7 +23,7 @@ jobs:
       - name: Build tool-enabled image and verify immutable tools
         run: |
           docker build --target toolkit --build-context gate=./.gate-source -t vardrrunner:toolkit .
-          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and shutil.which("nmap")'
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; assert "GODEBUG" not in os.environ; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and shutil.which("nmap")'
       - name: Verify one-shot defaults and fail-closed diagnostics
         shell: bash
         run: |

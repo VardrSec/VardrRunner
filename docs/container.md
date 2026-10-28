@@ -110,3 +110,14 @@ data requirements; this does not certify every mode.
 Wordlists, nuclei templates, headless browser support and raw-packet capabilities
 are separate operator requirements. Bundled binary availability does not prove
 that every scan mode works. No target requests run during image startup.
+
+
+### Go source download reliability
+
+Go source-build stages set `GODEBUG=http2client=0` so module-proxy and checksum-database
+requests use HTTPS over HTTP/1.1. Repeated independent CI builds hit upstream HTTP/2
+`INTERNAL_ERROR` streams at both services. The proxy remains `https://proxy.golang.org`,
+the public checksum database stays enabled, and TLS verification is unchanged. Every
+source receipt and binary hash is still checked. The setting belongs only to builders;
+the runtime image does not inherit it, so tools retain their HTTP/2 support. Container
+CI verifies that the final toolkit has no `GODEBUG` environment override.

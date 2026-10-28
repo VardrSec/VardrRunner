@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Use HTTPS over HTTP/1.1 for build-time Go module/checksum downloads after repeated
+  upstream HTTP/2 stream failures. TLS and checksum verification remain enforced;
+  no runtime networking setting or tool version changes. See the
+  [build reliability note](changelog/unreleased-container-downloads.md).
+
 - Rebuild the existing container Nuclei with go-jose 4.1.6 for CVE-2026-116587 and
   require that exact dependency in its verified source-build receipt. Native tool pins are unchanged.
   See [the remediation note](changelog/unreleased-container-go-jose.md).
