@@ -63,3 +63,26 @@ jobs:
           docker volume create "$volume"
           trap 'docker volume rm "$volume"' EXIT
           docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev,noexec --cap-drop ALL --security-opt no-new-privileges --mount "source=$volume,target=/home/runner/.vardrmap" --mount "type=bind,source=$PWD/tests,target=/checks,readonly" --mount "type=bind,source=$fixture,target=/tls-fixture,readonly" --entrypoint python vardrrunner:toolkit /checks/container_gau.py
+      - name: Report reachable Go advisories in the shipped binaries
+        shell: bash
+        run: |
+          # Report-only by design: the image scanner's database is frozen at collection
+          # time, so this reads the live Go vulnerability database against the binaries
+          # as built (symbol-level reachability). It never suppresses or gates; findings
+          # are triaged in the distribution's security assessment.
+          set -uo pipefail
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          id=$(docker create vardrrunner:toolkit)
+          mkdir -p "$RUNNER_TEMP/bins"
+          docker cp "$id:/opt/vardrtools/." "$RUNNER_TEMP/bins/"
+          docker cp "$id:/usr/local/bin/vardrgate" "$RUNNER_TEMP/bins/vardrgate"
+          docker rm "$id" > /dev/null
+          {
+            echo "## Reachable Go advisories (govulncheck, live database)"
+            for b in dnsx ffuf gau httpx katana naabu nuclei subfinder vardrgate; do
+              echo "### $b"
+              "$(go env GOPATH)/bin/govulncheck" -mode=binary "$RUNNER_TEMP/bins/$b" 2>&1 \
+                | grep -E "^Vulnerability|Found in|Fixed in|No vulnerabilities|Your code" \
+                || echo "scan did not complete"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"

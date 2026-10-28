@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add a report-only CI step that runs `govulncheck` (live database, symbol reachability) against
+  the shipped Go binaries in the toolkit image, including Naabu, and writes the result to the job
+  summary. It does not gate or suppress anything.
+
 - Raise the container source builds to x/net 0.62.0 (GO-2026-6860) and patch goldmark 1.7.17
   (GO-2026-5320) where linked, with the resolver-required x/crypto 0.58.0 and x/text 0.43.0.
   `govulncheck` reports no reachable advisory for httpx, Subfinder, Katana, DNSx, FFUF and
