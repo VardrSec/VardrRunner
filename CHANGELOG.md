@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Exclude the native Gau archive (breaking for native Gau users): `tools install gau` is
+  refused, `tools install --all` skips it, and `run gau` executes only the reviewed container
+  source build. The upstream archive disables provider TLS verification (ADR 0021).
+
 - Raise the container source builds to x/net 0.62.0 (GO-2026-6860) and patch goldmark 1.7.17
   (GO-2026-5320) where linked, with the resolver-required x/crypto 0.58.0 and x/text 0.43.0.
   `govulncheck` reports no reachable advisory for httpx, Subfinder, Katana, DNSx, FFUF and

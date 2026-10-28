@@ -169,7 +169,18 @@ def test_install_all_installs_every_manageable_tool(monkeypatch):
     )
     monkeypatch.setattr(tools_cmd, "pcap_available", lambda: True)
     tools_cmd.install([], all_tools=True, force=True)
-    assert calls == [(n, True) for n in toolchain.manageable_tools()]
+    expected = [n for n in toolchain.manageable_tools() if n not in toolchain.REVIEWED_SOURCE_ONLY]
+    assert calls == [(n, True) for n in expected]
+    assert "gau" not in [n for n, _ in calls]
+
+
+def test_install_all_skips_native_gau_with_the_reason(monkeypatch, capsys):
+    monkeypatch.setattr(toolchain, "install", lambda n, force: _result(n, already=True))
+    monkeypatch.setattr(tools_cmd, "pcap_available", lambda: True)
+    monkeypatch.setattr(toolchain, "status", lambda n, b: _status("system", None, ""))
+    tools_cmd.install([], all_tools=True, force=False)
+    out = capsys.readouterr().out
+    assert "SKIP gau" in out and "excluded" in out
 
 
 def test_install_continues_past_failures_then_exits_nonzero(monkeypatch, capsys):

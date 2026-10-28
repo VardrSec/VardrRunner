@@ -377,11 +377,12 @@ def check_tool(name: str) -> None:
     if not tool_available(name):
         import typer
 
-        hint = (
-            f"Run `vardrrunner tools install {name}`."
-            if toolchain.manageable(name)
-            else "Install it and make sure it is executable."
-        )
+        if name in toolchain.REVIEWED_SOURCE_ONLY:
+            hint = toolchain.REVIEWED_SOURCE_ONLY[name].capitalize() + "."
+        elif toolchain.manageable(name):
+            hint = f"Run `vardrrunner tools install {name}`."
+        else:
+            hint = "Install it and make sure it is executable."
         raise typer.BadParameter(f"'{name}' is not installed. {hint}", param_hint=name)
 
 

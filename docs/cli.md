@@ -541,7 +541,7 @@ Container Gau also records four reviewed source substitutions for TLS, provider 
 Its detail adds `reviewed source patches`. An untrusted or
 wrong-host provider certificate, initialization failure or fetch/decode error
 fails the lookup through Runner's normal error path; valid empty responses still
-work. Native Gau archives remain unchanged. See [ADR 0021](adr/0021-gau-patched-source.md).
+work. The native Gau archive is excluded: `tools install gau` is refused, `tools install --all` skips it, and Runner will not execute a PATH or archive-installed Gau. See [ADR 0021](adr/0021-gau-patched-source.md).
 
 `install` is safe to rerun and reports what each tool needed:
 
