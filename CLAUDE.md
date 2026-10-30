@@ -129,7 +129,7 @@ vardrrunner jobs run   # one-shot; nothing runs in the background
 - `init` — guided/provisioned auth, identity, and doctor acceptance gate; never installs a startup service (the old `--install-service`/`--start-service`/`--env-file` options are gone, so they fail as unknown options)
 - `logout` — remove credentials, keep URL
 - `whoami` — identity behind the configured key
-- `credentials` — credential source/posture; never shows the key
+- `credentials` — credential source/posture; never shows the key. `credentials approve|approvals|revoke` manage the VardrGate credential references queued cases may use (names only, per engagement and origin; ADR 0023)
 - `engagements` — list engagements
 - `scope <engagement-id>` — show in/out-of-scope items
 - `run httpx|subfinder|nuclei|nmap|dnsx|naabu|katana|gau|ffuf|dalfox` — run tool locally, upload results
@@ -177,6 +177,10 @@ unreachable target).
   never render unknown data as an empty inventory.
 - Preserve case-sensitive identity filters and bounded evidence pagination. Use
   job/case/identity metadata rather than similar titles to associate proof.
+- Gate credential references resolve only when the operator approved them with
+  `credentials approve` for the engagement and every origin the case contacts, and a
+  case containing `${` is refused; both checks run before claim. Never add a path that
+  resolves an unapproved reference, and always invoke Gate with `--literal-job` (ADR 0023).
 - Compare the polled spec with the spec returned by claim before execution. A
   changed case fails for operator review and a new job; older backends may omit
   the claim spec for compatibility.

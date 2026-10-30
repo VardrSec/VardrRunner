@@ -167,6 +167,30 @@ Only the OS keychain counts as **encrypted at rest**. `VARDRMAP_API_KEY` is not 
 to disk by the runner — a real improvement — but any process running as your user can
 read it, so it is reported as unencrypted rather than safe.
 
+### `credentials approve | approvals | revoke`
+Approve the credential references a queued `vardrgate_api_test` case may use. A
+reference is resolved only when it is approved here for the job's engagement and for
+every origin the case contacts (request, setup steps, preflights, write verifier).
+Approvals store names, never values, in the owner-only config file. See
+[ADR 0023](adr/0023-approved-gate-credential-references.md).
+
+```bash
+vardrrunner credentials approve --engagement <id> --origin https://api.example.com --env OWNER_TOKEN
+vardrrunner credentials approve --engagement <id> --origin https://api.example.com --keychain peer
+vardrrunner credentials approvals
+vardrrunner credentials revoke --engagement <id> --origin https://api.example.com --env OWNER_TOKEN
+```
+
+| Flag | Meaning |
+|---|---|
+| `--engagement` / `-e` | Engagement UUID the approval applies to |
+| `--origin` | Target URL; reduced to `scheme://host[:port]` (default ports dropped) |
+| `--env` | Environment variable name a case's `value_env` may name |
+| `--keychain` | Keychain account (service `vardrrunner-secrets`) a case's `value_keychain` may name |
+
+Exactly one of `--env` / `--keychain` is required. Invalid input exits 2; revoking an
+approval that does not exist exits 1.
+
 ## `whoami`
 Show the identity tied to the configured API key (`GET /me`). Confirms *which* account a
 key belongs to without printing the key itself.
@@ -917,6 +941,13 @@ embedding it — `value_env` (an environment variable on the runner) or
 `value_keychain` (an OS-keychain account) — resolved locally at execution so the
 secret never reaches the backend. A missing referenced secret fails the job. See
 [ADR 0007](adr/0007-local-secret-resolution.md).
+
+Before claiming such a job the runner refuses a case containing `${...}` anywhere and
+any reference not approved with `credentials approve` for the job's engagement and
+every origin the case contacts; the failure reason includes the approval command. The
+pre-run preview lists each identity's reference names. The resolved job is passed to
+`vardrgate run --literal-job`, which requires a VardrGate build with that flag. See
+[ADR 0023](adr/0023-approved-gate-credential-references.md).
 
 ---
 

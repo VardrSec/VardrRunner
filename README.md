@@ -31,7 +31,9 @@ installs a startup service or starts a background scan worker.
 - **VardrGate authorization tests** — `vardrgate_api_test` jobs drive the local `vardrgate`
   binary over a CLI/JSON contract and attach the sanitized result to the job. Identity
   credentials may reference a secret (`value_env` / `value_keychain`) that is resolved on
-  the runner at execution time, so the secret never reaches the backend
+  the runner at execution time, so the secret never reaches the backend. A reference is
+  resolved only after you approve it for that engagement and target origin with
+  `vardrrunner credentials approve`
 - **Importers** — pull existing `nuclei` / `httpx` output files into the backend
 - **Real heartbeat** — reports hostname, version, OS, and per-tool availability so the
   backend's Bridge shows live machine status

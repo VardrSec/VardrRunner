@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 from vardrrunner import api, configs, keychain, redaction, runner
+from vardrrunner import config as runner_config
 from vardrrunner.targets import _is_wildcard, _resolve_targets
 
 
@@ -525,7 +526,93 @@ class NaabuHandler(ToolHandler[configs.NaabuConfig]):
         return f"{created} new, {updated} updated service(s)"
 
 
-def _resolve_identity_secrets(test_case: dict) -> dict:
+_REFERENCE_SOURCES = (("value_env", "env"), ("value_keychain", "keychain"))
+
+
+def _case_origins(test_case: dict) -> list[str]:
+    """Every origin a case sends requests to: the request, setup steps, identity
+    preflights and the write verifier (with its reset). Raises ConfigError for a
+    missing or non-http(s) URL, so an approval check can never pass vacuously."""
+    request = test_case.get("request")
+    urls = [request.get("url") if isinstance(request, dict) else None]
+    for step in test_case.get("setup") or []:
+        if isinstance(step, dict) and isinstance(step.get("request"), dict):
+            urls.append(step["request"].get("url"))
+    for identity in configs.gate_identities(test_case):
+        preflight = identity.get("preflight")
+        if isinstance(preflight, dict):
+            urls.append(preflight.get("url"))
+    verification = test_case.get("write_verification")
+    if isinstance(verification, dict):
+        for holder in (verification, verification.get("reset")):
+            if isinstance(holder, dict) and isinstance(holder.get("request"), dict):
+                urls.append(holder["request"].get("url"))
+    origins: list[str] = []
+    for url in urls:
+        try:
+            origin = runner_config.url_origin(str(url or ""))
+        except runner_config.InvalidApproval as e:
+            raise configs.ConfigError(f"test case target: {e}") from e
+        if origin not in origins:
+            origins.append(origin)
+    return origins
+
+
+def _refuse_environment_references(value: Any) -> None:
+    """VardrGate expands ${VAR}; a backend case must not carry one (ADR 0023)."""
+    if isinstance(value, str):
+        if "${" in value:
+            raise configs.ConfigError(
+                "test case contains a ${...} environment reference; credentials must use "
+                "value_env or value_keychain"
+            )
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            _refuse_environment_references(str(key))
+            _refuse_environment_references(item)
+    elif isinstance(value, list):
+        for item in value:
+            _refuse_environment_references(item)
+
+
+def credential_references(test_case: dict) -> list[tuple[str, str, str]]:
+    """(identity id, source, name) for every reference in a case. Names only."""
+    refs: list[tuple[str, str, str]] = []
+    for idx, identity in enumerate(configs.gate_identities(test_case)):
+        cred = identity.get("credential")
+        if not isinstance(cred, dict):
+            continue
+        for key, source in _REFERENCE_SOURCES:
+            if cred.get(key):
+                refs.append((str(identity.get("id", f"#{idx}")), source, str(cred[key])))
+    return refs
+
+
+def check_gate_case(test_case: dict, engagement_id: str) -> None:
+    """Refuse a backend Gate case this runner must not execute (ADR 0023).
+
+    A case may not carry ${...} references, and every value_env / value_keychain
+    reference must be approved by the operator for this engagement and for every
+    origin the case contacts (``vardrrunner credentials approve``). Raises
+    ``ConfigError`` naming the first unapproved reference; resolves nothing.
+    """
+    _refuse_environment_references(test_case)
+    refs = credential_references(test_case)
+    if not refs:
+        return
+    origins = _case_origins(test_case)
+    for identity_id, source, name in refs:
+        for origin in origins:
+            if not runner_config.credential_approved(engagement_id, origin, source, name):
+                raise configs.ConfigError(
+                    f"identity {identity_id!r}: {source} reference {name!r} is not approved "
+                    f"for engagement {engagement_id or '(none)'} at {origin}; run "
+                    f"`vardrrunner credentials approve --engagement {engagement_id or '<id>'} "
+                    f"--origin {origin} --{source} {name}`"
+                )
+
+
+def _resolve_identity_secrets(test_case: dict, engagement_id: str) -> dict:
     """Return a copy of ``test_case`` with each identity credential's value
     resolved from a local source, so real secrets never travel through — or
     persist in — the backend.
@@ -535,9 +622,11 @@ def _resolve_identity_secrets(test_case: dict) -> dict:
       - ``value_env`` — an environment variable name, read on this machine
       - ``value_keychain`` — an account looked up in the OS keychain
 
-    A referenced-but-missing secret raises ``ConfigError`` so the job fails
-    instead of silently running with a blank credential.
+    A reference is resolved only after ``check_gate_case`` finds it approved for
+    ``engagement_id``. A referenced-but-missing secret raises ``ConfigError`` so
+    the job fails instead of silently running with a blank credential.
     """
+    check_gate_case(test_case, engagement_id)
     resolved = copy.deepcopy(test_case)
     for idx, identity in enumerate(configs.gate_identities(resolved)):
         cred = identity.get("credential")
@@ -1008,7 +1097,7 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         output = run_dir / "vardrgate_result.json"
         # Resolve credential references to real values locally, keeping secrets
         # out of the backend. Raises ConfigError if a referenced secret is missing.
-        test_case = _resolve_identity_secrets(config.test_case)
+        test_case = _resolve_identity_secrets(config.test_case, config.engagement_id)
         execution = dict(config.execution)
         # Network access is a choice of the operator running this worker.
         # A backend-supplied config cannot grant private-network access.
