@@ -91,6 +91,7 @@ Sources, in order: `VARDRMAP_API_KEY` environment variable, OS keychain, then `~
   `PATH` copy when one does. Tool hashes come from `tool_manifest.json` in the package,
   never from the download site; change them only via `scripts/pin_tools.py` (ADR 0014)
 - Every tool runs with an empty stdin (ProjectDiscovery tools block on an inherited pipe)
+- Every tool runs with `config.tool_environment()`, an allowlist of the runner's environment: never pass the full environment, which holds `VARDRMAP_API_KEY` and identity tokens (ADR 0022)
 - Every tool run bounded by a timeout; missing/failed/timed-out tool → job marked **failed** with reason — never silent skip, never hang
 
 ## Documentation rules

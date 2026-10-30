@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Run every tool, including version probes, with an allowlisted environment instead of the
+  runner's full environment. `VARDRMAP_API_KEY`, identity tokens and unrelated variables no longer
+  reach tool processes; VardrGate could previously expand them from a job's `${VAR}` references.
+  Tools keep their file-based configuration. See ADR 0022.
+
 - Correct README/development/CLI tool tables to distinguish the excluded native
   Gau archive from its reviewed container source build. Remove the stale native
   service-management feature claim and distinguish source changes from PyPI releases.

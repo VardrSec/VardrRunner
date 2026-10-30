@@ -118,7 +118,7 @@ requires VardrMap ≥ v0.22.0.
    reported with their category. Advisory policy warnings on the response are printed
    before any tool runs and emitted as a `policy_warning` event.
 4. **Execute** — after verifying the configured free-disk reserve, `runner.py` atomically
-   allocates a unique run directory, resolves the tool (a managed install must pass hash verification or the job fails; otherwise `PATH`), and spawns it as an argv list with an empty stdin in a dedicated
+   allocates a unique run directory, resolves the tool (a managed install must pass hash verification or the job fails; otherwise `PATH`), and spawns it as an argv list with an empty stdin and an allowlisted environment (ADR 0022) in a dedicated
    process group/session (never `shell=True` with server data). It records the PID and
    captures output; a timeout terminates the complete process tree. Emits `running`.
 5. **Hash and upload** — enforce the local artifact-size ceiling, then stream a SHA-256
