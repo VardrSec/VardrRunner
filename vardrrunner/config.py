@@ -276,6 +276,14 @@ def url_origin(url: str) -> str:
         raise InvalidApproval(f"invalid URL {url!r}") from e
     if parsed.scheme not in _DEFAULT_PORTS or not parsed.hostname:
         raise InvalidApproval(f"{url!r} is not an absolute http(s) URL")
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or any(marker in parsed.netloc for marker in ("{{", "}}"))
+    ):
+        raise InvalidApproval(
+            "credential targets require a fixed authority without URL user information"
+        )
     host = parsed.hostname
     if ":" in host:
         host = f"[{host}]"

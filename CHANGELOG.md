@@ -15,7 +15,8 @@ Per-version detail notes live in [`changelog/`](changelog/).
   `${...}` is refused. Both checks run before the job is claimed, and the failure names
   the approval command. The pre-run preview lists each identity's reference names. Gate
   is invoked with `run --literal-job`, which requires a VardrGate build with that flag.
-  See ADR 0023.
+  Credential targets require a fixed authority without URL user information; setup
+  captures in paths and queries remain supported. See ADR 0023.
 
 - Run every tool, including version probes, with an allowlisted environment instead of the
   runner's full environment. `VARDRMAP_API_KEY`, identity tokens and unrelated variables no longer

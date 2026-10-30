@@ -56,6 +56,29 @@ def test_url_origin_refuses_what_is_not_an_http_origin(url):
         config.url_origin(url)
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:password@api.example.com/users/42",
+        "https://{{authority}}@api.example.com/users/42",
+        "https://{{host}}.example.com/users/42",
+    ],
+)
+def test_a_credential_target_cannot_change_authority_after_approval(url):
+    config.approve_credential(ENGAGEMENT, "https://api.example.com", "env", "OWNER_TOKEN")
+    case = _case(request={"method": "GET", "url": url})
+    with patch("vardrrunner.handlers._resolve_one_credential") as resolve:
+        with pytest.raises(configs.ConfigError, match="test case target"):
+            handlers._resolve_identity_secrets(case, ENGAGEMENT)
+        resolve.assert_not_called()
+
+
+def test_setup_captures_in_paths_keep_the_approved_origin():
+    case = _case(request={"method": "GET", "url": "https://api.example.com/users/{{id}}"})
+    config.approve_credential(ENGAGEMENT, "https://api.example.com", "env", "OWNER_TOKEN")
+    handlers.check_gate_case(case, ENGAGEMENT)
+
+
 def test_approvals_are_idempotent_listed_and_revocable():
     first = config.approve_credential(ENGAGEMENT, "https://api.example.com/x", "env", "OWNER_TOKEN")
     config.approve_credential(ENGAGEMENT, "https://API.example.com", "env", "OWNER_TOKEN")

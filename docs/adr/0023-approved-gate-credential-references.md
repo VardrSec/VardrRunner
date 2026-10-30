@@ -25,7 +25,9 @@ re-read already resolved values as references.
    owner-only config file and holds names only, never values. The backend has no way to
    create one.
 2. **Every origin.** A reference must be approved for every origin the case contacts:
-   the request, setup steps, identity preflights and the write verifier with its reset.
+   the request, setup steps, identity preflights and the write verifier with its reset. Origins require a
+   fixed authority with no URL user information or setup captures in the host/port;
+   setup captures in paths and queries remain supported.
 3. **No environment placeholders.** A case containing `${` anywhere is refused.
 4. **Before claim.** The job loop checks both rules after parsing the job and before
    claiming it. A refused job fails with a reason that includes the approval command.
