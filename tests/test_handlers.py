@@ -1,5 +1,6 @@
 """Unit tests for the tool handlers and registry."""
 
+import dataclasses
 import json
 from unittest.mock import MagicMock, patch
 
@@ -194,14 +195,15 @@ def test_vardrgate_upload_without_job_id_skips_post(tmp_path):
     assert "0 finding(s)" in summary
 
 
-def test_resolve_secrets_from_env(monkeypatch):
+def test_resolve_secrets_from_env(monkeypatch, approve_gate_case):
     monkeypatch.setenv("OWNER_TOKEN", "s3cr3t")
     tc = {
         "identities": [
             {"id": "owner", "credential": {"type": "bearer", "value_env": "OWNER_TOKEN"}}
-        ]
+        ],
+        "request": {"url": "https://api.example.com/x"},
     }
-    out = handlers._resolve_identity_secrets(tc)
+    out = handlers._resolve_identity_secrets(tc, approve_gate_case(tc))
     cred = out["identities"][0]["credential"]
     assert cred["value"] == "s3cr3t"
     assert "value_env" not in cred
@@ -209,39 +211,51 @@ def test_resolve_secrets_from_env(monkeypatch):
     assert "value" not in tc["identities"][0]["credential"]
 
 
-def test_resolve_secrets_missing_env_fails(monkeypatch):
+def test_resolve_secrets_missing_env_fails(monkeypatch, approve_gate_case):
     monkeypatch.delenv("NOPE_TOKEN", raising=False)
     tc = {
-        "identities": [{"id": "owner", "credential": {"type": "bearer", "value_env": "NOPE_TOKEN"}}]
+        "identities": [
+            {"id": "owner", "credential": {"type": "bearer", "value_env": "NOPE_TOKEN"}}
+        ],
+        "request": {"url": "https://api.example.com/x"},
     }
-    with pytest.raises(configs.ConfigError):
-        handlers._resolve_identity_secrets(tc)
+    with pytest.raises(configs.ConfigError, match="is not set"):
+        handlers._resolve_identity_secrets(tc, approve_gate_case(tc))
 
 
-def test_resolve_secrets_from_keychain():
-    tc = {"identities": [{"id": "o", "credential": {"type": "bearer", "value_keychain": "acct"}}]}
+def test_resolve_secrets_from_keychain(approve_gate_case):
+    tc = {
+        "identities": [{"id": "o", "credential": {"type": "bearer", "value_keychain": "acct"}}],
+        "request": {"url": "https://api.example.com/x"},
+    }
+    engagement = approve_gate_case(tc)
     with patch("vardrrunner.keychain.get_secret", return_value="kc-secret") as gs:
-        out = handlers._resolve_identity_secrets(tc)
+        out = handlers._resolve_identity_secrets(tc, engagement)
     gs.assert_called_once_with("acct")
     assert out["identities"][0]["credential"]["value"] == "kc-secret"
 
 
-def test_resolve_secrets_missing_keychain_fails():
-    tc = {"identities": [{"id": "o", "credential": {"type": "bearer", "value_keychain": "acct"}}]}
+def test_resolve_secrets_missing_keychain_fails(approve_gate_case):
+    tc = {
+        "identities": [{"id": "o", "credential": {"type": "bearer", "value_keychain": "acct"}}],
+        "request": {"url": "https://api.example.com/x"},
+    }
+    engagement = approve_gate_case(tc)
     with patch("vardrrunner.keychain.get_secret", return_value=None):
-        with pytest.raises(configs.ConfigError):
-            handlers._resolve_identity_secrets(tc)
+        with pytest.raises(configs.ConfigError, match="no keychain secret"):
+            handlers._resolve_identity_secrets(tc, engagement)
 
 
-def test_resolve_secrets_ambiguous_fails(monkeypatch):
+def test_resolve_secrets_ambiguous_fails(monkeypatch, approve_gate_case):
     monkeypatch.setenv("T", "x")
     tc = {
         "identities": [
             {"id": "o", "credential": {"type": "bearer", "value": "lit", "value_env": "T"}}
-        ]
+        ],
+        "request": {"url": "https://api.example.com/x"},
     }
-    with pytest.raises(configs.ConfigError):
-        handlers._resolve_identity_secrets(tc)
+    with pytest.raises(configs.ConfigError, match="only one of"):
+        handlers._resolve_identity_secrets(tc, approve_gate_case(tc))
 
 
 def test_resolve_secrets_literal_and_anonymous_untouched():
@@ -251,12 +265,12 @@ def test_resolve_secrets_literal_and_anonymous_untouched():
             {"id": "anon", "credential": {"type": "static_header", "header": "", "value": ""}},
         ]
     }
-    out = handlers._resolve_identity_secrets(tc)
+    out = handlers._resolve_identity_secrets(tc, "")
     assert out["identities"][0]["credential"]["value"] == "keep-me"
     assert out["identities"][1]["credential"]["value"] == ""
 
 
-def test_vardrgate_execute_resolves_env_secret(monkeypatch, tmp_path):
+def test_vardrgate_execute_resolves_env_secret(monkeypatch, tmp_path, approve_gate_case):
     monkeypatch.setenv("OWNER_TOKEN", "resolved-token")
     cfg = configs.VardrGateConfig.from_dict(
         {
@@ -270,6 +284,7 @@ def test_vardrgate_execute_resolves_env_secret(monkeypatch, tmp_path):
             "execution": {},
         }
     )
+    cfg = dataclasses.replace(cfg, engagement_id=approve_gate_case(cfg.test_case))
     captured = {}
 
     def fake_run(job, out, timeout=None):

@@ -9,6 +9,7 @@ keychain when one is available, falling back to the config file otherwise.
 
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -246,3 +247,106 @@ def require_auth() -> tuple[str, str]:
 
         raise typer.BadParameter(str(e), param_hint="api_url") from e
     return url, key
+
+
+# --------------------------------------------------------------------------- #
+# Approved VardrGate credential references (ADR 0023)
+# --------------------------------------------------------------------------- #
+# A Gate case arrives from the backend and names where each identity's secret
+# comes from: an environment variable (value_env) or an OS keychain account
+# (value_keychain). The runner resolves a reference only if the operator approved
+# it on this machine for that engagement and target origin. The backend cannot
+# add an approval; approvals hold names, never values.
+APPROVALS_KEY = "gate_credential_approvals"
+CREDENTIAL_SOURCES = ("env", "keychain")
+_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+class InvalidApproval(ValueError):
+    """An approval names an invalid engagement, origin or reference."""
+
+
+def url_origin(url: str) -> str:
+    """Normalized ``scheme://host[:port]`` of an http(s) URL; raise InvalidApproval otherwise."""
+    try:
+        parsed = urlparse(str(url).strip())
+        port = parsed.port
+    except ValueError as e:
+        raise InvalidApproval(f"invalid URL {url!r}") from e
+    if parsed.scheme not in _DEFAULT_PORTS or not parsed.hostname:
+        raise InvalidApproval(f"{url!r} is not an absolute http(s) URL")
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or any(marker in parsed.netloc for marker in ("{{", "}}"))
+    ):
+        raise InvalidApproval(
+            "credential targets require a fixed authority without URL user information"
+        )
+    host = parsed.hostname
+    if ":" in host:
+        host = f"[{host}]"
+    if port is None or port == _DEFAULT_PORTS[parsed.scheme]:
+        return f"{parsed.scheme}://{host}"
+    return f"{parsed.scheme}://{host}:{port}"
+
+
+def _approval(engagement_id: str, origin: str, source: str, name: str) -> dict[str, str]:
+    engagement_id = str(engagement_id).strip()
+    if not engagement_id or len(engagement_id) > 128 or any(c.isspace() for c in engagement_id):
+        raise InvalidApproval("an engagement id is required")
+    if source not in CREDENTIAL_SOURCES:
+        raise InvalidApproval(f"source must be one of {CREDENTIAL_SOURCES}")
+    name = str(name).strip()
+    if source == "env" and not _ENV_NAME.fullmatch(name):
+        raise InvalidApproval(f"{name!r} is not an environment variable name")
+    if source == "keychain" and (not name or len(name) > 200 or any(ord(c) < 32 for c in name)):
+        raise InvalidApproval("a keychain account name is required")
+    return {
+        "engagement_id": engagement_id,
+        "origin": url_origin(origin),
+        "source": source,
+        "name": name,
+    }
+
+
+def credential_approvals() -> list[dict[str, str]]:
+    """Every approved reference, in the order it was added."""
+    entries = load().get(APPROVALS_KEY) or []
+    if not isinstance(entries, list):
+        raise InvalidConfigFile(f"{APPROVALS_KEY} in {CONFIG_FILE} must be a list")
+    return [e for e in entries if isinstance(e, dict)]
+
+
+def approve_credential(engagement_id: str, origin: str, source: str, name: str) -> dict[str, str]:
+    """Record an approval (idempotent) and return its normalized form."""
+    entry = _approval(engagement_id, origin, source, name)
+    data = load()
+    entries = [e for e in data.get(APPROVALS_KEY) or [] if isinstance(e, dict)]
+    if entry not in entries:
+        entries.append(entry)
+    data[APPROVALS_KEY] = entries
+    save(data)
+    return entry
+
+
+def revoke_credential(engagement_id: str, origin: str, source: str, name: str) -> bool:
+    """Remove an approval. Returns True if one was removed."""
+    entry = _approval(engagement_id, origin, source, name)
+    data = load()
+    entries = [e for e in data.get(APPROVALS_KEY) or [] if isinstance(e, dict)]
+    if entry not in entries:
+        return False
+    data[APPROVALS_KEY] = [e for e in entries if e != entry]
+    save(data)
+    return True
+
+
+def credential_approved(engagement_id: str, origin: str, source: str, name: str) -> bool:
+    """True if the operator approved this reference for this engagement and origin."""
+    try:
+        entry = _approval(engagement_id, origin, source, name)
+    except InvalidApproval:
+        return False
+    return entry in credential_approvals()

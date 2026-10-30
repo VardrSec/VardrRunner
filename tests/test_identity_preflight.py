@@ -1,15 +1,30 @@
+import dataclasses
 import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from tests.test_recovery import _run_at
+from vardrrunner import config as runner_config
 from vardrrunner import configs, handlers, runner
 from vardrrunner.journal import Journal, Phase
 from vardrrunner.recovery import reconcile
 
+ENGAGEMENT = "eng-1"
+
+
+@pytest.fixture(autouse=True)
+def approved_references():
+    """The operator approved both identities' references for this engagement."""
+    for name in ("OWNER_TOKEN", "READER_TOKEN"):
+        runner_config.approve_credential(ENGAGEMENT, "https://api.test", "env", name)
+
 
 def cfg():
+    return dataclasses.replace(_unbound_cfg(), engagement_id=ENGAGEMENT)
+
+
+def _unbound_cfg():
     return configs.VardrGateConfig.from_dict(
         {
             "test_case": {

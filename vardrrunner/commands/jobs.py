@@ -7,6 +7,7 @@ uniform *lifecycle* (availability → config → targets → claim → run → u
 done/fail); the per-tool specifics live in ``vardrrunner.handlers``.
 """
 
+import dataclasses
 import json
 import logging
 import threading
@@ -195,6 +196,11 @@ def _execute_one(
 
     try:
         tool_cfg = handler.parse_config(cfg)
+        if isinstance(tool_cfg, configs.VardrGateConfig):
+            # Refuse before claiming: credential references must be approved on
+            # this machine for this engagement and the case's targets (ADR 0023).
+            tool_cfg = dataclasses.replace(tool_cfg, engagement_id=engagement_id)
+            handlers.check_gate_case(tool_cfg.test_case, engagement_id)
     except configs.ConfigError as e:
         fail(errors.FailureCategory.INVALID_CONFIG, f"invalid config: {e}")
         return
@@ -262,6 +268,12 @@ def _execute_one(
         finish(Phase.DONE, "done")
         return
 
+    if isinstance(tool_cfg, configs.VardrGateConfig):
+        for identity_id, source, name in handlers.credential_references(tool_cfg.test_case):
+            con.print(
+                f"  credential {redaction.redact_rich_text(identity_id)}: approved {source} "
+                f"reference {redaction.redact_rich_text(name)}"
+            )
     _confirm(targets, tool_type, yes)
 
     try:

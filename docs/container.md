@@ -35,6 +35,9 @@ docker run --rm --cap-drop ALL --security-opt no-new-privileges \
 Set the two variables securely in the invoking environment; never put keys in a
 Dockerfile, image build argument or committed Compose file. Environment credentials
 are visible to Docker administrators. Containers do not inherit the host keychain.
+VardrGate credential references are approved with `credentials approve` run in a
+container that mounts the same state volume; approvals are stored there by name
+only (ADR 0023). Tool processes receive an allowlisted environment (ADR 0022).
 Do not mount a host home directory or Docker socket. No ports need to be published.
 
 Use an HTTPS backend URL reachable **from the container**. `localhost` refers to

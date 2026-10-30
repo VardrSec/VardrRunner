@@ -1,4 +1,4 @@
-"""`vardrrunner credentials` — report credential posture without revealing it.
+"""`vardrrunner credentials` — credential posture and approved Gate references.
 
 Answers the questions an operator actually has before an unattended run: where
 is my key coming from, is it encrypted at rest, and can anyone else on this box
@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import credentials
+from vardrrunner import config, credentials
 
 console = Console()
 
@@ -66,3 +66,58 @@ def show_credentials() -> None:
 
     if not s.is_authenticated:
         raise typer.Exit(1)
+
+
+def _reference(env: str | None, keychain: str | None) -> tuple[str, str]:
+    if bool(env) == bool(keychain):
+        console.print("[red]Name exactly one reference: --env NAME or --keychain ACCOUNT.[/red]")
+        raise typer.Exit(2)
+    return ("env", str(env)) if env else ("keychain", str(keychain))
+
+
+def approve(engagement_id: str, origin: str, env: str | None, keychain: str | None) -> None:
+    """Allow queued VardrGate cases to use one credential reference (ADR 0023)."""
+    source, name = _reference(env, keychain)
+    try:
+        entry = config.approve_credential(engagement_id, origin, source, name)
+    except config.InvalidApproval as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2) from e
+    console.print(
+        f"Approved {entry['source']} reference [bold]{entry['name']}[/bold] for engagement "
+        f"{entry['engagement_id']} at {entry['origin']}. Only the name is stored."
+    )
+
+
+def revoke(engagement_id: str, origin: str, env: str | None, keychain: str | None) -> None:
+    """Withdraw an approval."""
+    source, name = _reference(env, keychain)
+    try:
+        removed = config.revoke_credential(engagement_id, origin, source, name)
+    except config.InvalidApproval as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2) from e
+    if not removed:
+        console.print("[yellow]No matching approval.[/yellow]")
+        raise typer.Exit(1)
+    console.print("Approval removed.")
+
+
+def list_approvals() -> None:
+    """Print every approved reference. Names only; no secret is read."""
+    entries = config.credential_approvals()
+    if not entries:
+        console.print(
+            "No approved credential references. VardrGate jobs that reference a credential "
+            "will fail until one is approved with `vardrrunner credentials approve`."
+        )
+        return
+    table = Table("Engagement", "Origin", "Source", "Name")
+    for e in entries:
+        table.add_row(
+            str(e.get("engagement_id", "")),
+            str(e.get("origin", "")),
+            str(e.get("source", "")),
+            str(e.get("name", "")),
+        )
+    console.print(table)

@@ -983,3 +983,116 @@ class TestManualInvocationOnly:
         assert result.exit_code == 0
         for flag in ("--install-service", "--start-service", "--env-file"):
             assert flag not in result.output
+
+
+class TestCredentialsCommands:
+    def test_bare_credentials_still_shows_posture(self):
+        with patch("vardrrunner.commands.credentials.show_credentials") as show:
+            result = invoke("credentials")
+        assert result.exit_code == 0
+        show.assert_called_once_with()
+
+    @pytest.mark.parametrize(
+        ("flag", "env", "keychain"),
+        [("--env", "OWNER_TOKEN", None), ("--keychain", None, "OWNER_TOKEN")],
+    )
+    def test_approve_passes_every_option(self, flag, env, keychain):
+        with patch("vardrrunner.commands.credentials.approve") as approve:
+            result = invoke(
+                "credentials",
+                "approve",
+                "-e",
+                "eng-1",
+                "--origin",
+                "https://api.test",
+                flag,
+                "OWNER_TOKEN",
+            )
+        assert result.exit_code == 0, result.output
+        approve.assert_called_once_with("eng-1", "https://api.test", env, keychain)
+
+    def test_revoke_passes_every_option(self):
+        with patch("vardrrunner.commands.credentials.revoke") as revoke:
+            result = invoke(
+                "credentials",
+                "revoke",
+                "--engagement",
+                "eng-1",
+                "--origin",
+                "https://api.test",
+                "--env",
+                "OWNER_TOKEN",
+            )
+        assert result.exit_code == 0, result.output
+        revoke.assert_called_once_with("eng-1", "https://api.test", "OWNER_TOKEN", None)
+
+    def test_approvals_lists(self):
+        with patch("vardrrunner.commands.credentials.list_approvals") as listing:
+            result = invoke("credentials", "approvals")
+        assert result.exit_code == 0
+        listing.assert_called_once_with()
+
+    def test_approve_requires_engagement_and_origin(self):
+        result = invoke("credentials", "approve", "--env", "OWNER_TOKEN")
+        assert result.exit_code == 2
+
+
+class TestCredentialApprovalCommands:
+    def test_approve_and_revoke_round_trip(self):
+        from vardrrunner import config
+
+        result = invoke(
+            "credentials",
+            "approve",
+            "-e",
+            "eng-1",
+            "--origin",
+            "https://API.test:443/x",
+            "--env",
+            "OWNER_TOKEN",
+        )
+        assert result.exit_code == 0, result.output
+        assert config.credential_approvals() == [
+            {
+                "engagement_id": "eng-1",
+                "origin": "https://api.test",
+                "source": "env",
+                "name": "OWNER_TOKEN",
+            }
+        ]
+        assert "OWNER_TOKEN" in invoke("credentials", "approvals").output
+        result = invoke(
+            "credentials",
+            "revoke",
+            "-e",
+            "eng-1",
+            "--origin",
+            "https://api.test",
+            "--env",
+            "OWNER_TOKEN",
+        )
+        assert result.exit_code == 0
+        assert config.credential_approvals() == []
+
+    @pytest.mark.parametrize("args", [(), ("--env", "A", "--keychain", "b")])
+    def test_exactly_one_reference_is_required(self, args):
+        result = invoke(
+            "credentials", "approve", "-e", "eng-1", "--origin", "https://api.test", *args
+        )
+        assert result.exit_code == 2
+
+    def test_an_invalid_approval_exits_2(self):
+        result = invoke(
+            "credentials", "approve", "-e", "eng-1", "--origin", "ftp://x", "--env", "A"
+        )
+        assert result.exit_code == 2
+        assert "http(s)" in result.output
+
+    def test_revoking_nothing_exits_1(self):
+        result = invoke(
+            "credentials", "revoke", "-e", "eng-1", "--origin", "https://api.test", "--env", "A"
+        )
+        assert result.exit_code == 1
+
+    def test_empty_listing_explains_what_happens(self):
+        assert "will fail until" in invoke("credentials", "approvals").output

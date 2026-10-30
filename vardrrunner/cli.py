@@ -215,10 +215,52 @@ def logout():
     auth.logout()
 
 
-@app.command()
-def credentials():
+credentials_app = typer.Typer(
+    help="Credential posture, and the credential references VardrGate jobs may use."
+)
+app.add_typer(credentials_app, name="credentials")
+
+_APPROVAL_ENGAGEMENT = typer.Option(..., "--engagement", "-e", help="Engagement UUID")
+_APPROVAL_ORIGIN = typer.Option(
+    ..., "--origin", help="Target origin the case contacts, e.g. https://api.example.com"
+)
+_APPROVAL_ENV = typer.Option(None, "--env", help="Environment variable name (value_env)")
+_APPROVAL_KEYCHAIN = typer.Option(None, "--keychain", help="OS keychain account (value_keychain)")
+
+
+@credentials_app.callback(invoke_without_command=True)
+def credentials(ctx: typer.Context):
     """Show where the API key comes from and how exposed it is (never shows the key)."""
-    credentials_cmd.show_credentials()
+    if ctx.invoked_subcommand is None:
+        credentials_cmd.show_credentials()
+
+
+@credentials_app.command("approve")
+def credentials_approve(
+    engagement_id: str = _APPROVAL_ENGAGEMENT,
+    origin: str = _APPROVAL_ORIGIN,
+    env: str | None = _APPROVAL_ENV,
+    keychain: str | None = _APPROVAL_KEYCHAIN,
+):
+    """Let VardrGate jobs for one engagement and origin use a credential reference."""
+    credentials_cmd.approve(engagement_id, origin, env, keychain)
+
+
+@credentials_app.command("approvals")
+def credentials_approvals():
+    """List approved credential references (names only)."""
+    credentials_cmd.list_approvals()
+
+
+@credentials_app.command("revoke")
+def credentials_revoke(
+    engagement_id: str = _APPROVAL_ENGAGEMENT,
+    origin: str = _APPROVAL_ORIGIN,
+    env: str | None = _APPROVAL_ENV,
+    keychain: str | None = _APPROVAL_KEYCHAIN,
+):
+    """Withdraw an approved credential reference."""
+    credentials_cmd.revoke(engagement_id, origin, env, keychain)
 
 
 audit_app = typer.Typer(

@@ -496,6 +496,9 @@ class VardrGateConfig:
     test_case: dict
     execution: dict
     policy_id: str | None = None
+    # Set by the job loop from the envelope; selects the operator's approved
+    # credential references (ADR 0023). Never read from the job config.
+    engagement_id: str = ""
 
     @classmethod
     def from_dict(cls, cfg: dict) -> "VardrGateConfig":
