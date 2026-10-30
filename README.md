@@ -18,13 +18,14 @@ installs a startup service or starts a background scan worker.
 - **Manual queue execution** — `jobs run` claims and executes pending jobs once, then exits
 - **Manual invocation only** — no startup registration, detached daemon, or automatic queue polling
 - **Tool runners** — `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu`, `katana`
-  (crawler), `gau` (archived URLs),
+  (crawler), `gau` (archived URLs; reviewed container toolkit only),
   each capturing output into an atomically unique run directory, every run bounded by a
   timeout that terminates the complete child-process tree
 - **Pinned, verified tool installs** — `tools install --all` downloads exact versions of
-  httpx, subfinder, nuclei, dnsx, naabu, katana, gau, ffuf and dalfox into one folder, `~/.vardrmap/tools`, after
+  httpx, subfinder, nuclei, dnsx, naabu, katana, ffuf and dalfox into one folder, `~/.vardrmap/tools`, after
   checking each against a SHA-256 pinned in this package. The runner re-checks every
-  managed binary before use and refuses to run one that has changed
+  managed binary before use and refuses to run one that has changed. Native Gau
+  is excluded; use the [reviewed container toolkit](docs/container.md) for Gau
 - **Recon pipelines** — chain tools in one command: `recon` (subfinder → httpx → nuclei),
   `deep` (adds dnsx resolution), `ports` (subfinder → dnsx → naabu), `quick`
 - **VardrGate authorization tests** — `vardrgate_api_test` jobs drive the local `vardrgate`
@@ -39,7 +40,7 @@ installs a startup service or starts a background scan worker.
 - **Sanitized audit evidence** — `audit list`, `audit show`, and atomic JSON exports without
   raw targets, credentials, request bodies, or headers
 - **Small-team operations** — stable runner UUID/name, rotating JSON logs, strict production
-  preflight, and native systemd/launchd/Windows Scheduled Task management
+  preflight, and explicitly invoked diagnostics; setup installs no startup service
 - **AI agent integration (MCP)** — `vardrrunner mcp` serves the engagement to an MCP client
   (Claude Code, Claude Desktop): the agent reads scope, findings, assets, recon and jobs, and
   queues scans or drafts findings with your approval. No tool can edit scope or delete, so
@@ -62,9 +63,14 @@ installs a startup service or starts a background scan worker.
   use, risky target classes can be denied locally, and the API key is stored locally with
   restrictive permissions
 
+The native Gau exclusion and reviewed toolkit builds are current-source,
+unreleased behavior; the existing PyPI version does not acquire these changes
+until a package release. See [Unreleased](CHANGELOG.md#unreleased) and the
+[container guide](docs/container.md) for the exact development build path.
+
 ## Requirements
 - Python **3.10+**
-- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `gau`, `ffuf` and `dalfox`; `nmap` comes from your OS installer or package manager, and `vardrgate` (for `vardrgate_api_test` jobs) from its repository. Tools already on your `PATH` still work and are reported as unverified
+- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `ffuf` and `dalfox`; `nmap` comes from your OS installer or package manager, and `vardrgate` (for `vardrgate_api_test` jobs) from its repository. Other tools on your `PATH` can be used and are reported as unverified; Gau has no native archive or PATH fallback and runs only from the [reviewed container toolkit](docs/container.md)
 - For ffuf, supply a named wordlist in `~/.vardrmap/wordlists` (for example `common.txt` for `--wordlist common`); none ship with the runner
 - A VardrSec backend URL and an API key (`vmap_…` for VardrMap)
 - VardrMap **≥ v0.22.0** as the backend — the runner calls `/engagements/*` (see [CHANGELOG](CHANGELOG.md) v0.27.0)

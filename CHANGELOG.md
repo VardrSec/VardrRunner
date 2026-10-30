@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Correct README/development/CLI tool tables to distinguish the excluded native
+  Gau archive from its reviewed container source build. Remove the stale native
+  service-management feature claim and distinguish source changes from PyPI releases.
+  Documentation only; execution behavior and tool pins are unchanged.
+
 - Use HTTPS over HTTP/1.1 for build-time Go module/checksum downloads after repeated
   upstream HTTP/2 stream failures. TLS and checksum verification remain enforced;
   no runtime networking setting or tool version changes. See the

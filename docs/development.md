@@ -17,11 +17,14 @@ No new dependency, setup secret or environment variable is required.
 - Python **3.10+**
 - `git`
 - (Optional, for real runs) the external tools. `vardrrunner tools install --all` installs
-  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `gau`,
+  pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`,
   `ffuf` and `dalfox` into
   `~/.vardrmap/tools`; `nmap` and `vardrgate` (only for `vardrgate_api_test` jobs) still
   come from your OS or `PATH`. None are needed for the default tests; real scanners
-  are used only by the explicitly enabled smoke tests below.
+  are used only by the explicitly enabled smoke tests below. Native Gau is excluded
+  from installation/execution; use the reviewed [container toolkit](container.md)
+  for Gau. This exclusion is unreleased source behavior, not a change already
+  delivered to an existing PyPI installation.
 - (Optional, for real `ffuf` runs) at least one wordlist in `~/.vardrmap/wordlists`, named
   without the extension — `common.txt` backs `--wordlist common`. A symlink to an existing
   list (SecLists, dirb) is fine. None ship with VardrRunner, and a job names a wordlist
