@@ -561,13 +561,15 @@ the runner can execute. Only a tool that fails to install makes the command exit
 | Tool | Managed | Notes |
 |---|---|---|
 | httpx, nuclei, subfinder, dnsx, katana | yes | |
-| gau, ffuf | yes | `.tar.gz` on Linux/macOS, `.zip` on Windows; same single-file extraction. ffuf also needs a [wordlist](#wordlists), which is not installed for you |
+| ffuf | yes | `.tar.gz` on Linux/macOS, `.zip` on Windows; single-file extraction. Also needs a [wordlist](#wordlists), which is not installed for you |
+| gau | reviewed container source build only | Native archive install is refused, native `--all` skips it, and no PATH fallback is allowed; use the [container toolkit](container.md) |
 | dalfox | yes | Binary sits one directory inside the archive, so the manifest records its path (`member`); extraction still copies exactly that one named entry |
 | naabu | yes | port scans also need libpcap (Linux/macOS) or [Npcap](https://npcap.com) (Windows) |
 | nmap | no | install with your OS installer or package manager |
 | vardrgate | no | install from the VardrGate repository |
 
-**Resolution.** The runner uses a managed install when one exists and otherwise falls back
+**Resolution.** Gau requires the reviewed container source-build receipt. For other
+tools, the runner uses a managed install when one exists and otherwise falls back
 to `PATH`, which `tools list`, `status`, and `doctor` report as *unverified*. A managed
 binary is re-hashed before its first use in each process and whenever it changes on disk;
 one that no longer matches its receipt is **never executed** — the job fails with the
