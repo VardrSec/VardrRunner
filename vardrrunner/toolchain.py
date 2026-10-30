@@ -438,6 +438,7 @@ def _check_version(binary: Path, name: str, version: str, version_args: list[str
         result = subprocess.run(
             [str(binary), *version_args],
             stdin=subprocess.DEVNULL,
+            env=config.tool_environment(),
             capture_output=True,
             text=True,
             timeout=_VERSION_TIMEOUT,

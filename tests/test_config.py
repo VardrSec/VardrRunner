@@ -141,3 +141,23 @@ def test_load_error_message_includes_filename(tmp_path, monkeypatch):
         assert str(cf) in str(e)
     else:
         pytest.fail("InvalidConfigFile not raised")
+
+
+def test_tool_environment_keeps_only_what_tools_need(monkeypatch):
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/home/runner/.vardrmap")
+    monkeypatch.setenv("LC_ALL", "C.UTF-8")
+    monkeypatch.setenv("https_proxy", "http://127.0.0.1:8080")
+    monkeypatch.setenv(config.ENV_API_KEY, "vmap_must_not_leak")
+    monkeypatch.setenv("OWNER_TOKEN", "identity-secret")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "unrelated-secret")
+
+    env = config.tool_environment()
+
+    upper = {name.upper(): value for name, value in env.items()}
+    assert upper["PATH"] == "/usr/bin"
+    assert upper["XDG_CONFIG_HOME"] == "/home/runner/.vardrmap"
+    assert upper["LC_ALL"] == "C.UTF-8"
+    assert upper["HTTPS_PROXY"] == "http://127.0.0.1:8080"
+    for secret in (config.ENV_API_KEY, "OWNER_TOKEN", "AWS_SECRET_ACCESS_KEY"):
+        assert secret not in upper

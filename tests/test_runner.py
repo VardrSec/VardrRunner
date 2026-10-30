@@ -4,12 +4,13 @@ construction and wildcard handling, not actual tool execution.
 """
 
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vardrrunner import runner
+from vardrrunner import config, runner
 from vardrrunner.commands.run import _is_wildcard, _resolve_targets
 
 
@@ -464,23 +465,53 @@ def test_process_is_killed_if_observer_cannot_persist_pid(tmp_path):
 
 
 def test_spawn_tool_starts_a_new_posix_session_with_empty_stdin():
+    env = {"PATH": "/usr/bin"}
     with (
         patch.object(runner.os, "name", "posix"),
+        patch("vardrrunner.runner.config.tool_environment", return_value=env),
         patch("vardrrunner.runner.subprocess.Popen") as popen,
     ):
         runner._spawn_tool(["httpx"])
     # Empty stdin: ProjectDiscovery tools block reading an inherited pipe that never closes.
-    popen.assert_called_once_with(["httpx"], stdin=subprocess.DEVNULL, start_new_session=True)
+    popen.assert_called_once_with(
+        ["httpx"], stdin=subprocess.DEVNULL, env=env, start_new_session=True
+    )
 
 
 def test_spawn_tool_starts_a_new_windows_process_group_with_empty_stdin():
     with (
         patch.object(runner.os, "name", "nt"),
         patch.object(runner.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, create=True),
+        patch("vardrrunner.runner.config.tool_environment", return_value={"PATH": "C:\bin"}),
         patch("vardrrunner.runner.subprocess.Popen") as popen,
     ):
         runner._spawn_tool(["httpx"])
-    popen.assert_called_once_with(["httpx"], stdin=subprocess.DEVNULL, creationflags=512)
+    popen.assert_called_once_with(
+        ["httpx"], stdin=subprocess.DEVNULL, env={"PATH": "C:\bin"}, creationflags=512
+    )
+
+
+def test_a_tool_process_does_not_inherit_runner_secrets(monkeypatch):
+    # A real child process: what a tool receives, not what a mock was called with.
+    monkeypatch.setenv(config.ENV_API_KEY, "vmap_must_not_leak")
+    monkeypatch.setenv("OWNER_TOKEN", "identity-secret")
+    probe = (
+        "import os, sys; "
+        "sys.exit(7 if {'VARDRMAP_API_KEY', 'OWNER_TOKEN'} & set(os.environ) else 0)"
+    )
+    assert runner._run_tool_status([sys.executable, "-c", probe], None, "probe", 30) == 0
+
+
+def test_tool_version_runs_with_the_tool_environment():
+    env = {"PATH": "/usr/bin"}
+    with (
+        patch("shutil.which", return_value="/usr/bin/httpx"),
+        patch("vardrrunner.runner.config.tool_environment", return_value=env),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = MagicMock(stdout="v1.6.9", stderr="", returncode=0)
+        runner.tool_version("httpx")
+    assert mock_run.call_args.kwargs["env"] == env
 
 
 def test_terminate_process_tree_kills_posix_group():

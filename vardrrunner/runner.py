@@ -171,15 +171,18 @@ def _spawn_tool(cmd: list[str]) -> subprocess.Popen:
     stdin is always empty. ProjectDiscovery tools read extra targets from stdin
     whenever it is not a terminal, so inheriting a pipe that never closes (a
     supervisor, a script, CI) makes them wait forever. Targets always arrive in
-    files, so no tool needs stdin.
+    files, so no tool needs stdin. The environment is ``config.tool_environment()``.
     """
     if os.name == "nt":
         return subprocess.Popen(
             cmd,
             stdin=subprocess.DEVNULL,
+            env=config.tool_environment(),
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
         )
-    return subprocess.Popen(cmd, stdin=subprocess.DEVNULL, start_new_session=True)
+    return subprocess.Popen(
+        cmd, stdin=subprocess.DEVNULL, env=config.tool_environment(), start_new_session=True
+    )
 
 
 def _pid_alive(pid: int) -> bool:
@@ -357,6 +360,7 @@ def tool_version(name: str) -> str | None:
         result = subprocess.run(
             [binary] + args,
             stdin=subprocess.DEVNULL,
+            env=config.tool_environment(),
             capture_output=True,
             text=True,
             timeout=5,

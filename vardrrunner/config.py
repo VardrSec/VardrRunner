@@ -37,6 +37,51 @@ ENV_ALLOW_INSECURE = "VARDRRUNNER_ALLOW_INSECURE"
 
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
+# What a tool process may inherit: finding binaries, a home and config/cache
+# directories, temp space, locale, CA bundles, the operator's proxy, and the
+# variables Windows programs need to start and resolve names. Everything else in
+# the runner's environment, notably VARDRMAP_API_KEY and identity credentials,
+# stays out of tool processes.
+_TOOL_ENV_NAMES = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "LANG",
+        "LANGUAGE",
+        "TZ",
+        "TERM",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        # Windows
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+        "SYSTEMDRIVE",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMDATA",
+        "PROGRAMFILES",
+        "USERNAME",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+    }
+)
+_TOOL_ENV_PREFIXES = ("LC_", "XDG_")
+
 
 class InvalidApiUrl(ValueError):
     """The API URL is malformed or would send the key over plain HTTP."""
@@ -56,6 +101,21 @@ def runs_dir() -> Path:
 
 def tools_dir() -> Path:
     return TOOLS_DIR
+
+
+def tool_environment() -> dict[str, str]:
+    """The environment every tool subprocess receives: an allowlist of this one.
+
+    Tools read their configuration from files under HOME / XDG directories, so
+    nothing a tool needs is lost. VardrGate in particular expands ${VAR}
+    references from the environment it inherits; a full copy would let a job
+    name the runner's own secrets.
+    """
+    return {
+        name: value
+        for name, value in os.environ.items()
+        if name.upper() in _TOOL_ENV_NAMES or name.upper().startswith(_TOOL_ENV_PREFIXES)
+    }
 
 
 def data_dir() -> Path:
