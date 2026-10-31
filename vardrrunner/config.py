@@ -35,6 +35,10 @@ WORDLISTS_DIR = CONFIG_DIR / "wordlists"
 ENV_API_URL = "VARDRMAP_URL"
 ENV_API_KEY = "VARDRMAP_API_KEY"
 ENV_ALLOW_INSECURE = "VARDRRUNNER_ALLOW_INSECURE"
+# Nmap is not part of the supported toolkit (its license terms are unresolved for
+# distribution, so no image or installer carries it). The integration remains for an
+# operator who supplies their own installation and accepts Nmap's license terms.
+ENV_ENABLE_NMAP = "VARDRRUNNER_ENABLE_NMAP"
 
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -102,6 +106,11 @@ def runs_dir() -> Path:
 
 def tools_dir() -> Path:
     return TOOLS_DIR
+
+
+def nmap_enabled() -> bool:
+    """True only when the operator explicitly opted in to the unsupported Nmap integration."""
+    return os.environ.get(ENV_ENABLE_NMAP) == "1"
 
 
 def tool_environment() -> dict[str, str]:

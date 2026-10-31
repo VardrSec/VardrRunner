@@ -23,7 +23,10 @@ jobs:
       - name: Build tool-enabled image and verify immutable tools
         run: |
           docker build --target toolkit --build-context gate=./.gate-source -t vardrrunner:toolkit .
-          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; assert "GODEBUG" not in os.environ; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and shutil.which("nmap")'
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; assert "GODEBUG" not in os.environ; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and not shutil.which("nmap")'
+      - name: Verify Nmap is absent from the tool-enabled image
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint sh vardrrunner:toolkit -c '! command -v nmap && ! dpkg -s nmap >/dev/null 2>&1 && ! dpkg -s nmap-common >/dev/null 2>&1 && test -z "$(find / -xdev -name "nmap*" -not -path "/proc/*" 2>/dev/null | head -1)"'
       - name: Verify one-shot defaults and fail-closed diagnostics
         shell: bash
         run: |

@@ -68,8 +68,8 @@
           "id": "API8:2023",
           "title": "Security Misconfiguration",
           "source": "https://owasp.org/API-Security/editions/2023/en/0xa8-security-misconfiguration/",
-          "look_at": "Headers, TLS, verbose errors, exposed debug and admin surfaces, permissive CORS. httpx fingerprints, nuclei matches known misconfigurations, nmap and naabu show what is listening.",
-          "suggests": ["httpx", "nuclei", "nmap", "naabu"],
+          "look_at": "Headers, TLS, verbose errors, exposed debug and admin surfaces, permissive CORS. httpx fingerprints, nuclei matches known misconfigurations, naabu shows what is listening.",
+          "suggests": ["httpx", "nuclei", "naabu"],
           "method": "tooling"
         },
         {
@@ -110,7 +110,7 @@
           "title": "Configuration and Deployment Management Testing",
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/",
           "look_at": "Exposed admin interfaces, old files, directory listings, HTTP methods, platform defaults. Port and service discovery, template matching and content discovery cover a good share of this.",
-          "suggests": ["nmap", "naabu", "httpx", "nuclei", "ffuf"],
+          "suggests": ["naabu", "httpx", "nuclei", "ffuf"],
           "method": "tooling"
         },
         {
@@ -166,7 +166,7 @@
           "title": "Testing for Weak Cryptography",
           "source": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/",
           "look_at": "TLS versions and ciphers, weak algorithms, padding oracles. Service detection and templates cover the transport layer.",
-          "suggests": ["nmap", "nuclei"],
+          "suggests": ["nuclei"],
           "method": "tooling"
         },
         {

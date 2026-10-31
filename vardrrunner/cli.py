@@ -556,7 +556,11 @@ def run_nmap(
         run.MAX_TARGETS_DEFAULT, "--max-targets", min=0, help=_MAX_TARGETS_HELP
     ),
 ):
-    """Run nmap service discovery locally and upload open ports to VardrMap."""
+    """Run nmap service discovery locally and upload open ports to VardrMap.
+
+    Optional and unsupported: refused unless VARDRRUNNER_ENABLE_NMAP=1 and nmap is
+    installed by you. Use `run naabu` for supported port discovery.
+    """
     run.run_nmap(
         engagement_id=engagement_id,
         scope=scope,

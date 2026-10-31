@@ -19,8 +19,9 @@ No new dependency, setup secret or environment variable is required.
 - (Optional, for real runs) the external tools. `vardrrunner tools install --all` installs
   pinned, verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`,
   `ffuf` and `dalfox` into
-  `~/.vardrmap/tools`; `nmap` and `vardrgate` (only for `vardrgate_api_test` jobs) still
-  come from your OS or `PATH`. None are needed for the default tests; real scanners
+  `~/.vardrmap/tools`; `vardrgate` (only for `vardrgate_api_test` jobs) still
+  comes from your OS or `PATH`, and `nmap` is an unsupported opt-in
+  (`VARDRRUNNER_ENABLE_NMAP=1`, your own installation). None are needed for the default tests; real scanners
   are used only by the explicitly enabled smoke tests below. Native Gau is excluded
   from installation/execution; use the reviewed [container toolkit](container.md)
   for Gau. The exclusion ships in 0.54.0; earlier releases still install the archive.
@@ -138,7 +139,8 @@ required for shared playbook reads or case binding.
 | `tests/test_phase4_safety.py` | target shape, queue ceilings, compatibility gate, and engagement-safe concurrency |
 | `tests/test_target_safety.py` | lexical target classification, local deny rules, single-pass queue auditing, and terminal escaping |
 | `tests/test_setup.py` | interactive/non-interactive onboarding, option forwarding, idempotent state, and doctor gating |
-| `tests/test_nmap.py` | nmap target normalization + profile + `run nmap` command |
+| `tests/test_nmap.py` | nmap target normalization + profile + `run nmap` command (the suite opts in to the optional integration) |
+| `tests/test_nmap_optional.py` | nmap is off by default in fresh interpreters, opt-in only, never installed in the image, and naabu never calls it |
 | `tests/test_status.py` | tool detection + status output |
 | `tests/test_doctor.py` | preflight checks, exit codes, and `--json` report |
 | `tests/test_toolchain.py` | pinned installs: manifest validation, hash mismatch, single-member extraction, hostile archives, version checks, antivirus quarantine, receipts, tamper detection, PATH fallback |

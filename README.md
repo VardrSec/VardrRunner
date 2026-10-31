@@ -17,7 +17,7 @@ installs a startup service or starts a background scan worker.
 ## Features
 - **Manual queue execution** — `jobs run` claims and executes pending jobs once, then exits
 - **Manual invocation only** — no startup registration, detached daemon, or automatic queue polling
-- **Tool runners** — `httpx`, `subfinder`, `nuclei`, `nmap`, `dnsx`, `naabu`, `katana`
+- **Tool runners** — `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu` (port discovery), `katana`
   (crawler), `gau` (archived URLs; reviewed container toolkit only),
   each capturing output into an atomically unique run directory, every run bounded by a
   timeout that terminates the complete child-process tree
@@ -71,7 +71,7 @@ the [container guide](docs/container.md).
 
 ## Requirements
 - Python **3.10+**
-- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `ffuf` and `dalfox`; `nmap` comes from your OS installer or package manager, and `vardrgate` (for `vardrgate_api_test` jobs) from its repository. Other tools on your `PATH` can be used and are reported as unverified; Gau has no native archive or PATH fallback and runs only from the [reviewed container toolkit](docs/container.md)
+- The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `ffuf` and `dalfox`; `vardrgate` (for `vardrgate_api_test` jobs) comes from its repository. `nmap` is not part of the supported toolkit or any image: its integration stays off unless you set `VARDRRUNNER_ENABLE_NMAP=1` and install Nmap yourself under its own license terms; use `naabu` for port discovery. Other tools on your `PATH` can be used and are reported as unverified; Gau has no native archive or PATH fallback and runs only from the [reviewed container toolkit](docs/container.md)
 - For ffuf, supply a named wordlist in `~/.vardrmap/wordlists` (for example `common.txt` for `--wordlist common`); none ship with the runner
 - A VardrSec backend URL and an API key (`vmap_…` for VardrMap)
 - VardrMap **≥ v0.22.0** as the backend — the runner calls `/engagements/*` (see [CHANGELOG](CHANGELOG.md) v0.27.0)

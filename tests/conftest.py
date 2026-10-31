@@ -1,5 +1,12 @@
 """Suite-wide isolation for local runner state."""
 
+import os
+
+# The suite exercises the optional Nmap integration, so opt in before any import reads the
+# variable. tests/test_nmap_optional.py checks the default (disabled) behavior in fresh
+# interpreters.
+os.environ.setdefault("VARDRRUNNER_ENABLE_NMAP", "1")
+
 import pytest
 
 from vardrrunner import api, config, identity, updates

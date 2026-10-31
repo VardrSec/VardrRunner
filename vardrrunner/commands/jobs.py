@@ -187,7 +187,10 @@ def _execute_one(
 
     handler = handlers.REGISTRY.get(tool_type)
     if handler is None:
-        fail(errors.FailureCategory.UNSUPPORTED_JOB, f"unknown tool type {tool_type!r}")
+        fail(
+            errors.FailureCategory.UNSUPPORTED_JOB,
+            runner.disabled_tool_reason(tool_type) or f"unknown tool type {tool_type!r}",
+        )
         return
     # Capability check before claiming — never claim work this runner can't do.
     if not runner.tool_available(handler.tool):

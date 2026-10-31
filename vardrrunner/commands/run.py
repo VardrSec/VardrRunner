@@ -253,6 +253,7 @@ def run_nmap(
     max_targets: int = MAX_TARGETS_DEFAULT,
 ):
     """Run nmap service discovery and upload open ports to VardrMap's services API."""
+    runner.require_enabled("nmap")
     runner.check_tool("nmap")
     url, key = config.require_auth()
     client = api.VardrMapClient(url, key)

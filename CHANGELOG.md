@@ -7,6 +7,19 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Changed
+- **Nmap is outside the supported toolkit; naabu is the supported port-discovery tool.**
+  The `toolkit` container image no longer installs `nmap` (libpcap stays for naabu), and the
+  Nmap integration (`run nmap`, the `nmap` job type, its handler and allowlist entry) is now
+  off unless the operator sets `VARDRRUNNER_ENABLE_NMAP=1` and supplies their own Nmap, under
+  its own license terms. By default `doctor`, `tools` and `status` no longer list Nmap, a queued
+  `nmap` job fails as unsupported with a message naming naabu, and the methodology checklists
+  suggest naabu instead of nmap. Naabu's command line never enables its Nmap hooks. The
+  container workflow asserts that no Nmap package or file is in the image. Nothing else
+  changes: no credential, scope, approval or execution control is relaxed, and Nmap XML
+  parsing remains available to the opt-in path. Upgrade note: an installation that relied on
+  `nmap` must set the variable and keep its own installation.
+
 ### Documentation
 - Agent instructions consolidated: `AGENTS.md` is the single source for Claude Code and
   Codex and keeps every execution, credential, integrity, MCP and Map/Gate contract rule;
