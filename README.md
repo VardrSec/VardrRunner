@@ -65,10 +65,9 @@ installs a startup service or starts a background scan worker.
   use, risky target classes can be denied locally, and the API key is stored locally with
   restrictive permissions
 
-The native Gau exclusion and reviewed toolkit builds are current-source,
-unreleased behavior; the existing PyPI version does not acquire these changes
-until a package release. See [Unreleased](CHANGELOG.md#unreleased) and the
-[container guide](docs/container.md) for the exact development build path.
+Native Gau is excluded from 0.54.0 onward; earlier releases install an archive that
+disables provider TLS verification. The container toolkit is a development build; see
+the [container guide](docs/container.md).
 
 ## Requirements
 - Python **3.10+**
@@ -80,8 +79,10 @@ until a package release. See [Unreleased](CHANGELOG.md#unreleased) and the
 That is the baseline API requirement, not support for every newer feature. Shared
 playbooks, evidence reads and bound assessments require the matching Map endpoints
 and migration; deploy that backend first. These features ship in Runner 0.47.0.
-Identity preflight additionally requires [VardrGate v0.1.0 or newer](https://github.com/VardrSec/VardrGate/releases).
-Install its verified binary on your `PATH` before enabling preflight cases.
+VardrGate jobs require a VardrGate build with `run --literal-job`
+([VardrGate ADR 0028](https://github.com/VardrSec/VardrGate/blob/main/docs/adr/0028-literal-job-input.md))
+on your `PATH`, and each credential reference a case uses must be approved with
+`vardrrunner credentials approve`.
 See [API assessment guidance](docs/cli.md#api-assessment-guidance).
 
 ## Container development
