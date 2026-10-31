@@ -7,6 +7,14 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.54.0] — 2026-10-30
+
+Security release. Native Gau is excluded because its archive disables provider TLS
+verification; VardrGate credential references resolve only after operator approval;
+tool processes receive an allowlisted environment. **Breaking:** VardrGate jobs need a
+VardrGate build with `run --literal-job` and approved credential references. See
+[`changelog/v0.54.0.md`](changelog/v0.54.0.md) for upgrade steps.
+
 - **Breaking:** a `vardrgate_api_test` job resolves a `value_env` / `value_keychain`
   reference only when the operator approved it on this machine for the job's engagement
   and every origin the case contacts: `vardrrunner credentials approve --engagement <id>
