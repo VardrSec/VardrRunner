@@ -26,7 +26,7 @@ from vardrrunner import config, configs, toolchain
 
 # Allowlist maps subcommand names to their executable names.
 # Add new tools here only — never allow arbitrary executables.
-ALLOWED_TOOLS = {
+_KNOWN_TOOLS = {
     "httpx": "httpx",
     "nuclei": "nuclei",
     "subfinder": "subfinder",
@@ -40,6 +40,37 @@ ALLOWED_TOOLS = {
     # Job type "vardrgate_api_test" maps to the "vardrgate" binary on PATH.
     "vardrgate_api_test": "vardrgate",
 }
+
+# Tools that exist in the code but are outside the supported toolkit and stay off
+# unless the operator opts in. Naabu is the supported port-discovery tool.
+OPTIONAL_TOOLS = frozenset({"nmap"})
+
+ALLOWED_TOOLS = {
+    name: binary
+    for name, binary in _KNOWN_TOOLS.items()
+    if name not in OPTIONAL_TOOLS or config.nmap_enabled()
+}
+
+
+def disabled_tool_reason(name: str) -> str | None:
+    """Why an optional tool is unavailable, or None if it is not a disabled optional tool."""
+    if name in OPTIONAL_TOOLS and name not in ALLOWED_TOOLS:
+        return (
+            f"'{name}' is not part of the supported toolkit: Community Alpha packages and "
+            f"supports naabu for port discovery. To use your own {name} installation, set "
+            f"{config.ENV_ENABLE_NMAP}=1 and accept its license terms yourself"
+        )
+    return None
+
+
+def require_enabled(name: str) -> None:
+    """Refuse an optional tool the operator has not opted in to."""
+    reason = disabled_tool_reason(name)
+    if reason:
+        import typer
+
+        raise typer.BadParameter(reason, param_hint=name)
+
 
 # Wall-clock ceiling for a single tool run. A hung tool must never freeze a
 # run forever — the run is killed and the job marked failed. Override per run

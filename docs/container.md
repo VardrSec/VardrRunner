@@ -14,8 +14,8 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges v
 The default command prints help and exits. The image runs as UID/GID 10001 and
 contains the Runner CLI only: no Gate or scanning binaries, browser, wordlists or
 templates are bundled. Missing tools remain visible in doctor; this image alone
-does not satisfy full installation acceptance. An optional `toolkit` target adds Gate, nmap/libpcap and checksum-verified managed
-tools. Python/Debian Trixie and the Gate Go build image use reviewed base digests.
+does not satisfy full installation acceptance. An optional `toolkit` target adds Gate, libpcap (for naabu) and checksum-verified managed
+tools. Nmap is deliberately not installed. Python/Debian Trixie and the Gate Go build image use reviewed base digests.
 Python dependency ranges and apt packages still resolve during builds, so this is
 a development build; immutable published releases and reproducibility remain
 separate work. Native Runner's Python support and state paths are unchanged.

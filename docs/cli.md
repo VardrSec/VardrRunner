@@ -578,7 +578,7 @@ work. The native Gau archive is excluded: `tools install gau` is refused, `tools
 | reinstalled and verified | `--force` on an install that was already good |
 
 It ends with a one-line summary. With `--all` it also checks the tools it cannot install:
-nmap and vardrgate are reported as found on `PATH` or `MISSING` with where to get them. A
+vardrgate (and nmap, only when `VARDRRUNNER_ENABLE_NMAP=1`) is reported as found on `PATH` or `MISSING` with where to get it. A
 missing external tool is a warning, not a failure, because it only limits which job types
 the runner can execute. Only a tool that fails to install makes the command exit 1.
 
@@ -589,7 +589,7 @@ the runner can execute. Only a tool that fails to install makes the command exit
 | gau | reviewed container source build only | Native archive install is refused, native `--all` skips it, and no PATH fallback is allowed; use the [container toolkit](container.md) |
 | dalfox | yes | Binary sits one directory inside the archive, so the manifest records its path (`member`); extraction still copies exactly that one named entry |
 | naabu | yes | port scans also need libpcap (Linux/macOS) or [Npcap](https://npcap.com) (Windows) |
-| nmap | no | install with your OS installer or package manager |
+| nmap | no | optional and unsupported: disabled unless `VARDRRUNNER_ENABLE_NMAP=1`; you install it yourself and accept its license terms. No image or installer carries it |
 | vardrgate | no | install from the VardrGate repository |
 
 **Resolution.** Gau requires the reviewed container source-build receipt. For other
@@ -621,8 +621,9 @@ vardrrunner run dalfox    --engagement <id> [--worker N] [--delay MS] [--no-mini
 ```
 Executes the named tool, captures output into an atomically unique timestamp-prefixed run
 directory under `~/.vardrmap/runs`, and uploads parsed results to the backend.
-- `run nmap` — safe-profile service discovery (normalizes URLs to hosts, never uses
-  `-A`/`-O`/`-p-`/`--script`/`-T5`) → services API.
+- `run nmap` — optional, off by default (`VARDRRUNNER_ENABLE_NMAP=1` and your own Nmap):
+  safe-profile service discovery (normalizes URLs to hosts, never uses
+  `-A`/`-O`/`-p-`/`--script`/`-T5`) → services API. Use `run naabu` for supported port discovery.
 - `run dnsx` — DNS resolution; uploads the **resolvable** hosts as recon targets, so a later
   httpx/nuclei pass only probes hosts that exist.
 - `run nuclei` — a managed nuclei keeps its templates under `~/.vardrmap/data/nuclei-templates`,
@@ -931,8 +932,8 @@ They do **not** block execution — that is deliberate, and staying in scope rem
 responsibility. They are also emitted as a `policy_warning` job event so the backend
 Terminal records them. Stop-work is the only policy condition that halts.
 
-Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`, `nmap`,
-`dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`) plus `vardrgate_api_test`, which runs a VardrGate API authorization
+Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`,
+`dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`; `nmap` only when opted in) plus `vardrgate_api_test`, which runs a VardrGate API authorization
 test via the local `vardrgate` binary and uploads the result to the job. See
 [ADR 0006](adr/0006-vardrgate-api-test-handler.md).
 

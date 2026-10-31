@@ -118,8 +118,9 @@ RUN go mod init vardrrunner-nuclei-build     && go get github.com/projectdiscove
     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei     && go version -m /out/nuclei > /out/build-info.txt     && sha256sum /out/nuclei > /out/nuclei.sha256     && cp go.mod go.sum /out/
 
 FROM base AS toolkit
+# Nmap is deliberately not installed: its license terms are unresolved for distribution. libpcap is for naabu.
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends nmap libpcap0.8 ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends libpcap0.8 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 COPY --from=katana-build /out/ /tmp/katana-build/

@@ -1213,4 +1213,6 @@ REGISTRY: dict[str, ToolHandler[Any]] = {
         DalfoxHandler(),
         VardrGateHandler(),
     )
+    # Optional tools (Nmap) register only when the operator has opted in.
+    if h.tool in runner.ALLOWED_TOOLS
 }

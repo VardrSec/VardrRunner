@@ -35,3 +35,4 @@ the way it does.
 | [0021](0021-gau-patched-source.md) | Recorded Gau TLS and provider-error source fixes | Accepted for development security remediation |
 | [0022](0022-minimal-tool-environment.md) | Minimal environment for tool processes | Accepted |
 | [0023](0023-approved-gate-credential-references.md) | Operator-approved VardrGate credential references | Accepted |
+| [0024](0024-nmap-outside-supported-toolkit.md) | Nmap outside the supported toolkit; naabu for port discovery | Accepted |
