@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Documentation
+- Agent instructions consolidated: `AGENTS.md` is the single source for Claude Code and
+  Codex and keeps every execution, credential, integrity, MCP and Map/Gate contract rule;
+  `CLAUDE.md` imports it. Wiring and smoke-test guidance moved to `docs/development.md`.
+  No behavior change.
+
 ## [0.54.0] — 2026-10-30
 
 Security release. Native Gau is excluded because its archive disables provider TLS

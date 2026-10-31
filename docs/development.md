@@ -74,6 +74,23 @@ VARDRRUNNER_SMOKE=1 VARDRRUNNER_SMOKE_BIN_DIR=/path/to/bins pytest tests -m smok
   under a request ceiling, and every run has a 60-second timeout.
 - They assert the real **argv** (the tool accepts every flag we pass), the real **exit
   behaviour** (clean, findings, unreachable) and the real **output parsing**.
+- Run the smoke test whenever a tool's argv, exit-code handling or output parsing changes.
+  dalfox's exit code `1` once shipped as a job failure through 1165 green mocked tests. A
+  tool's exit code is documentation until you have seen it from the real binary, and **a
+  report file existing is never evidence a run succeeded** — dalfox writes a valid empty
+  report on an unreachable target.
+
+### Wiring and guard tests
+`tests/test_cli.py` is the only thing that checks Typer wiring, and
+`mock.assert_called_once()` is not enough: it passes whether or not an option reaches the
+command module. Two v0.28.0 fixes existed because nothing asserted kwargs — `--max-targets`
+was implemented but never exposed, and `import ffuf` stayed registered after leaving
+`SUPPORTED_TOOLS`. **When adding a flag, assert the kwarg it produces.**
+
+Assert its range too. v0.28.1 fixed `--max-targets -1` silently disabling the target cap,
+because every guard read `max_targets > 0`. For any option that gates a safety check, test
+the out-of-range values, not only the happy path: a guard a stray minus sign can switch off
+is worse than none, because the operator believes it is on.
 
 ### Combined platform acceptance
 
@@ -158,9 +175,9 @@ Tests only run if the lint job passes (`needs: lint`).
 ## Branch & commit workflow
 1. Branch off `main` for any non-trivial change.
 2. Implement **with tests**; keep the suite green.
-3. Update docs and `CHANGELOG.md` in the **same commit** (Charter §2).
+3. Update docs and `CHANGELOG.md` in the **same commit** (see `AGENTS.md`).
 4. For a non-trivial design decision, add an ADR in `docs/adr/`.
-5. Never add "Co-Authored-By: Claude" to commits.
+5. Never add AI attribution (`Co-Authored-By` trailers or "Generated with" lines).
 6. Open a PR; CI must pass before merge.
 
 ## Releasing

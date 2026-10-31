@@ -232,7 +232,7 @@ pytest tests                          # scanner smoke tests skip unless explicit
 CI runs ruff (lint + format), mypy, and a bandit security scan, then the test suite at a
 95% coverage floor on Python 3.10–3.14 (Linux) plus Python 3.14 on Windows and macOS,
 and a `pip-audit` dependency audit — on every push and PR to `main`.
-Contributions follow the **Engineering Charter** in [CLAUDE.md](CLAUDE.md): clean code,
+Contributions follow the engineering rules in [AGENTS.md](AGENTS.md): clean code,
 tests with behavior changes, documentation updated, and the relevant checks green.
 Docs-only changes require a diff and Markdown-link check.
 
