@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "vardr.execution-plan/1"
+    },
+    "profile": {
+      "const": "gate-fixed-http/1"
+    },
+    "tool_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "case_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        },
+        "max_response_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5242880
+        },
+        "allow_private_targets": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "timeout_seconds",
+        "max_response_bytes",
+        "allow_private_targets"
+      ],
+      "additionalProperties": false
+    },
+    "credential_references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identity_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          },
+          "source": {
+            "enum": [
+              "value_env",
+              "value_keychain"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity_id",
+          "source",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 100
+    },
+    "dispatches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "enum": [
+              "setup",
+              "preflight",
+              "resource",
+              "verification",
+              "reset"
+            ]
+          },
+          "identity_id": {
+            "type": "string"
+          },
+          "request": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "enum": [
+                  "GET",
+                  "HEAD",
+                  "OPTIONS",
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE"
+                ]
+              },
+              "url": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "query_params": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "body": {}
+            },
+            "required": [
+              "method",
+              "url",
+              "headers",
+              "query_params",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          "max_dispatches": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "phase",
+          "identity_id",
+          "request",
+          "max_dispatches"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 4096
+    },
+    "max_http_dispatches": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    }
+  },
+  "required": [
+    "schema",
+    "profile",
+    "tool_sha256",
+    "case_hash",
+    "execution",
+    "credential_references",
+    "dispatches",
+    "max_http_dispatches"
+  ],
+  "additionalProperties": false
+}
