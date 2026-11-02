@@ -13,7 +13,17 @@ VECTORS = Path(__file__).parent / "fixtures" / "authorization"
 
 
 @pytest.fixture
-def files(tmp_path):
+def files(tmp_path, monkeypatch):
+    from vardrrunner.authorization.ledger import AuthorizationLedger
+
+    # Historical vectors have an explicit frozen trusted test clock. Production
+    # reference calls still account for actual time waiting at the ledger locks.
+    original = AuthorizationLedger.__init__
+
+    def frozen(self, journal):
+        original(self, journal, monotonic=lambda: 0)
+
+    monkeypatch.setattr(AuthorizationLedger, "__init__", frozen)
     for source in VECTORS.glob("*.json"):
         (tmp_path / source.name).write_bytes(source.read_bytes())
     (tmp_path / "key").write_bytes(bytes(range(32)))

@@ -1,0 +1,338 @@
+{
+  "approval": {
+    "format": "vardr.authorization-envelope/1",
+    "payload": "eyJhcHByb3ZhbF9pZCI6ImFwcHJvdmFsLTEiLCJhcHByb3ZlZF9hdCI6IjIwMjYtMTEtMDJUMTc6NTk6MDBaIiwiYXBwcm92ZXJfaWQiOiJvd25lci0xIiwiY29udGV4dCI6eyJhdXRob3JpdHlfcmV2aXNpb24iOjEsImF1dGhvcml0eV9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiY29udHJvbCI6Im1hbmFnZWRfb25saW5lIiwiY3JlZGVudGlhbF9ncmFudHMiOlt7ImV4cGlyZXNfYXQiOiIyMDI2LTExLTAyVDE5OjAwOjAwWiIsImlkZW50aXR5X2lkIjoib3duZXIiLCJuYW1lIjoiTk0xX09XTkVSIiwicmV2aXNpb24iOjEsInNvdXJjZSI6InZhbHVlX2VudiJ9XSwiZW5nYWdlbWVudF9pZCI6ImVuZy0xIiwiZXhjZXB0aW9ucyI6W10sImV4cGlyZXNfYXQiOiIyMDI2LTExLTAyVDE5OjAwOjAwWiIsImpvYl9pZCI6ImpvYi0xIiwibWF4X2FydGlmYWN0X2J5dGVzIjoxMDAwMDAwLCJtYXhfZHVyYXRpb25fc2Vjb25kcyI6NjAsIm1heF9leGVjdXRpb25zIjoyLCJtYXhfaHR0cF9kaXNwYXRjaGVzIjoxMDAsIm1vZGUiOiJzdHJpY3QiLCJub3RfYmVmb3JlIjoiMjAyNi0xMS0wMlQxNzowMDowMFoiLCJwbGFuX3NoYTI1NiI6Ijg3Yzc0OGI1MTQ2YjRjYzJjOGU0ODg3ZTFjMTE1YWVhYzdiY2RkMmYyMTY1ODMzN2U2NTJjN2RhYTc4MjY0NTQiLCJydW5uZXJfaWQiOiJydW5uZXItMSIsInNjb3BlIjpbeyJleGNsdWRlZCI6ZmFsc2UsIm1ldGhvZCI6IlBPU1QiLCJvcmlnaW4iOiJodHRwczovL2FwaS5leGFtcGxlLnRlc3Q6NDQzIiwicGF0aCI6Ii9wcmVwYXJlIiwicmVhc29uIjoiIn0seyJleGNsdWRlZCI6ZmFsc2UsIm1ldGhvZCI6IkdFVCIsIm9yaWdpbiI6Imh0dHBzOi8vYXBpLmV4YW1wbGUudGVzdDo0NDMiLCJwYXRoIjoiL21lIiwicmVhc29uIjoiIn0seyJleGNsdWRlZCI6ZmFsc2UsIm1ldGhvZCI6IkdFVCIsIm9yaWdpbiI6Imh0dHBzOi8vYXBpLmV4YW1wbGUudGVzdDo0NDMiLCJwYXRoIjoiL21lIiwicmVhc29uIjoiIn0seyJleGNsdWRlZCI6ZmFsc2UsIm1ldGhvZCI6IlBBVENIIiwib3JpZ2luIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS50ZXN0OjQ0MyIsInBhdGgiOiIvb2JqZWN0cy8xNyIsInJlYXNvbiI6IiJ9LHsiZXhjbHVkZWQiOmZhbHNlLCJtZXRob2QiOiJQQVRDSCIsIm9yaWdpbiI6Imh0dHBzOi8vYXBpLmV4YW1wbGUudGVzdDo0NDMiLCJwYXRoIjoiL29iamVjdHMvMTciLCJyZWFzb24iOiIifSx7ImV4Y2x1ZGVkIjpmYWxzZSwibWV0aG9kIjoiUEFUQ0giLCJvcmlnaW4iOiJodHRwczovL2FwaS5leGFtcGxlLnRlc3Q6NDQzIiwicGF0aCI6Ii9vYmplY3RzLzE3IiwicmVhc29uIjoiIn0seyJleGNsdWRlZCI6ZmFsc2UsIm1ldGhvZCI6IkdFVCIsIm9yaWdpbiI6Imh0dHBzOi8vYXBpLmV4YW1wbGUudGVzdDo0NDMiLCJwYXRoIjoiL29iamVjdHMvMTciLCJyZWFzb24iOiIifSx7ImV4Y2x1ZGVkIjpmYWxzZSwibWV0aG9kIjoiUE9TVCIsIm9yaWdpbiI6Imh0dHBzOi8vYXBpLmV4YW1wbGUudGVzdDo0NDMiLCJwYXRoIjoiL3Jlc2V0IiwicmVhc29uIjoiIn1dLCJ0ZXN0aW5nX2VuZCI6IjIwMjYtMTEtMDJUMTk6MDA6MDBaIiwidGVzdGluZ19zdGFydCI6IjIwMjYtMTEtMDJUMTc6MDA6MDBaIn0sImlzc3VlciI6eyJpZCI6Im1hbmFnZWQtZml4dHVyZSIsImtleV9pZCI6Im9wZXJhdG9yLTEifSwib3JpZ2luIjoibWFwIiwic2NoZW1hIjoidmFyZHIuZXhlY3V0aW9uLWFwcHJvdmFsLzEifQ",
+    "purpose": "approval",
+    "signature": "PTLsymUaLm6TpJarmdcu0xAcZkJxvWk33j9rypgyTT5GxFYfaIH-BelwrD7xK2XoUDVFEQ2LKKuduLssz0elAw"
+  },
+  "case": {
+    "expected_access": [
+      {
+        "decision": "allow",
+        "identity_id": "owner"
+      },
+      {
+        "decision": "deny",
+        "identity_id": "peer"
+      },
+      {
+        "decision": "skip",
+        "identity_id": "skipped"
+      }
+    ],
+    "id": "case-1",
+    "identities": [
+      {
+        "credential": {
+          "type": "bearer",
+          "value_env": "NM1_OWNER"
+        },
+        "id": "owner",
+        "preflight": {
+          "expected_status": 200,
+          "json_fields": {
+            "id": "owner"
+          },
+          "url": "https://api.example.test/me"
+        }
+      },
+      {
+        "credential": {
+          "type": "static_header"
+        },
+        "id": "peer"
+      },
+      {
+        "credential": {
+          "type": "static_header"
+        },
+        "id": "skipped"
+      }
+    ],
+    "mutating": true,
+    "request": {
+      "body": {
+        "label": "reviewed"
+      },
+      "method": "PATCH",
+      "url": "https://api.example.test/objects/17"
+    },
+    "setup": [
+      {
+        "name": "prepare",
+        "request": {
+          "method": "POST",
+          "url": "https://api.example.test/prepare"
+        }
+      }
+    ],
+    "write_verification": {
+      "identity": {
+        "credential": {
+          "type": "static_header"
+        },
+        "id": "reader",
+        "preflight": {
+          "expected_status": 200,
+          "json_fields": {
+            "id": "reader"
+          },
+          "url": "https://api.example.test/me"
+        }
+      },
+      "request": {
+        "method": "GET",
+        "url": "https://api.example.test/objects/17"
+      },
+      "reset": {
+        "as": "owner",
+        "request": {
+          "method": "POST",
+          "url": "https://api.example.test/reset"
+        }
+      }
+    }
+  },
+  "context": {
+    "authority_revision": 1,
+    "authority_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "control": "managed_online",
+    "credential_grants": [
+      {
+        "expires_at": "2026-11-02T19:00:00Z",
+        "identity_id": "owner",
+        "name": "NM1_OWNER",
+        "revision": 1,
+        "source": "value_env"
+      }
+    ],
+    "engagement_id": "eng-1",
+    "exceptions": [],
+    "expires_at": "2026-11-02T19:00:00Z",
+    "job_id": "job-1",
+    "max_artifact_bytes": 1000000,
+    "max_duration_seconds": 60,
+    "max_executions": 2,
+    "max_http_dispatches": 100,
+    "mode": "strict",
+    "not_before": "2026-11-02T17:00:00Z",
+    "plan_sha256": "87c748b5146b4cc2c8e4887e1c115aeac7bcdd2f21658337e652c7daa7826454",
+    "runner_id": "runner-1",
+    "scope": [
+      {
+        "excluded": false,
+        "method": "POST",
+        "origin": "https://api.example.test:443",
+        "path": "/prepare",
+        "reason": ""
+      },
+      {
+        "excluded": false,
+        "method": "GET",
+        "origin": "https://api.example.test:443",
+        "path": "/me",
+        "reason": ""
+      },
+      {
+        "excluded": false,
+        "method": "GET",
+        "origin": "https://api.example.test:443",
+        "path": "/me",
+        "reason": ""
+      },
+      {
+        "excluded": false,
+        "method": "PATCH",
+        "origin": "https://api.example.test:443",
+        "path": "/objects/17",
+        "reason": ""
+      },
+      {
+        "excluded": false,
+        "method": "PATCH",
+        "origin": "https://api.example.test:443",
+        "path": "/objects/17",
+        "reason": ""
+      },
+      {
+        "excluded": false,
+        "method": "PATCH",
+        "origin": "https://api.example.test:443",
+        "path": "/objects/17",
+        "reason": ""
+      },
+      {
+        "excluded": false,
+        "method": "GET",
+        "origin": "https://api.example.test:443",
+        "path": "/objects/17",
+        "reason": ""
+      },
+      {
+        "excluded": false,
+        "method": "POST",
+        "origin": "https://api.example.test:443",
+        "path": "/reset",
+        "reason": ""
+      }
+    ],
+    "testing_end": "2026-11-02T19:00:00Z",
+    "testing_start": "2026-11-02T17:00:00Z"
+  },
+  "contract": {
+    "format": "vardr.authorization-envelope/1",
+    "payload": "eyJhcHByb3ZhbF9pZCI6ImFwcHJvdmFsLTEiLCJhcHByb3ZhbF9zaGEyNTYiOiJhYmYzNmQ1YzFhYTI5YmEyNTkyNDgzYWMzYWI1YWFjOWUxMGZmMDcyNTZjYTZjMzRhYzk2ZjcxZjVmNTEzODY3IiwiYXR0ZW1wdF9pZCI6ImF0dGVtcHQtMSIsImF1dGhvcml0eV9yZXZpc2lvbiI6MSwiY29udHJhY3RfaWQiOiJjb250cmFjdC0xIiwiZW5nYWdlbWVudF9pZCI6ImVuZy0xIiwiZXhlY3V0aW9uX2luZGV4IjoxLCJleHBpcmVzX2F0IjoiMjAyNi0xMS0wMlQxOTowMDowMFoiLCJmZW5jZSI6MSwiaXNzdWVkX2F0IjoiMjAyNi0xMS0wMlQxODowMDowMFoiLCJpc3N1ZXIiOnsiaWQiOiJtYW5hZ2VkLWZpeHR1cmUiLCJrZXlfaWQiOiJjb250cmFjdC0xIn0sImpvYl9pZCI6ImpvYi0xIiwib3JpZ2luIjoibWFwIiwicGxhbl9zaGEyNTYiOiI4N2M3NDhiNTE0NmI0Y2MyYzhlNDg4N2UxYzExNWFlYWM3YmNkZDJmMjE2NTgzMzdlNjUyYzdkYWE3ODI2NDU0IiwicnVubmVyX2lkIjoicnVubmVyLTEiLCJzY2hlbWEiOiJ2YXJkci5hdXRob3JpemF0aW9uLzEifQ",
+    "purpose": "contract",
+    "signature": "PhMON5naWRmiLHIlh69MELczZ-Ca82w71h6nb0earUakw8O4hY7jFaZ-wissQdbKWLMaMwPaSHL28ueWZxzGBA"
+  },
+  "execution": {},
+  "plan": {
+    "case_hash": "b47137624782de240a2c2f9b4b7e836ae0160da32402c557713ac1c0cec74ad4",
+    "credential_references": [
+      {
+        "identity_id": "owner",
+        "name": "NM1_OWNER",
+        "source": "value_env"
+      }
+    ],
+    "dispatches": [
+      {
+        "identity_id": "setup:prepare",
+        "max_dispatches": 1,
+        "phase": "setup",
+        "request": {
+          "body": null,
+          "headers": {},
+          "method": "POST",
+          "query_params": {},
+          "url": "https://api.example.test/prepare"
+        }
+      },
+      {
+        "identity_id": "owner",
+        "max_dispatches": 1,
+        "phase": "preflight",
+        "request": {
+          "body": null,
+          "headers": {},
+          "method": "GET",
+          "query_params": {},
+          "url": "https://api.example.test/me"
+        }
+      },
+      {
+        "identity_id": "reader",
+        "max_dispatches": 1,
+        "phase": "preflight",
+        "request": {
+          "body": null,
+          "headers": {},
+          "method": "GET",
+          "query_params": {},
+          "url": "https://api.example.test/me"
+        }
+      },
+      {
+        "identity_id": "owner",
+        "max_dispatches": 1,
+        "phase": "resource",
+        "request": {
+          "body": {
+            "label": "reviewed"
+          },
+          "headers": {},
+          "method": "PATCH",
+          "query_params": {},
+          "url": "https://api.example.test/objects/17"
+        }
+      },
+      {
+        "identity_id": "peer",
+        "max_dispatches": 1,
+        "phase": "resource",
+        "request": {
+          "body": {
+            "label": "reviewed"
+          },
+          "headers": {},
+          "method": "PATCH",
+          "query_params": {},
+          "url": "https://api.example.test/objects/17"
+        }
+      },
+      {
+        "identity_id": "skipped",
+        "max_dispatches": 1,
+        "phase": "resource",
+        "request": {
+          "body": {
+            "label": "reviewed"
+          },
+          "headers": {},
+          "method": "PATCH",
+          "query_params": {},
+          "url": "https://api.example.test/objects/17"
+        }
+      },
+      {
+        "identity_id": "reader",
+        "max_dispatches": 6,
+        "phase": "verification",
+        "request": {
+          "body": null,
+          "headers": {},
+          "method": "GET",
+          "query_params": {},
+          "url": "https://api.example.test/objects/17"
+        }
+      },
+      {
+        "identity_id": "owner",
+        "max_dispatches": 2,
+        "phase": "reset",
+        "request": {
+          "body": null,
+          "headers": {},
+          "method": "POST",
+          "query_params": {},
+          "url": "https://api.example.test/reset"
+        }
+      }
+    ],
+    "execution": {
+      "allow_private_targets": false,
+      "max_response_bytes": 5242880,
+      "timeout_seconds": 30
+    },
+    "max_http_dispatches": 14,
+    "profile": "gate-fixed-http/1",
+    "schema": "vardr.execution-plan/1",
+    "tool_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "trust": [
+    {
+      "issuer_id": "managed-fixture",
+      "key_id": "operator-1",
+      "origins": [
+        "map"
+      ],
+      "public_key": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+      "purposes": [
+        "approval"
+      ],
+      "revoked": false
+    },
+    {
+      "issuer_id": "managed-fixture",
+      "key_id": "contract-1",
+      "origins": [
+        "map"
+      ],
+      "public_key": "Kay64UG8yvCyLhqU000LxzYeUm0L_hLIl5S8kyKWbdc",
+      "purposes": [
+        "contract"
+      ],
+      "revoked": false
+    }
+  ]
+}

@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Preserve the authorization ledger's trusted clock high-water mark after denied
+  issue/consume attempts. Recheck elapsed permission after writer locks and before
+  reservation so delayed or rolled-back clocks cannot revive expired contracts.
+
 - Cap opt-in guarded execution by the execution contract's own expiry, approval
   expiry and testing-window end. Recheck the deadline after credential/job-file
   preparation; an expired contract cannot launch Gate. Container CI uses NM-1 Gate.
