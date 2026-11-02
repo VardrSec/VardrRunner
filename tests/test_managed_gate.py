@@ -170,6 +170,9 @@ def specimen(tmp_path, monkeypatch):
         context=context,
         ledger=ledger,
         calls=calls,
+        case=vector["case"],
+        execution=vector["execution"],
+        anchors=anchors,
     )
 
 

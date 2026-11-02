@@ -394,6 +394,22 @@ class Journal:
                 ).fetchone()
             )
 
+    def managed_claim_exists(self, run_id: str) -> bool:
+        """Read-only recovery fence; never initialize prototype tables here."""
+        try:
+            with self._connection() as con:
+                exists = con.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_claim_intents'"
+                ).fetchone()
+                return bool(
+                    exists
+                    and con.execute(
+                        "SELECT 1 FROM managed_claim_intents WHERE run_id=?", (run_id,)
+                    ).fetchone()
+                )
+        except sqlite3.Error:
+            raise JournalError("managed_claim_state_unavailable") from None
+
     def active_for_job(self, job_id: str) -> RunRecord | None:
         with self._connection() as con:
             return self._active_for_job(con, job_id)

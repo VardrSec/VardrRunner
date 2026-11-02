@@ -234,6 +234,7 @@ class Policy:
     def __init__(self, authority: str):
         self.authority = issuer(authority)
         self.expected: dict[str, str] | None = None
+        self.expires_at: datetime | None = None
         self.store = Store()
 
     def permitted(self, catalog: dict, requested: set[str], entered_at: datetime) -> dict[str, str]:
@@ -253,6 +254,8 @@ class Policy:
             raise GrantError("grant_clock_rollback")
         if expiries and min(expiries) <= checked_at:
             raise GrantError("grant_expired_or_revoked")
+        if self.expires_at is not None and self.expires_at <= checked_at:
+            raise GrantError("grant_expired_or_revoked")
         if set(current) != requested or (self.expected is not None and current != self.expected):
             raise GrantError("grant_missing_or_replaced")
         return current
@@ -270,6 +273,11 @@ class Policy:
             return
         with self.store.transaction() as (_, _, catalog, clock):
             self.expected = self.permitted(catalog, requested, clock)
+            if self.expires_at is None:
+                ids = set(self.expected.values())
+                self.expires_at = min(
+                    timestamp(row["expires_at"]) for row in catalog["grants"] if row["id"] in ids
+                )
 
     @contextmanager
     def launch(self):

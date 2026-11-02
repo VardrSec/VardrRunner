@@ -329,6 +329,12 @@ evidence and fail the job. Deploy the matching Map support before this feature.
 
 ## NM-1 opt-in authorization foundation
 
+The unregistered `authorization.claim.ManagedEntry` adds a one-shot pre-claim
+boundary and same-journal durable intent fence around that managed composition.
+It preserves pre-RPC clock/grant identity through local artifact creation;
+recovery holds uncertainty without replay or legacy finalization. See
+[ADR 0033](adr/0033-managed-preclaim-entry.md).
+
 The later unregistered `authorization.managed.ManagedGate` prototype composes the
 same handler with current-control verification, durable consumption, expiring grants
 and native Windows containment. It is not a CLI/queue adapter and does not finalize

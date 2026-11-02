@@ -1,5 +1,13 @@
 # VardrRunner — Development
 
+`tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
+journal connections, preparation/grant/clock failures and conservative recovery.
+Map's explicit `tests/test_managed_entry.py` adds real verified loopback TLS and
+native Windows Gate execution; it additionally requires `NM2_PRECLAIM_ENTRY=1`
+and the existing native fixture opt-ins. Use disposable profiles/databases, an
+explicit child environment allowlist and dotenv disabled. No production route,
+enrollment or completion is enabled. See [ADR 0033](adr/0033-managed-preclaim-entry.md).
+
 Authorization-ledger checks include denial followed by clock rollback, reload,
 contended writer locks and validation delayed beyond signed expiry. Historical
 reference-vector tests explicitly freeze injected monotonic clocks; runtime uses

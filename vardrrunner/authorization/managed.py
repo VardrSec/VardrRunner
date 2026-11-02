@@ -64,8 +64,19 @@ class ManagedGate:
         allocated_seconds: int,
         current: Callable[[dict], dict],
         local_stop: Callable[[], bool] = lambda: False,
+        claim_anchor_utc: datetime | None = None,
+        grant_snapshot: dict[str, str] | None = None,
+        grant_expiry: datetime | None = None,
     ):
         require(context.origin == "map", "managed_origin_required")
+        require(
+            claim_anchor_utc is None or claim_anchor_utc.tzinfo is not None, "invalid_claim_clock"
+        )
+        self._entered = claim_started if claim_anchor_utc is not None else time.monotonic()
+        self._anchor = claim_anchor_utc or datetime.now(timezone.utc)
+        self._grant_snapshot = None if grant_snapshot is None else dict(grant_snapshot)
+        require(grant_expiry is None or grant_expiry.tzinfo is not None, "invalid_grant_clock")
+        self._grant_expiry = grant_expiry
         self.anchors, self.ledger, self.context = anchors, ledger, context
         self.case, self.execution = case, execution
         wire = claim["managed_authorization"]
@@ -120,18 +131,19 @@ class ManagedGate:
             *(timestamp(self.permission[k]) for k in ("expires_at", "testing_end")),
             *(timestamp(g["expires_at"]) for g in self.permission["credential_grants"]),
         )
+        if grant_expiry is not None:
+            self.until = min(self.until, grant_expiry)
         self.hard_end = min(
             claim_started + allocated_seconds,
             claim_started + self.permission["max_duration_seconds"],
             claim_started + self.plan["execution"]["timeout_seconds"],
-            time.monotonic() + self.until.timestamp() - time.time(),
+            time.monotonic() + self.until.timestamp() - self.now().timestamp(),
         )
         self._lease_end = min(claim_started + lease, self.hard_end)
         self._state_lock, self._refresh_lock = threading.Lock(), threading.Lock()
         self._current, self._local_stop = current, local_stop
         self._used = self._denied = False
         self._policy: credential_grants.Policy | None = None
-        self._entered, self._anchor = time.monotonic(), datetime.now(timezone.utc)
         self.control: execution_control.Control | None = None
 
     def now(self) -> datetime:
@@ -232,6 +244,9 @@ class ManagedGate:
             "exclusive_output_required",
         )
         with credential_grants.required(self.binding["origin"]) as policy:
+            if self._grant_snapshot is not None:
+                policy.expected = dict(self._grant_snapshot)
+                policy.expires_at = self._grant_expiry
             self._policy = policy
             handlers.check_gate_case(self.case, self.context.engagement_id)
             expected = set((policy.expected or {}).values())
@@ -244,7 +259,8 @@ class ManagedGate:
                     self.until, *(credential_grants.timestamp(r["expires_at"]) for r in rows)
                 )
                 self.hard_end = min(
-                    self.hard_end, time.monotonic() + self.until.timestamp() - time.time()
+                    self.hard_end,
+                    time.monotonic() + self.until.timestamp() - self.now().timestamp(),
                 )
             self._tool()
             require(

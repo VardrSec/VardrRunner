@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add an unregistered one-shot managed pre-claim entry and durable journal
+  handoff fence. Validate local preparation before RPC, preserve the original
+  claim clock and grant identity/expiry, and defer managed recovery without
+  replay, upload or completion. See ADR 0033; no CLI/queue activation.
+
 - Compose nested launch rechecks and add an optional verified absolute lease cap.
   Add an unregistered managed Gate library composition reusing shared validation,
   strict existing budget receipts, durable consumption, grants and native control.
