@@ -1045,6 +1045,8 @@ the strictest signed/local/budget deadline. It does not bound preclaim review or
 post-tool upload/finalization; existing graceful/forced cleanup is additional.
 Unused allocations are never refunded. Combine independent flags only where
 their profiles are supported. See ADR 0030 for timing and platform limitations.
+Unknown owned attempts remain fenced; rerunning a command cannot reset their
+allocated time or reopen their ownership.
 
 For a separately configured cumulative target ceiling, invoke
 `jobs run --controlled --target-budget`. Only fixed Gate request-guard cases are

@@ -3,7 +3,9 @@
 Opt-in duration allocations use an immutable claim-start monotonic deadline,
 composed through existing launch checks and native supervision. Map accounts
 nonrefundable allocated seconds; Runner measures and enforces the permission
-window. See [ADR 0030](adr/0030-allocated-duration-permission.md) for exclusions.
+window. Claim and monitor entry are atomically single-use per owned facade,
+including unknown responses and failed monitor setup. See
+[ADR 0030](adr/0030-allocated-duration-permission.md) for exclusions.
 
 Opt-in cumulative target accounting uses Map's owned claim receipt and Runner's
 existing fixed Gate compiler/request guard, including auxiliary origins. Default

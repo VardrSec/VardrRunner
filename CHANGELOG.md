@@ -11,6 +11,8 @@ Per-version detail notes live in [`changelog/`](changelog/).
   allocation receipt and monotonic deadline composition. Requires unreleased Map
   `0035durationbudget`. Default calls stay unchanged; cleanup/transport scope is
   documented separately from the finite permission window.
+  Owned claims and monitor entry are single-use, including unknown responses and
+  failed monitor setup, so retries cannot renew permission or create parallel windows.
 
 - Add explicit `--controlled --target-budget` for fixed Gate plans, bound Map
   cumulative origin-attempt receipts and guarded dispatch. Requires unreleased Map

@@ -9,8 +9,12 @@ cumulative allocation, not actual measured usage, CPU time or arbitrary manual w
 
 Runner verifies exact owned receipt/quantity and starts an immutable monotonic
 deadline immediately before claim HTTP. Postclaim preparation consumes it; late
-responses or lease renewal cannot extend it. Compose by minimum with existing
-signed/local timeouts. Reuse launch_guard so the final check follows grant-lock,
+responses or lease renewal cannot extend it. Each owned-claim facade is single-use,
+including failed/unknown responses; retrying it cannot restart the clock or
+ownership attempt. The strictest signed/local/budget limit applies. The same local
+lock reserves monitor entry before construction; failed setup cannot reopen it,
+and a matching receipt is mandatory before entry. Reuse
+launch_guard so the final check follows grant-lock,
 private-file/environment/native preparation and permit callbacks. Library entries
 also reject an explicit allowance without controlled mode before contact.
 

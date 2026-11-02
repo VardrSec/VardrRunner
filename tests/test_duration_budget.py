@@ -143,6 +143,129 @@ def test_claim_latency_cannot_renew_allocated_window(monkeypatch):
         spawn.assert_not_called()
 
 
+@pytest.mark.parametrize("first_success", [True, False])
+def test_repeated_owned_claim_cannot_restart_clock_or_retry_unknown(monkeypatch, first_success):
+    mono = [100.0]
+    monkeypatch.setattr(controlled_jobs.time, "monotonic", lambda: mono[0])
+    if first_success:
+        instance = owned(3)
+    else:
+        client = Mock(spec=api.VardrMapClient)
+        client.base = "https://map.example.test"
+        client.claim_controlled.side_effect = OSError("synthetic lost response")
+        instance = controlled_jobs.OwnedClient(client, duration_seconds=3)
+        with pytest.raises(OSError):
+            instance.claim_job("duration-job")
+    mono[0] += 4
+    with pytest.raises(ValueError, match="single-use"):
+        instance.claim_job("duration-job")
+    assert instance.started == 100
+    assert instance.client.claim_controlled.call_count == 1
+    if first_success:
+        with instance.monitor(lambda: False), pytest.raises(launch_guard.DeadlineExpired):
+            launch_guard.require_permission()
+
+
+def test_concurrent_owned_calls_allow_one_attempt_only():
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    client = Mock(spec=api.VardrMapClient)
+    client.base = "https://map.example.test"
+    client.claim_controlled.side_effect = lambda job, rid, **_: {
+        "execution_control": {
+            "job_id": job,
+            "runner_id": rid,
+            "origin": client.base,
+            "lease_seconds": 10,
+            "token": "synthetic-capability-" * 3,
+            "duration_budget": {
+                "allocated_seconds": 3,
+                "total_allocated_seconds": 3,
+                "limit_seconds": 3,
+            },
+        }
+    }
+    instance = controlled_jobs.OwnedClient(client, duration_seconds=3)
+    barrier = threading.Barrier(2)
+
+    def claim():
+        barrier.wait(2)
+        try:
+            instance.claim_job("job")
+            return "claimed"
+        except ValueError:
+            return "refused"
+
+    with ThreadPoolExecutor(2) as pool:
+        assert sorted(pool.map(lambda _: claim(), range(2))) == ["claimed", "refused"]
+    assert client.claim_controlled.call_count == 1
+
+
+def test_owned_monitor_requires_receipt_and_cannot_be_reentered():
+    client = Mock(spec=api.VardrMapClient)
+    client.base = "https://map.example.test"
+    instance = controlled_jobs.OwnedClient(client, duration_seconds=3)
+    with pytest.raises(ValueError, match="owned receipt"):
+        with instance.monitor(lambda: False):
+            raise AssertionError("monitor entered without receipt")
+    instance = owned(3)
+    with instance.monitor(lambda: False):
+        pass
+    with pytest.raises(ValueError, match="single-use"):
+        with instance.monitor(lambda: False):
+            raise AssertionError("monitor reentered")
+
+
+def test_monitor_entry_is_reserved_before_constructor_delay(monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    instance = owned(3)
+    constructing, release = threading.Event(), threading.Event()
+    original = execution_control.Control
+    constructed = []
+
+    def delayed(*args, **kwargs):
+        constructed.append(True)
+        constructing.set()
+        assert release.wait(2)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(execution_control, "Control", delayed)
+
+    def enter():
+        try:
+            with instance.monitor(lambda: False):
+                return "entered"
+        except ValueError:
+            return "refused"
+
+    with ThreadPoolExecutor(2) as pool:
+        first = pool.submit(enter)
+        try:
+            assert constructing.wait(2)
+            second = pool.submit(enter)
+            assert second.result(timeout=1) == "refused"
+        finally:
+            release.set()
+        assert first.result(timeout=2) == "entered"
+    assert len(constructed) == 1
+
+
+def test_failed_monitor_setup_cannot_restart_allocation(monkeypatch):
+    instance = owned(3)
+    factory = Mock(side_effect=RuntimeError("synthetic setup failure"))
+    monkeypatch.setattr(execution_control, "Control", factory)
+    with pytest.raises(RuntimeError):
+        with instance.monitor(lambda: False):
+            raise AssertionError("setup unexpectedly succeeded")
+    with pytest.raises(ValueError, match="single-use"):
+        with instance.monitor(lambda: False):
+            raise AssertionError("failed setup restarted")
+    factory.assert_called_once()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="native controlled runtime evidence only")
 @pytest.mark.parametrize("mode", ["budget", "budget_forced", "per_job", "signed"])
 def test_actual_native_tree_stops_at_strictest_window(tmp_path, monkeypatch, mode):

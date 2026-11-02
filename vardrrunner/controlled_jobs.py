@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from contextlib import contextmanager
 from typing import Any
@@ -28,6 +29,9 @@ class OwnedClient:
         self.binding: dict = {}
         self.payload: dict = {}
         self.started = 0.0
+        self._claim_attempted = False
+        self._claim_lock = threading.Lock()
+        self._monitor_attempted = False
         self.control: execution_control.Control | None = None
         self.target_binding: dict | None = None
 
@@ -35,6 +39,10 @@ class OwnedClient:
         return getattr(self.client, name)
 
     def claim_job(self, job_id: str):
+        with self._claim_lock:
+            if self._claim_attempted:
+                raise ValueError("owned execution claim is single-use; no legacy fallback")
+            self._claim_attempted = True
         runner_id = identity.load_or_create().runner_id
         self.started = time.monotonic()
         options: dict[str, Any] = {}
@@ -87,6 +95,10 @@ class OwnedClient:
 
     @contextmanager
     def monitor(self, local_stop):
+        with self._claim_lock:
+            if not self.payload or self._monitor_attempted or self.control is not None:
+                raise ValueError("owned receipt and single-use monitor required")
+            self._monitor_attempted = True
         control = execution_control.Control(
             lambda: self.client.execution_control(self.binding["job_id"], self.payload),
             self.binding,
