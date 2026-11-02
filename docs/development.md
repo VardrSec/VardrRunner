@@ -255,3 +255,5 @@ fixture signing seed is public and must never be trusted outside tests.
 VardrSec's explicit `tests/nm1_contract_acceptance.py` checks Map/standalone issuance;
 `tests/nm1_guarded_execution.py` runs a separately built guarded Gate against an
 ephemeral loopback fixture. Neither script modifies an installed Runner workspace.
+Run that real guarded fixture whenever the projection argv or Gate handler changes;
+the existing ffuf/dalfox smoke tests cover different adapters.

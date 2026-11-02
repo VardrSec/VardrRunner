@@ -1022,3 +1022,6 @@ path is explicit; approval requires a terminal and operator review. Validation
 does not run a tool. No approval command is exposed through MCP, and this module
 does not enable a worker or change `vardrrunner` command behavior.
 See the [contract specification](contracts/README.md) before using the prototype.
+Guarded execution is an explicit library acceptance path, not another CLI command.
+It requires the companion unreleased Gate request-guard capability; older Gate
+binaries fail on the required flag before contacting a target.

@@ -1092,7 +1092,13 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         return f"vardrgate authorization test against {targets[0] if targets else 'target'}"
 
     def execute(
-        self, targets: list[str], run_dir: Path, config: configs.VardrGateConfig
+        self,
+        targets: list[str],
+        run_dir: Path,
+        config: configs.VardrGateConfig,
+        *,
+        request_guard: dict | None = None,
+        total_timeout: int | None = None,
     ) -> Path | None:
         output = run_dir / "vardrgate_result.json"
         # Resolve credential references to real values locally, keeping secrets
@@ -1106,8 +1112,16 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         )
         job = {"config": {"test_case": test_case, "execution": execution}}
         timeout = execution.get("timeout_seconds")
+        guard_options = {"request_guard": request_guard} if request_guard is not None else {}
         exit_code = runner.run_vardrgate(
-            job, output, timeout=timeout if isinstance(timeout, int) else None
+            job,
+            output,
+            timeout=total_timeout
+            if total_timeout is not None
+            else timeout
+            if isinstance(timeout, int)
+            else None,
+            **guard_options,
         )
         # Bind the result to the reviewed spec, before local secrets were resolved.
         # Keep it in the artifact so crash recovery uploads the same binding.

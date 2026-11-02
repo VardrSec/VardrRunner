@@ -7,6 +7,8 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- NM-1 opt-in standalone execution reuses the Gate handler with a private request
+  projection, actual binary binding and durable single use; legacy argv is unchanged.
 - Add isolated NM-1 reference authorization contracts, bounded reusable operator
   approvals, fixed-request Gate plans and conformance/security fixtures. Existing
   CLI, queue and evidence behavior is unchanged; see ADR 0025.

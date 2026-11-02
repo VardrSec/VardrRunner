@@ -298,3 +298,8 @@ request projection for the explicitly supported `gate-fixed-http/1` profile.
 Legacy CLI, queue and MCP paths do not import or advertise this capability.
 See [ADR 0025](adr/0025-authorization-contract-v1.md) and the
 [conformance specification](contracts/README.md) for trust boundaries and limits.
+
+`authorization.runtime.execute_gate` is an explicit standalone library adapter:
+check current time/binary/local grants, consume durably, then call the existing
+handler with a private request projection and approved timeout. It records known
+completion only after the handler returns. Managed live execution is refused.
