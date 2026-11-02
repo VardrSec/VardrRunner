@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add a test-only verified loopback HTTPS transport around the existing API
+  client. Disposable trust and bounded no-redirect/no-retry settings apply only
+  to fixture instances; runtime defaults and supported execution stay unchanged.
+
 - Add a test-only managed HTTP probe composing shared authorization validation,
   the durable ledger and an inert final-launch guard. No runtime adapter, CLI,
   queue, tool execution or supported-platform behavior is enabled.

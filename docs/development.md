@@ -310,6 +310,16 @@ service left by 0.47.0 or earlier is removed by hand; see `docs/cli.md`.
 
 ## NM-1 conformance
 
+The later `tests/managed_tls_transport.py` reuses the existing API client for
+Map's `tests/test_managed_tls.py` fixture. In addition to `NM2_RUNNER_SOURCE`,
+that suite requires explicit `NM2_TLS_LOOPBACK=1` in the isolated child. It opens
+only fixture-owned loopback listeners and verifies a disposable named certificate
+against an explicit CA file. It changes no machine trust or runtime client defaults.
+Fixture sessions use zero retries/redirects and bounded timeouts; certificate,
+redirect, truncated-response, timeout and fixed-expiry failures remain fail-closed.
+Neither the TLS fixture nor the inert probe starts Gate or proves deployed support,
+real enrollment, public/VPN/fresh-host networking or distributed consumption/ACK.
+
 The later NM-2 `tests/managed_http_probe.py` is a test-only probe for Map's opt-in
 `tests/test_managed_http.py` harness. That ASGI harness transports JSON through
 real synthetic JWT/local-cookie/CSRF authentication, managed issuance and current
