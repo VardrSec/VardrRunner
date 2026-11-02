@@ -174,3 +174,33 @@ def test_unsupported_platform_refuses_before_claim(scenario, monkeypatch):
     execute(scenario)
     handler.execute.assert_not_called()
     client.claim_controlled.assert_not_called()
+
+
+@pytest.mark.parametrize("reserved", [True, False, None])
+def test_budgeted_claim_requires_explicit_reservation_receipt(scenario, reserved):
+    client, _, _, _, _ = scenario
+    original = client.claim_controlled.side_effect
+
+    def claim(job_id, runner_id, **kwargs):
+        assert kwargs == {"concurrency_budget": True}
+        result = original(job_id, runner_id)
+        result["execution_control"]["capacity_reserved"] = reserved
+        return result
+
+    client.claim_controlled.side_effect = claim
+    owned = controlled_jobs.OwnedClient(client, concurrency_budget=True)
+    if reserved is True:
+        assert owned.claim_job("job-one")["execution_control"]["capacity_reserved"] is True
+    else:
+        with pytest.raises(ValueError, match="no legacy fallback"):
+            owned.claim_job("job-one")
+
+
+def test_budget_requires_controlled_before_connecting(monkeypatch):
+    import typer
+
+    heartbeat = Mock()
+    monkeypatch.setattr(jobs, "send_heartbeat", heartbeat)
+    with pytest.raises(typer.Exit):
+        jobs.run_jobs(concurrency_budget=True)
+    heartbeat.assert_not_called()

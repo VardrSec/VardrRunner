@@ -470,12 +470,18 @@ def jobs_run(
         "--expiring-grants",
         help="Require expiring Gate reference grants without legacy fallback",
     ),
+    concurrency_budget: bool = typer.Option(
+        False,
+        "--concurrency-budget",
+        help="Require an explicitly configured engagement capacity reservation; needs --controlled",
+    ),
 ):
     """Claim and execute all pending scan jobs."""
     jobs.run_jobs(
         yes=yes,
         **({"controlled": True} if controlled else {}),
         **({"expiring_grants": True} if expiring_grants else {}),
+        **({"concurrency_budget": True} if concurrency_budget else {}),
     )
 
 

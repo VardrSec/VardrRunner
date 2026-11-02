@@ -1,5 +1,10 @@
 # VardrRunner — Development
 
+Concurrency-budget regressions cover CLI opt-in, required controlled mode and
+refusal of absent/false reservation receipts. Map's production-dialect tests
+verify atomic accounting; Runner unit tests do not certify database locking.
+See [ADR 0028](adr/0028-engagement-capacity.md) before integration testing.
+
 ## Local expiring-grant checks
 
 The normal suite includes `test_expiring_grants.py` and

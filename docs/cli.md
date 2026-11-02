@@ -1035,6 +1035,16 @@ The internal guarded adapter also refuses an expired launch after local preparat
 and caps the process timeout by the signed execution contract's own expiry. No
 legacy CLI option or behavior changes.
 
+## Owned engagement capacity (local NM-2 increment)
+
+For separately configured Map engagement capacity, explicitly invoke
+`jobs run --controlled --concurrency-budget`. Requires matching unreleased Map
+`0033concurrencybudget` and owner/full-scope policy configuration while idle.
+No fallback occurs without a reservation receipt. Slots count owned attempts
+through finalization, not manual/direct work, requests, targets or duration.
+Uncertain attempts retain slots. This enables no worker; Linux/Docker and ffuf
+controlled execution remain unsupported. See ADR 0028 for limits.
+
 ## Expiring Gate reference grants (local NM-2 increment)
 
 Issue an explicit grant in a separate namespace; this command reads no secret:

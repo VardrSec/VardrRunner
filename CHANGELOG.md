@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicit `jobs run --controlled --concurrency-budget` and mandatory Map
+  reservation receipt. Requires matching unreleased Map `0033concurrencybudget`
+  and owner configuration; default calls remain unchanged.
+
 - Add opt-in expiring/revocable Gate reference grants, claim/provider/launch
   revalidation and conservative protected recovery. Preserve signed deadlines
   across grant-lock waits; legacy approvals are unchanged. See

@@ -39,3 +39,4 @@ the way it does.
 | [0025](0025-authorization-contract-v1.md) | NM-1 authorization contracts and bounded approvals | Accepted direction; opt-in prototypes |
 | [0026](0026-controlled-cancellation.md) | Explicit owned execution control | Local NM-2 increment for review |
 | [0027](0027-expiring-reference-grants.md) | Explicit expiring/revocable reference grants | Local NM-2 increment for review |
+| [0028](0028-engagement-capacity.md) | Explicit owned engagement capacity | Local NM-2 increment for review |

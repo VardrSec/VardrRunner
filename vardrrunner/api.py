@@ -269,11 +269,17 @@ class VardrMapClient:
         r = self.session.patch(self._url(f"/jobs/{job_id}"), json=payload, timeout=30)
         return self._classified(r)
 
-    def claim_controlled(self, job_id: str, runner_id: str) -> dict:
+    def claim_controlled(
+        self, job_id: str, runner_id: str, *, concurrency_budget: bool = False
+    ) -> dict:
         """Explicit companion capability; old servers must refuse, never fall back."""
         response = self.session.post(
             self._url(f"/jobs/{job_id}/claim"),
-            json={"runner_id": runner_id, "origin": self.base},
+            json={
+                "runner_id": runner_id,
+                "origin": self.base,
+                **({"concurrency_budget": True} if concurrency_budget else {}),
+            },
             timeout=(1, 1),
             allow_redirects=False,
         )

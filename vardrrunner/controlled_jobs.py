@@ -9,8 +9,9 @@ from vardrrunner import api, execution_control, identity
 
 
 class OwnedClient:
-    def __init__(self, client: api.VardrMapClient):
+    def __init__(self, client: api.VardrMapClient, *, concurrency_budget: bool = False):
         self.client = client
+        self.concurrency_budget = concurrency_budget
         self.base = client.base
         self.binding: dict = {}
         self.payload: dict = {}
@@ -23,7 +24,9 @@ class OwnedClient:
     def claim_job(self, job_id: str):
         runner_id = identity.load_or_create().runner_id
         self.started = time.monotonic()
-        claimed = self.client.claim_controlled(job_id, runner_id)
+        claimed = self.client.claim_controlled(
+            job_id, runner_id, **({"concurrency_budget": True} if self.concurrency_budget else {})
+        )
         self.binding = {"job_id": job_id, "runner_id": runner_id, "origin": self.base}
         receipt = claimed.get("execution_control", {})
         if (
@@ -31,6 +34,7 @@ class OwnedClient:
             or receipt.get("lease_seconds") != 10
             or not isinstance(receipt.get("token"), str)
             or len(receipt["token"]) < 32
+            or (self.concurrency_budget and receipt.get("capacity_reserved") is not True)
         ):
             raise ValueError("matching execution control capability required; no legacy fallback")
         self.payload = {"runner_id": runner_id, "origin": self.base, "token": receipt["token"]}

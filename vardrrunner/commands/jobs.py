@@ -133,12 +133,21 @@ def _execute_one(
     limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
     controlled: bool = False,
     expiring_grants: bool = False,
+    concurrency_budget: bool = False,
 ) -> None:
     """Run a single job through the uniform lifecycle, delegating specifics to its handler."""
     if expiring_grants:
         with credential_grants.required(str(client.base)):
             return _execute_one(
-                client, con, job, yes, journal_store, backend_url, limits, controlled
+                client,
+                con,
+                job,
+                yes,
+                journal_store,
+                backend_url,
+                limits,
+                controlled,
+                concurrency_budget=concurrency_budget,
             )
     # Validate the job envelope before touching any field — a drifted/partial payload
     # must fail cleanly, not crash the loop with a KeyError.
@@ -162,7 +171,10 @@ def _execute_one(
     if controlled:
         if journal_store is None:
             raise ValueError("controlled execution requires a durable journal")
-        client = cast(api.VardrMapClient, controlled_jobs.OwnedClient(client))
+        client = cast(
+            api.VardrMapClient,
+            controlled_jobs.OwnedClient(client, concurrency_budget=concurrency_budget),
+        )
     if journal_store is not None:
         record = journal_store.begin(
             job_id=job_id,
@@ -590,6 +602,7 @@ def execute_pending_jobs(
     client_factory: Callable[[], api.VardrMapClient] | None = None,
     controlled: bool = False,
     expiring_grants: bool = False,
+    concurrency_budget: bool = False,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
@@ -635,6 +648,7 @@ def execute_pending_jobs(
                 limits=limits,
                 **({"controlled": True} if controlled else {}),
                 **({"expiring_grants": True} if expiring_grants else {}),
+                **({"concurrency_budget": True} if concurrency_budget else {}),
             )
         except errors.StopWorkError:
             # Reported already by _execute_one. Don't claim this engagement's other
@@ -668,8 +682,17 @@ def execute_pending_jobs(
     return len(jobs_list)
 
 
-def run_jobs(yes: bool = False, *, controlled: bool = False, expiring_grants: bool = False) -> None:
+def run_jobs(
+    yes: bool = False,
+    *,
+    controlled: bool = False,
+    expiring_grants: bool = False,
+    concurrency_budget: bool = False,
+) -> None:
     """Claim and execute all pending jobs for the authenticated user."""
+    if concurrency_budget and not controlled:
+        console.print("[red]--concurrency-budget requires --controlled.[/red]")
+        raise typer.Exit(2)
     report = send_heartbeat(quiet=True)
     if isinstance(report, compatibility.CompatibilityReport) and not report.compatible:
         console.print(
@@ -698,6 +721,7 @@ def run_jobs(yes: bool = False, *, controlled: bool = False, expiring_grants: bo
         client_factory=lambda: api.VardrMapClient(url, key),
         **({"controlled": True} if controlled else {}),
         **({"expiring_grants": True} if expiring_grants else {}),
+        **({"concurrency_budget": True} if concurrency_budget else {}),
     )
     if executed == 0:
         console.print("[dim]No pending jobs.[/dim]")

@@ -1,5 +1,10 @@
 # VardrRunner — Architecture
 
+Explicit owned engagement capacity uses Map reservations via
+`jobs run --controlled --concurrency-budget`. Map accounts; Runner executes and
+requires the receipt. This does not count unregistered manual work or enable a
+worker. See [ADR 0028](adr/0028-engagement-capacity.md).
+
 Opt-in expiring Gate reference grants are described in
 [ADR 0027](adr/0027-expiring-reference-grants.md). A separate config catalog uses
 the existing journal for writer serialization, digest anchoring and observed-time
