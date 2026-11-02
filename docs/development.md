@@ -48,6 +48,14 @@ harness needs Map's test dependencies and exercises real loopback HTTP with a ne
 SQLite database. Production-dialect races live in Map's `postgres_tests` and must
 pass separately. Never point these checks at retained installations or databases.
 
+`tests/nm2_native_fault_acceptance.py --map-source <checkout> --out <new-dir>`
+adds real HTTP proxy loss/delay and ambiguous owned-finalization coverage. Run
+with Map's existing Windows test Python and Runner's existing `.venv` available;
+redirect `TEMP`/`TMP` to disposable scratch. It creates its own SQLite database,
+synthetic authentication, grant catalog and three-process trees. It is explicitly
+opt-in, outside normal pytest discovery. See [native fault coverage](nm2-native-faults.md)
+for the case matrix, transport-timeout injection and evidence limits.
+
 Container development: see [the container guide](container.md) for build, persistent state, credentials and trust configuration.
 
 The container CI generates disposable Gau TLS fixtures on its host with the

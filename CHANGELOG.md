@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add opt-in native Windows fault evidence for real loopback control loss/delay
+  and ambiguous owned finalization, with accounting and journal replay checks.
+  Test coverage only; execution behavior and supported profiles are unchanged.
+
 - Add explicit `--controlled --duration-budget SECONDS`, bound cumulative Map
   allocation receipt and monotonic deadline composition. Requires unreleased Map
   `0035durationbudget`. Default calls stay unchanged; cleanup/transport scope is
