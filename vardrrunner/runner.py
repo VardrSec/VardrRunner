@@ -13,6 +13,7 @@ import ssl
 import stat
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -968,7 +969,14 @@ def run_dalfox(
     return _run_tool_status(cmd, targets_file, "dalfox", timeout, ok_codes=DALFOX_OK_EXIT_CODES)
 
 
-def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> int:
+def run_vardrgate(
+    job: dict,
+    output_path: Path,
+    timeout: int | None = None,
+    *,
+    request_guard: dict | None = None,
+    execution_deadline: float | None = None,
+) -> int:
     """Run a VardrGate API authorization test job locally.
 
     ``job`` is the VardrGate job envelope (``{"config": {"test_case": ..., "execution": ...}}``).
@@ -998,7 +1006,18 @@ def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> i
         # Older binaries reject the flag before making any target request.
         cmd.append("--require-identity-preflight")
     active_error: BaseException | None = None
+    guard_file: Path | None = None
+    guard_dir: Path | None = None
     try:
+        if request_guard is not None:
+            guard_file, guard_dir = _write_private_job(request_guard)
+            cmd.extend(["--request-guard", str(guard_file)])
+        if execution_deadline is not None:
+            # UTC epoch deadline from validated permission, after secret/file preparation.
+            remaining = int(execution_deadline - time.time())
+            if remaining <= 0:
+                raise ToolTimeout("VardrGate authorization deadline elapsed before launch")
+            timeout = min(_resolve_timeout(timeout), remaining)
         if preflight:
             return _run_tool_status(cmd, None, "vardrgate", timeout, ok_codes=(0, 3))
         _run_tool(cmd, None, "vardrgate", timeout)
@@ -1008,11 +1027,23 @@ def run_vardrgate(job: dict, output_path: Path, timeout: int | None = None) -> i
         raise
     finally:
         try:
-            _remove_private_job(job_dir, job_file)
+            if guard_file is not None and guard_dir is not None:
+                _remove_private_job(guard_dir, guard_file)
         except OSError as cleanup_error:
             if active_error is None:
-                raise ToolError("could not remove sensitive VardrGate job data") from cleanup_error
-            logging.error("Could not remove sensitive VardrGate job data after a failed run")
+                raise ToolError(
+                    "could not remove private Gate request projection"
+                ) from cleanup_error
+            logging.error("Could not remove private Gate request projection after a failed run")
+        finally:
+            try:
+                _remove_private_job(job_dir, job_file)
+            except OSError as cleanup_error:
+                if active_error is None:
+                    raise ToolError(
+                        "could not remove sensitive VardrGate job data"
+                    ) from cleanup_error
+                logging.error("Could not remove sensitive VardrGate job data after a failed run")
 
 
 def parse_naabu_json(json_path: Path) -> list[dict]:

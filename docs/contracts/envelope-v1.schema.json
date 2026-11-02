@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "vardr.authorization-envelope/1"
+    },
+    "purpose": {
+      "enum": [
+        "approval",
+        "contract"
+      ]
+    },
+    "payload": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    }
+  },
+  "required": [
+    "format",
+    "purpose",
+    "payload",
+    "signature"
+  ],
+  "additionalProperties": false
+}

@@ -289,3 +289,21 @@ and complete-diagnostics validation. Result artifacts preserve additive semantic
 assessment/readback metadata for Map's companion upload handler, without treating
 scanner conclusions as operator-confirmed findings. Failed checks retain safe
 evidence and fail the job. Deploy the matching Map support before this feature.
+
+## NM-1 opt-in authorization foundation
+
+The independent `authorization` package adds signed bounded approvals, single-use
+execution contracts and additive journal state. It reuses the Gate handler with a
+request projection for the explicitly supported `gate-fixed-http/1` profile.
+Legacy CLI, queue and MCP paths do not import or advertise this capability.
+See [ADR 0025](adr/0025-authorization-contract-v1.md) and the
+[conformance specification](contracts/README.md) for trust boundaries and limits.
+
+`authorization.runtime.execute_gate` is an explicit standalone library adapter:
+check current time/binary/local grants, consume durably, then call the existing
+handler with a private request projection and approved timeout. It records known
+completion only after the handler returns. Managed live execution is refused.
+The deadline is the earliest execution-contract expiry, approval expiry or testing
+window end, capped by approved duration. The existing subprocess adapter rechecks
+it after credential and private-file preparation; elapsed setup time cannot restore
+permission. This is the existing timeout boundary, not managed cancellation.

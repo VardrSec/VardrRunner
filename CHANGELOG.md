@@ -7,6 +7,15 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Cap opt-in guarded execution by the execution contract's own expiry, approval
+  expiry and testing-window end. Recheck the deadline after credential/job-file
+  preparation; an expired contract cannot launch Gate. Container CI uses NM-1 Gate.
+- NM-1 opt-in standalone execution reuses the Gate handler with a private request
+  projection, actual binary binding and durable single use; legacy argv is unchanged.
+- Add isolated NM-1 reference authorization contracts, bounded reusable operator
+  approvals, fixed-request Gate plans and conformance/security fixtures. Existing
+  CLI, queue and evidence behavior is unchanged; see ADR 0025.
+
 ### Changed
 - **Nmap is outside the supported toolkit; naabu is the supported port-discovery tool.**
   The `toolkit` container image no longer installs `nmap` (libpcap stays for naabu), and the
