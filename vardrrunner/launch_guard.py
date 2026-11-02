@@ -37,7 +37,14 @@ def require_permission() -> None:
 @contextmanager
 def revalidation(check: Callable[[], None]) -> Iterator[None]:
     """Recheck captured permission inside the already-held launch transaction."""
-    token = _RECHECK.set(check)
+    previous = _RECHECK.get()
+
+    def combined() -> None:
+        if previous:
+            previous()
+        check()
+
+    token = _RECHECK.set(combined)
     try:
         yield
     finally:

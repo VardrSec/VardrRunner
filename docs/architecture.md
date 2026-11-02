@@ -329,6 +329,11 @@ evidence and fail the job. Deploy the matching Map support before this feature.
 
 ## NM-1 opt-in authorization foundation
 
+The later unregistered `authorization.managed.ManagedGate` prototype composes the
+same handler with current-control verification, durable consumption, expiring grants
+and native Windows containment. It is not a CLI/queue adapter and does not finalize
+managed Map success. See [ADR 0032](adr/0032-unregistered-managed-native-gate.md).
+
 The independent `authorization` package adds signed bounded approvals, single-use
 execution contracts and additive journal state. It reuses the Gate handler with a
 request projection for the explicitly supported `gate-fixed-http/1` profile.

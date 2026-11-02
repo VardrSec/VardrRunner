@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import threading
 import time
@@ -37,12 +38,14 @@ class Control:
         started: float,
         local_stop: Callable[[], bool],
         grace: float = 2.0,
+        lease_deadline: Callable[[], float] | None = None,
     ):
         self.refresh = refresh
         self.binding = binding
         self.deadline = started + lease_seconds
         self.local_stop = local_stop
         self.grace = grace
+        self.lease_deadline = lease_deadline
         self.reason = ""
         self._lock = threading.Lock()
         self._close = threading.Event()
@@ -50,11 +53,24 @@ class Control:
 
     def stop_reason(self) -> str:
         with self._lock:
-            if not self.reason and time.monotonic() >= self.deadline:
+            try:
+                cap = self._capped(self.deadline)
+            except Exception:
+                self.reason = self.reason or "control_cap_unavailable"
+                cap = self.deadline
+            if not self.reason and time.monotonic() >= cap:
                 self.reason = "control_lease_expired"
             if not self.reason and self.local_stop():
                 self.reason = "local_emergency_stop"
             return self.reason
+
+    def _capped(self, deadline: float) -> float:
+        if self.lease_deadline is None:
+            return deadline
+        cap = self.lease_deadline()
+        if isinstance(cap, bool) or not isinstance(cap, (int, float)) or not math.isfinite(cap):
+            raise ValueError("invalid verified control deadline")
+        return min(deadline, cap)
 
     def _refresh(self) -> None:
         while not self._close.wait(0.5):
@@ -79,7 +95,7 @@ class Control:
                     if response.get("action") != "continue":
                         self.reason = "remote_stop_requested"
                         return
-                    self.deadline = started + lease
+                    self.deadline = self._capped(started + lease)
             except Exception:
                 # Do not log remote payloads/errors or extend the last lease.
                 continue

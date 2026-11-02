@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Compose nested launch rechecks and add an optional verified absolute lease cap.
+  Add an unregistered managed Gate library composition reusing shared validation,
+  strict existing budget receipts, durable consumption, grants and native control.
+  No CLI/queue activation or managed upload/completion is enabled.
+
 - Add a test-only verified loopback HTTPS transport around the existing API
   client. Disposable trust and bounded no-redirect/no-retry settings apply only
   to fixture instances; runtime defaults and supported execution stay unchanged.
