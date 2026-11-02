@@ -269,6 +269,27 @@ class VardrMapClient:
         r = self.session.patch(self._url(f"/jobs/{job_id}"), json=payload, timeout=30)
         return self._classified(r)
 
+    def claim_controlled(self, job_id: str, runner_id: str) -> dict:
+        """Explicit companion capability; old servers must refuse, never fall back."""
+        response = self.session.post(
+            self._url(f"/jobs/{job_id}/claim"),
+            json={"runner_id": runner_id, "origin": self.base},
+            timeout=(1, 1),
+            allow_redirects=False,
+        )
+        return self._classified(response)
+
+    def execution_control(self, job_id: str, payload: dict, *, finish: bool = False) -> dict:
+        """No redirects or retries for capability-bearing control messages."""
+        endpoint = "execution-finish" if finish else "control"
+        response = self.session.post(
+            self._url(f"/jobs/{job_id}/{endpoint}"),
+            json=payload,
+            timeout=(1, 1),
+            allow_redirects=False,
+        )
+        return self._classified(response)
+
     def patch(self, path: str, json: dict | None = None) -> Any:
         r = self.session.patch(self._url(path), json=json, timeout=30)
         r.raise_for_status()

@@ -1,5 +1,11 @@
 # VardrRunner — Architecture
 
+Opt-in manual execution control and cancellation are described in
+[ADR 0026](adr/0026-controlled-cancellation.md). Map control is authenticated and
+attempt-bound, with bounded leases, conservative uncertainty and local emergency
+requests in the existing journal. It does not grant execution approval or enable
+a worker; legacy paths and Gate evidence semantics remain unchanged.
+
 The first Compose distribution uses a one-shot, non-root Runner container; native execution remains supported. See [ADR 0019](adr/0019-container-packaging.md).
 
 The toolkit's existing Katana, DNSx, Naabu, httpx, Subfinder, FFUF and Nuclei use recorded source builds with dependency patches

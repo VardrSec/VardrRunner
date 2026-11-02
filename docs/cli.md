@@ -1,5 +1,11 @@
 # VardrRunner — CLI Reference
 
+Opt-in NM-2 source builds add `vardrrunner jobs run --controlled [--yes]` with
+matching Map execution-control endpoints, and `vardrrunner jobs stop RUN_ID` to
+request local emergency stop of that journal run. A stop request is not confirmed
+termination. Ordinary invocation keeps existing behavior. See [ADR 0026](adr/0026-controlled-cancellation.md)
+for lease, ownership, platform and partial-evidence limits. No worker is enabled.
+
 For `vardrgate_api_test` jobs, reviewed identities can additionally declare
 `preflight: {url, expected_status, json_fields}`. The matching Gate build checks a
 same-origin GET session endpoint against public principal metadata before resource

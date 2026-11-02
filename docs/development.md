@@ -1,5 +1,14 @@
 # VardrRunner — Development
 
+NM-2 cancellation checks: `tests/test_execution_control.py` uses real bounded
+synthetic process trees; `tests/test_controlled_jobs.py` covers late cancellation,
+durable PID and upload state. On Windows, hidden private consoles verify actual
+graceful signalling and owner-crash cleanup. No scanner/external target is used.
+The explicit `tests/nm2_control_acceptance.py --map-source <checkout> --out <new-dir>`
+harness needs Map's test dependencies and exercises real loopback HTTP with a new
+SQLite database. Production-dialect races live in Map's `postgres_tests` and must
+pass separately. Never point these checks at retained installations or databases.
+
 Container development: see [the container guide](container.md) for build, persistent state, credentials and trust configuration.
 
 The container CI generates disposable Gau TLS fixtures on its host with the

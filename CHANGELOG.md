@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add opt-in `jobs run --controlled` and `jobs stop RUN_ID`: owned control leases,
+  graceful/forced process-tree cancellation and conservative partial-state recovery.
+  Requires matching unreleased Map execution-control migration/endpoints. No worker,
+  default CLI behavior, distribution pin or Strict authorization claim changes.
+
 - Cap opt-in guarded execution by the execution contract's own expiry, approval
   expiry and testing-window end. Recheck the deadline after credential/job-file
   preparation; an expired contract cannot launch Gate. Container CI uses NM-1 Gate.

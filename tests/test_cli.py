@@ -393,6 +393,16 @@ class TestJobsCommands:
             invoke("jobs", "run", "--yes")
         mock.assert_called_once_with(yes=True)
 
+    def test_jobs_controlled_flag(self):
+        with patch("vardrrunner.commands.jobs.run_jobs") as mock:
+            invoke("jobs", "run", "--yes", "--controlled")
+        mock.assert_called_once_with(yes=True, controlled=True)
+
+    def test_jobs_stop(self):
+        with patch("vardrrunner.commands.jobs.stop_job") as mock:
+            invoke("jobs", "stop", "local-run-uuid")
+        mock.assert_called_once_with("local-run-uuid")
+
 
 # ---------------------------------------------------------------------------
 # Run sub-app

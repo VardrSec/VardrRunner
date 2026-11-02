@@ -438,9 +438,18 @@ def jobs_list():
 @jobs_app.command("run")
 def jobs_run(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
+    controlled: bool = typer.Option(
+        False, "--controlled", help="Require owned active-job control from a matching Map"
+    ),
 ):
     """Claim and execute all pending scan jobs."""
-    jobs.run_jobs(yes=yes)
+    jobs.run_jobs(yes=yes, **({"controlled": True} if controlled else {}))
+
+
+@jobs_app.command("stop")
+def jobs_stop(run_id: str = typer.Argument(..., help="Local journal run UUID")):
+    """Request emergency stop of one locally owned controlled execution."""
+    jobs.stop_job(run_id)
 
 
 # --------------------------------------------------------------------------- #

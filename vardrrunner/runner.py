@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
-from vardrrunner import config, configs, toolchain
+from vardrrunner import config, configs, execution_control, toolchain
 
 # Allowlist maps subcommand names to their executable names.
 # Add new tools here only — never allow arbitrary executables.
@@ -325,6 +325,12 @@ def _run_tool_status(
     seconds = _resolve_timeout(timeout)
     observer = _PROCESS_OBSERVER.get()
     try:
+        control = execution_control.current()
+        if control is not None:
+            returncode = execution_control.run(cmd, seconds, observer, control)
+            if returncode not in ok_codes:
+                raise ToolError(f"{tool} exited with code {returncode}")
+            return returncode
         process = _spawn_tool(cmd)
         if observer is not None:
             try:
