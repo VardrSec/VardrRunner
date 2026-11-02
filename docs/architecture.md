@@ -1,5 +1,9 @@
 # VardrRunner — Architecture
 
+Opt-in cumulative target accounting uses Map's owned claim receipt and Runner's
+existing fixed Gate compiler/request guard, including auxiliary origins. Default
+execution remains unchanged. See [ADR 0029](adr/0029-cumulative-target-attempts.md).
+
 Explicit owned engagement capacity uses Map reservations via
 `jobs run --controlled --concurrency-budget`. Map accounts; Runner executes and
 requires the receipt. This does not count unregistered manual work or enable a

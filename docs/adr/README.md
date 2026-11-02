@@ -40,3 +40,4 @@ the way it does.
 | [0026](0026-controlled-cancellation.md) | Explicit owned execution control | Local NM-2 increment for review |
 | [0027](0027-expiring-reference-grants.md) | Explicit expiring/revocable reference grants | Local NM-2 increment for review |
 | [0028](0028-engagement-capacity.md) | Explicit owned engagement capacity | Local NM-2 increment for review |
+| [0029](0029-cumulative-target-attempts.md) | Cumulative represented-origin attempts | Local NM-2 increment for review |

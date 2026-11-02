@@ -475,6 +475,11 @@ def jobs_run(
         "--concurrency-budget",
         help="Require an explicitly configured engagement capacity reservation; needs --controlled",
     ),
+    target_budget: bool = typer.Option(
+        False,
+        "--target-budget",
+        help="Require cumulative represented-origin allowance for fixed Gate; needs --controlled",
+    ),
 ):
     """Claim and execute all pending scan jobs."""
     jobs.run_jobs(
@@ -482,6 +487,7 @@ def jobs_run(
         **({"controlled": True} if controlled else {}),
         **({"expiring_grants": True} if expiring_grants else {}),
         **({"concurrency_budget": True} if concurrency_budget else {}),
+        **({"target_budget": True} if target_budget else {}),
     )
 
 

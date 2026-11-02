@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import time
 from contextlib import contextmanager
+from typing import Any
 
-from vardrrunner import api, execution_control, identity
+from vardrrunner import api, execution_control, identity, target_budget
 
 
 class OwnedClient:
@@ -17,6 +18,7 @@ class OwnedClient:
         self.payload: dict = {}
         self.started = 0.0
         self.control: execution_control.Control | None = None
+        self.target_binding: dict | None = None
 
     def __getattr__(self, name):
         return getattr(self.client, name)
@@ -24,9 +26,12 @@ class OwnedClient:
     def claim_job(self, job_id: str):
         runner_id = identity.load_or_create().runner_id
         self.started = time.monotonic()
-        claimed = self.client.claim_controlled(
-            job_id, runner_id, **({"concurrency_budget": True} if self.concurrency_budget else {})
-        )
+        options: dict[str, Any] = {}
+        if self.concurrency_budget:
+            options["concurrency_budget"] = True
+        if self.target_binding is not None:
+            options["target_binding"] = self.target_binding
+        claimed = self.client.claim_controlled(job_id, runner_id, **options)
         self.binding = {"job_id": job_id, "runner_id": runner_id, "origin": self.base}
         receipt = claimed.get("execution_control", {})
         if (
@@ -35,6 +40,12 @@ class OwnedClient:
             or not isinstance(receipt.get("token"), str)
             or len(receipt["token"]) < 32
             or (self.concurrency_budget and receipt.get("capacity_reserved") is not True)
+            or (
+                self.target_binding is not None
+                and not target_budget.receipt_matches(
+                    receipt.get("target_budget"), self.target_binding
+                )
+            )
         ):
             raise ValueError("matching execution control capability required; no legacy fallback")
         self.payload = {"runner_id": runner_id, "origin": self.base, "token": receipt["token"]}

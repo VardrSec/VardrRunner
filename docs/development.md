@@ -1,5 +1,10 @@
 # VardrRunner — Development
 
+Target-budget checks cover exact receipt binding, conservative auxiliary origins,
+unsupported fixed profiles and actual handler guard wiring. Map PostgreSQL fixtures
+verify cumulative atomicity and enable/disable races; real guarded Gate loopback
+must also pass. See [ADR 0029](adr/0029-cumulative-target-attempts.md).
+
 Concurrency-budget regressions cover CLI opt-in, required controlled mode and
 refusal of absent/false reservation receipts. Map's production-dialect tests
 verify atomic accounting; Runner unit tests do not certify database locking.

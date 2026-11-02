@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicit `--controlled --target-budget` for fixed Gate plans, bound Map
+  cumulative origin-attempt receipts and guarded dispatch. Requires unreleased Map
+  `0034targetbudget` and owner configuration. Default paths remain unchanged.
+
 - Add explicit `jobs run --controlled --concurrency-budget` and mandatory Map
   reservation receipt. Requires matching unreleased Map `0033concurrencybudget`
   and owner configuration; default calls remain unchanged.

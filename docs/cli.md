@@ -1037,6 +1037,15 @@ legacy CLI option or behavior changes.
 
 ## Owned engagement capacity (local NM-2 increment)
 
+For a separately configured cumulative target ceiling, invoke
+`jobs run --controlled --target-budget`. Only fixed Gate request-guard cases are
+supported. Counts distinct represented origins per attempt, including auxiliary
+requests; repeats charge again. Requires Map `0034targetbudget` and explicit owner
+policy. Missing/mismatched charge receipts refuse execution. Spent allowance is
+never refunded or silently reset. This counts no arbitrary manual work and adds
+no duration budget, worker or global RPS promise. Flags can combine with separately
+configured concurrency and expiring-grant controls. See ADR 0029.
+
 For separately configured Map engagement capacity, explicitly invoke
 `jobs run --controlled --concurrency-budget`. Requires matching unreleased Map
 `0033concurrencybudget` and owner/full-scope policy configuration while idle.

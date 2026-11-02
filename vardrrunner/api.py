@@ -270,7 +270,12 @@ class VardrMapClient:
         return self._classified(r)
 
     def claim_controlled(
-        self, job_id: str, runner_id: str, *, concurrency_budget: bool = False
+        self,
+        job_id: str,
+        runner_id: str,
+        *,
+        concurrency_budget: bool = False,
+        target_binding: dict | None = None,
     ) -> dict:
         """Explicit companion capability; old servers must refuse, never fall back."""
         response = self.session.post(
@@ -279,6 +284,7 @@ class VardrMapClient:
                 "runner_id": runner_id,
                 "origin": self.base,
                 **({"concurrency_budget": True} if concurrency_budget else {}),
+                **({"target_binding": target_binding} if target_binding is not None else {}),
             },
             timeout=(1, 1),
             allow_redirects=False,

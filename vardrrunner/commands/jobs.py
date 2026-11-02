@@ -36,6 +36,7 @@ from vardrrunner import (
     runner,
     target_safety,
 )
+from vardrrunner import target_budget as target_limits
 from vardrrunner import targets as targets_module
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.run import _confirm, _make_run_dir
@@ -134,6 +135,7 @@ def _execute_one(
     controlled: bool = False,
     expiring_grants: bool = False,
     concurrency_budget: bool = False,
+    target_budget: bool = False,
 ) -> None:
     """Run a single job through the uniform lifecycle, delegating specifics to its handler."""
     if expiring_grants:
@@ -148,6 +150,7 @@ def _execute_one(
                 limits,
                 controlled,
                 concurrency_budget=concurrency_budget,
+                target_budget=target_budget,
             )
     # Validate the job envelope before touching any field — a drifted/partial payload
     # must fail cleanly, not crash the loop with a KeyError.
@@ -245,6 +248,7 @@ def _execute_one(
         fail(errors.FailureCategory.TOOL_MISSING, f"'{handler.tool}' not found on PATH")
         return
 
+    target_guard = None
     try:
         tool_cfg = handler.parse_config(cfg)
         if isinstance(tool_cfg, configs.VardrGateConfig):
@@ -254,6 +258,12 @@ def _execute_one(
             handlers.check_gate_case(tool_cfg.test_case, engagement_id)
         elif credential_grants.current() is not None:
             raise credential_grants.GrantError("expiring_grants_profile_supports_gate_only")
+        if target_budget:
+            if not isinstance(client, controlled_jobs.OwnedClient):
+                raise configs.ConfigError("target budgets require controlled execution")
+            client.target_binding, target_guard = target_limits.prepare(tool_cfg)
+            if isinstance(tool_cfg, configs.VardrGateConfig):
+                tool_cfg = dataclasses.replace(tool_cfg, execution=target_guard["execution"])
     except configs.ConfigError as e:
         fail(errors.FailureCategory.INVALID_CONFIG, f"invalid config: {e}")
         return
@@ -479,9 +489,19 @@ def _execute_one(
                 journal_store.transition(run_id, Phase.EXECUTING, pid=pid)
 
             with runner.observe_process(record_pid):
-                output = handler.execute(targets, run_dir, tool_cfg)
+                output = handler.execute(
+                    targets,
+                    run_dir,
+                    tool_cfg,
+                    **({"request_guard": target_guard} if target_guard is not None else {}),
+                )
         else:
-            output = handler.execute(targets, run_dir, tool_cfg)
+            output = handler.execute(
+                targets,
+                run_dir,
+                tool_cfg,
+                **({"request_guard": target_guard} if target_guard is not None else {}),
+            )
 
         if output is None or not output.exists() or output.stat().st_size == 0:
             con.print("[yellow]No output produced — nothing to upload.[/yellow]")
@@ -603,6 +623,7 @@ def execute_pending_jobs(
     controlled: bool = False,
     expiring_grants: bool = False,
     concurrency_budget: bool = False,
+    target_budget: bool = False,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
@@ -649,6 +670,7 @@ def execute_pending_jobs(
                 **({"controlled": True} if controlled else {}),
                 **({"expiring_grants": True} if expiring_grants else {}),
                 **({"concurrency_budget": True} if concurrency_budget else {}),
+                **({"target_budget": True} if target_budget else {}),
             )
         except errors.StopWorkError:
             # Reported already by _execute_one. Don't claim this engagement's other
@@ -688,10 +710,14 @@ def run_jobs(
     controlled: bool = False,
     expiring_grants: bool = False,
     concurrency_budget: bool = False,
+    target_budget: bool = False,
 ) -> None:
     """Claim and execute all pending jobs for the authenticated user."""
     if concurrency_budget and not controlled:
         console.print("[red]--concurrency-budget requires --controlled.[/red]")
+        raise typer.Exit(2)
+    if target_budget and not controlled:
+        console.print("[red]--target-budget requires --controlled.[/red]")
         raise typer.Exit(2)
     report = send_heartbeat(quiet=True)
     if isinstance(report, compatibility.CompatibilityReport) and not report.compatible:
@@ -722,6 +748,7 @@ def run_jobs(
         **({"controlled": True} if controlled else {}),
         **({"expiring_grants": True} if expiring_grants else {}),
         **({"concurrency_budget": True} if concurrency_budget else {}),
+        **({"target_budget": True} if target_budget else {}),
     )
     if executed == 0:
         console.print("[dim]No pending jobs.[/dim]")
