@@ -1,5 +1,12 @@
 # VardrRunner — Development
 
+Authorization-ledger checks include denial followed by clock rollback, reload,
+contended writer locks and validation delayed beyond signed expiry. Historical
+reference-vector tests explicitly freeze injected monotonic clocks; runtime uses
+real elapsed time and managed adapters must also supply their trusted UTC clock.
+No signed payload timestamp may supply that clock. Cross-repository managed wire
+vectors are conformance evidence only, not authenticated online-control proof.
+
 Duration tests distinguish allocation from measured preparation, process runtime
 and cleanup. Include native cooperative/refusing trees, late claim responses,
 grant-lock/environment/permit delays, clock changes and receipt/library-entry

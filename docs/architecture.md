@@ -1,5 +1,11 @@
 # VardrRunner — Architecture
 
+The opt-in authorization ledger records trusted observed time in a short separate
+transaction, independent of permission changes. Denied issuance/consumption cannot
+forget expiry, and permission transactions recheck time after writer-lock waits
+and before reservation. Monotonic elapsed time composes with the runtime clock;
+unknown ordinals/fences remain spent. See [ADR 0031](adr/0031-ledger-clock-denials.md).
+
 Opt-in duration allocations use an immutable claim-start monotonic deadline,
 composed through existing launch checks and native supervision. Map accounts
 nonrefundable allocated seconds; Runner measures and enforces the permission

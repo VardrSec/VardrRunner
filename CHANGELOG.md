@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Preserve the authorization ledger's trusted clock high-water mark after denied
+  issue/consume attempts. Recheck elapsed permission after writer locks and before
+  reservation so delayed or rolled-back clocks cannot revive expired contracts.
+
 - Add opt-in native Windows fault evidence for real loopback control loss/delay
   and ambiguous owned finalization, with accounting and journal replay checks.
   Test coverage only; execution behavior and supported profiles are unchanged.

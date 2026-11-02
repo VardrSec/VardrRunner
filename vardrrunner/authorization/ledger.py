@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import timezone
+import time
+from contextlib import contextmanager
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 from vardrrunner.journal import Journal
 
 from .codec import AuthorizationError, TrustAnchor, digest, encoded, identifier, require, sign
-from .contracts import ValidationContext, approved, hash_field, validate
+from .contracts import ValidationContext, approved, hash_field, timestamp, validate
 
 
 class AuthorizationLedger:
-    def __init__(self, journal: Journal):
+    def __init__(self, journal: Journal, *, clock=None, monotonic=time.monotonic):
         self.journal = journal
+        # Trusted adapter/test injection only, never supplied by a wire document.
+        # Reference callers anchor time in ValidationContext; elapsed lock/preparation
+        # time must still consume that permission. Managed runtime also supplies UTC.
+        self._clock = clock
+        self._monotonic = monotonic
         with journal._connection() as con:
             columns = con.execute("PRAGMA table_info(authorization_state)").fetchall()
             require(
@@ -87,8 +95,79 @@ class AuthorizationLedger:
         )
         now = context.now.astimezone(timezone.utc).isoformat()
         clock = con.execute("SELECT observed FROM authorization_clock WHERE singleton=1").fetchone()
-        require(clock is None or now >= clock["observed"], "clock_rollback")
+        require(clock is None or context.now >= self._observed(clock["observed"]), "clock_rollback")
         con.execute("INSERT OR REPLACE INTO authorization_clock VALUES (1,?)", (now,))
+
+    @staticmethod
+    def _observed(value: str) -> datetime:
+        try:
+            parsed = datetime.fromisoformat(value)
+            require(
+                parsed.tzinfo is not None and parsed.astimezone(timezone.utc).isoformat() == value,
+                "clock_state_failed",
+            )
+            return parsed
+        except (ValueError, TypeError) as exc:
+            raise AuthorizationError("clock_state_failed") from exc
+
+    def _now(self, anchor: datetime, entered: float) -> datetime:
+        require(isinstance(anchor, datetime) and anchor.tzinfo is not None, "invalid_clock")
+        elapsed = self._monotonic() - entered
+        require(elapsed >= 0, "clock_rollback")
+        value = anchor + timedelta(seconds=elapsed)
+        if self._clock is not None:
+            wall = self._clock()
+            require(isinstance(wall, datetime) and wall.tzinfo is not None, "invalid_clock")
+            value = max(value, wall)
+        return value.astimezone(timezone.utc)
+
+    def observe_time(self, now: datetime) -> None:
+        """Persist trusted runtime time independently of later permission denial.
+
+        The caller supplies its trusted current clock, never a payload timestamp.
+        This separate, short transaction cannot commit any ordinal/fence change.
+        The execution transaction rechecks the high-water mark to close races.
+        """
+        require(isinstance(now, datetime) and now.tzinfo is not None, "invalid_clock")
+        entered = self._monotonic()
+        try:
+            with self.journal._connection() as con:
+                con.execute("BEGIN IMMEDIATE")
+                observed = self._now(now, entered).isoformat()
+                row = con.execute(
+                    "SELECT observed FROM authorization_clock WHERE singleton=1"
+                ).fetchone()
+                require(
+                    row is None
+                    or datetime.fromisoformat(observed) >= self._observed(row["observed"]),
+                    "clock_rollback",
+                )
+                con.execute("INSERT OR REPLACE INTO authorization_clock VALUES (1,?)", (observed,))
+        except sqlite3.Error as exc:
+            raise AuthorizationError("clock_state_failed") from exc
+
+    @contextmanager
+    def _transaction(self, context: ValidationContext, entered: float):
+        try:
+            with self.journal._connection() as con:
+                con.execute("BEGIN IMMEDIATE")
+                yield con
+        except BaseException:
+            # The permission transaction has rolled back. Preserve only trusted
+            # elapsed time in an independent transaction, including expiry denials.
+            self.observe_time(self._now(context.now, entered))
+            raise
+
+    def _final_time(self, con, context, entered, permission, payload):
+        current = replace(context, now=self._now(context.now, entered))
+        self._state(con, current, payload["issuer"]["id"])
+        require(
+            timestamp(permission["not_before"]) <= current.now < timestamp(payload["expires_at"])
+            and timestamp(permission["testing_start"])
+            <= current.now
+            < timestamp(permission["testing_end"]),
+            "expired_or_not_yet_valid",
+        )
 
     def issue(
         self,
@@ -103,14 +182,17 @@ class AuthorizationLedger:
         case: dict,
         execution: dict,
     ) -> dict:
+        source = context
+        entered = self._monotonic()
+        self.observe_time(context.now)
         receipt = approved(approval, anchors)
         permission = receipt["context"]
         require(issuer["id"] == receipt["issuer"]["id"], "approval_issuer_mismatch")
         identifier(contract_id)
         identifier(attempt_id)
         try:
-            with self.journal._connection() as con:
-                con.execute("BEGIN IMMEDIATE")
+            with self._transaction(context, entered) as con:
+                context = replace(context, now=self._now(context.now, entered))
                 self._state(con, context, issuer["id"])
                 active = con.execute(
                     "SELECT 1 FROM authorization_contracts WHERE issuer=? AND job=? AND consumed=1",
@@ -155,6 +237,7 @@ class AuthorizationLedger:
                 }
                 envelope = sign(payload, private_key, "contract")
                 validate(envelope, approval, plan, case, execution, anchors, context)
+                self._final_time(con, source, entered, permission, payload)
                 con.execute(
                     "INSERT OR REPLACE INTO authorization_approvals VALUES (?,?,?,?)",
                     (issuer["id"], receipt["approval_id"], receipt_digest, ordinal),
@@ -189,12 +272,16 @@ class AuthorizationLedger:
         anchors: tuple[TrustAnchor, ...],
         context: ValidationContext,
     ) -> dict:
-        payload = validate(envelope, approval, plan, case, execution, anchors, context)
-        issuer = payload["issuer"]["id"]
+        source = context
+        entered = self._monotonic()
+        self.observe_time(context.now)
         try:
-            with self.journal._connection() as con:
-                con.execute("BEGIN IMMEDIATE")
+            with self._transaction(context, entered) as con:
+                context = replace(context, now=self._now(context.now, entered))
+                payload = validate(envelope, approval, plan, case, execution, anchors, context)
+                issuer = payload["issuer"]["id"]
                 self._state(con, context, issuer)
+                permission = approved(approval, anchors)["context"]
                 current = con.execute(
                     "SELECT fence FROM authorization_fences WHERE issuer=? AND job=?",
                     (issuer, payload["job_id"]),
@@ -214,6 +301,7 @@ class AuthorizationLedger:
                     approval_row is None or approval_row["digest"] == approval_digest,
                     "approval_id_reused",
                 )
+                self._final_time(con, source, entered, permission, payload)
                 con.execute(
                     "INSERT OR REPLACE INTO authorization_approvals VALUES (?,?,?,?)",
                     (
