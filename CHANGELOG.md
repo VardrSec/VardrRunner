@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add isolated NM-1 reference authorization contracts, bounded reusable operator
+  approvals, fixed-request Gate plans and conformance/security fixtures. Existing
+  CLI, queue and evidence behavior is unchanged; see ADR 0025.
+
 ### Changed
 - **Nmap is outside the supported toolkit; naabu is the supported port-discovery tool.**
   The `toolkit` container image no longer installs `nmap` (libpcap stays for naabu), and the

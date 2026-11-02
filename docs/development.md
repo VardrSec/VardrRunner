@@ -244,3 +244,14 @@ connectivity check. Environment credentials apply to the invoked command. A star
 service left by 0.47.0 or earlier is removed by hand; see `docs/cli.md`.
 
 `VARDRRUNNER_TOOLS_DIR` optionally overrides only the managed binary/receipt directory; the container toolkit target uses `/opt/vardrtools`. See [container operations](container.md).
+
+## NM-1 conformance
+
+`tests/test_authorization_contract.py`, `test_authorization_cli.py` and
+`test_authorization_runtime.py` exercise synthetic signing vectors, negative
+permission cases, transactional replay/fencing and the explicit standalone adapter.
+They run in the normal regression suite without assessment traffic. The synthetic
+fixture signing seed is public and must never be trusted outside tests.
+VardrSec's explicit `tests/nm1_contract_acceptance.py` checks Map/standalone issuance;
+`tests/nm1_guarded_execution.py` runs a separately built guarded Gate against an
+ephemeral loopback fixture. Neither script modifies an installed Runner workspace.

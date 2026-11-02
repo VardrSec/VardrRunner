@@ -41,6 +41,8 @@ Issues = "https://github.com/VardrSec/VardrRunner/issues"
 Security = "https://github.com/VardrSec/VardrRunner/security/policy"
 
 [project.optional-dependencies]
+# NM-1 reference prototypes only; legacy execution does not import this extra.
+authorization = ["cryptography>=42"]
 # The MCP server is opt-in: `pip install vardrrunner[mcp]`. It pulls pydantic,
 # anyio, starlette and friends, which the lean core deliberately avoids.
 mcp = [

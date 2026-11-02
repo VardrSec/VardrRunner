@@ -1012,3 +1012,13 @@ The worker refuses a case changed at claim: review it and queue a new job. New
 Gate artifacts include case_hash for Map's binding. Deploy the matching Map
 backend before publishing this Runner release; old artifacts upload with
 inconclusive assessments. Local private-target opt-in remains required.
+
+## NM-1 reference interface
+
+`python -m vardrrunner.authorization --help` exposes separate opt-in `plan`,
+`approve`, `state`, `issue` and `validate` prototypes. Install the optional
+`authorization` extra for Ed25519 signing/verification. Every file and journal
+path is explicit; approval requires a terminal and operator review. Validation
+does not run a tool. No approval command is exposed through MCP, and this module
+does not enable a worker or change `vardrrunner` command behavior.
+See the [contract specification](contracts/README.md) before using the prototype.
