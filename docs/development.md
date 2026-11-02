@@ -1,5 +1,11 @@
 # VardrRunner — Development
 
+Duration tests distinguish allocation from measured preparation, process runtime
+and cleanup. Include native cooperative/refusing trees, late claim responses,
+grant-lock/environment/permit delays, clock changes and receipt/library-entry
+failures. PostgreSQL verifies accounting and policy races; the combined loopback
+fixture checks real Gate with all controls. No test may use retained state.
+
 Target-budget checks cover exact receipt binding, conservative auxiliary origins,
 unsupported fixed profiles and actual handler guard wiring. Map PostgreSQL fixtures
 verify cumulative atomicity and enable/disable races; real guarded Gate loopback

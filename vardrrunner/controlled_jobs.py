@@ -6,12 +6,23 @@ import time
 from contextlib import contextmanager
 from typing import Any
 
-from vardrrunner import api, execution_control, identity, target_budget
+from vardrrunner import api, execution_control, identity, launch_guard, target_budget
 
 
 class OwnedClient:
-    def __init__(self, client: api.VardrMapClient, *, concurrency_budget: bool = False):
+    def __init__(
+        self,
+        client: api.VardrMapClient,
+        *,
+        concurrency_budget: bool = False,
+        duration_seconds: int | None = None,
+    ):
+        if duration_seconds is not None and (
+            type(duration_seconds) is not int or not 1 <= duration_seconds <= 86400
+        ):
+            raise ValueError("finite duration allocation required")
         self.client = client
+        self.duration_seconds = duration_seconds
         self.concurrency_budget = concurrency_budget
         self.base = client.base
         self.binding: dict = {}
@@ -31,6 +42,8 @@ class OwnedClient:
             options["concurrency_budget"] = True
         if self.target_binding is not None:
             options["target_binding"] = self.target_binding
+        if self.duration_seconds is not None:
+            options["duration_seconds"] = self.duration_seconds
         claimed = self.client.claim_controlled(job_id, runner_id, **options)
         self.binding = {"job_id": job_id, "runner_id": runner_id, "origin": self.base}
         receipt = claimed.get("execution_control", {})
@@ -45,6 +58,10 @@ class OwnedClient:
                 and not target_budget.receipt_matches(
                     receipt.get("target_budget"), self.target_binding
                 )
+            )
+            or (
+                self.duration_seconds is not None
+                and not _duration_matches(receipt.get("duration_budget"), self.duration_seconds)
             )
         ):
             raise ValueError("matching execution control capability required; no legacy fallback")
@@ -78,5 +95,18 @@ class OwnedClient:
             local_stop=local_stop,
         )
         self.control = control
-        with execution_control.controlled(control):
+        until = self.started + self.duration_seconds if self.duration_seconds is not None else None
+        with launch_guard.monotonic_deadline(until), execution_control.controlled(control):
             yield control
+
+
+def _duration_matches(receipt, requested: int) -> bool:
+    if not isinstance(receipt, dict):
+        return False
+    allocated, total, limit = (
+        receipt.get(key)
+        for key in ("allocated_seconds", "total_allocated_seconds", "limit_seconds")
+    )
+    if type(allocated) is not int or type(total) is not int or type(limit) is not int:
+        return False
+    return allocated == requested and allocated <= total <= limit <= 1000000000

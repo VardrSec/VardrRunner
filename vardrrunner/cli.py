@@ -8,6 +8,7 @@ backend (today: VardrMap) over HTTP. See https://github.com/VardrSec/VardrRunner
 import importlib
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import typer
 from rich.console import Console
@@ -480,6 +481,13 @@ def jobs_run(
         "--target-budget",
         help="Require cumulative represented-origin allowance for fixed Gate; needs --controlled",
     ),
+    duration_budget: int | None = typer.Option(
+        None,
+        "--duration-budget",
+        min=1,
+        max=86400,
+        help="Allocate finite wall-permission seconds; requires --controlled and Map policy",
+    ),
 ):
     """Claim and execute all pending scan jobs."""
     jobs.run_jobs(
@@ -488,6 +496,10 @@ def jobs_run(
         **({"expiring_grants": True} if expiring_grants else {}),
         **({"concurrency_budget": True} if concurrency_budget else {}),
         **({"target_budget": True} if target_budget else {}),
+        **cast(
+            dict[str, Any],
+            {"duration_budget": duration_budget} if duration_budget is not None else {},
+        ),
     )
 
 

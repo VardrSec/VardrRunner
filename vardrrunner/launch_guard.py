@@ -12,6 +12,7 @@ _DEADLINE: ContextVar[tuple[float, float] | None] = ContextVar(
     "vardr_launch_deadline", default=None
 )
 _RECHECK: ContextVar[Callable[[], None] | None] = ContextVar("vardr_launch_recheck", default=None)
+_MONOTONIC: ContextVar[float | None] = ContextVar("vardr_monotonic_permission", default=None)
 
 
 class DeadlineExpired(RuntimeError):
@@ -50,11 +51,25 @@ def require_deadline() -> None:
 
 def timeout(seconds: int | float) -> int | float:
     until = _DEADLINE.get()
-    return (
+    remaining = (
         seconds
         if until is None
         else min(seconds, until[0] - time.time(), until[1] - time.monotonic())
     )
+    monotonic = _MONOTONIC.get()
+    return remaining if monotonic is None else min(remaining, monotonic - time.monotonic())
+
+
+@contextmanager
+def monotonic_deadline(until: float | None) -> Iterator[None]:
+    """Immutable allocated permission, composed with all surrounding limits."""
+    previous = _MONOTONIC.get()
+    effective = previous if until is None else until if previous is None else min(previous, until)
+    token = _MONOTONIC.set(effective)
+    try:
+        yield
+    finally:
+        _MONOTONIC.reset(token)
 
 
 @contextmanager

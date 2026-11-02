@@ -389,6 +389,9 @@ def _run_tool_status(
         except subprocess.TimeoutExpired:
             _terminate_process_tree(process)
             raise
+    except launch_guard.DeadlineExpired as e:
+        name = "VardrGate authorization" if tool == "vardrgate" else f"{tool} execution permission"
+        raise ToolTimeout(f"{name} deadline elapsed before launch") from e
     except subprocess.TimeoutExpired as e:
         raise ToolTimeout(
             f"{tool} timed out after {seconds}s and its process tree was killed"

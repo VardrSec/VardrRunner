@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicit `--controlled --duration-budget SECONDS`, bound cumulative Map
+  allocation receipt and monotonic deadline composition. Requires unreleased Map
+  `0035durationbudget`. Default calls stay unchanged; cleanup/transport scope is
+  documented separately from the finite permission window.
+
 - Add explicit `--controlled --target-budget` for fixed Gate plans, bound Map
   cumulative origin-attempt receipts and guarded dispatch. Requires unreleased Map
   `0034targetbudget` and owner configuration. Default paths remain unchanged.

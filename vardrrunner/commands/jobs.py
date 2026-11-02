@@ -14,7 +14,7 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, nullcontext
-from typing import cast
+from typing import Any, cast
 
 import typer
 from rich.console import Console
@@ -124,6 +124,15 @@ def _complete_done(client: api.VardrMapClient, job_id: str, note: str = "") -> N
     _emit(client, job_id, "done", note)
 
 
+def _require_duration_control(seconds: int | None, controlled: bool) -> None:
+    if seconds is not None and (
+        not controlled or type(seconds) is not int or not 1 <= seconds <= 86400
+    ):
+        raise configs.ConfigError(
+            "duration budget requires controlled execution and 1–86400 seconds"
+        )
+
+
 def _execute_one(
     client: api.VardrMapClient,
     con: Console,
@@ -136,8 +145,10 @@ def _execute_one(
     expiring_grants: bool = False,
     concurrency_budget: bool = False,
     target_budget: bool = False,
+    duration_budget: int | None = None,
 ) -> None:
     """Run a single job through the uniform lifecycle, delegating specifics to its handler."""
+    _require_duration_control(duration_budget, controlled)
     if expiring_grants:
         with credential_grants.required(str(client.base)):
             return _execute_one(
@@ -151,6 +162,7 @@ def _execute_one(
                 controlled,
                 concurrency_budget=concurrency_budget,
                 target_budget=target_budget,
+                duration_budget=duration_budget,
             )
     # Validate the job envelope before touching any field — a drifted/partial payload
     # must fail cleanly, not crash the loop with a KeyError.
@@ -176,7 +188,9 @@ def _execute_one(
             raise ValueError("controlled execution requires a durable journal")
         client = cast(
             api.VardrMapClient,
-            controlled_jobs.OwnedClient(client, concurrency_budget=concurrency_budget),
+            controlled_jobs.OwnedClient(
+                client, concurrency_budget=concurrency_budget, duration_seconds=duration_budget
+            ),
         )
     if journal_store is not None:
         record = journal_store.begin(
@@ -624,6 +638,7 @@ def execute_pending_jobs(
     expiring_grants: bool = False,
     concurrency_budget: bool = False,
     target_budget: bool = False,
+    duration_budget: int | None = None,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
@@ -631,6 +646,7 @@ def execute_pending_jobs(
     the rest of this run, so one halt is reported once instead of once per job. The next
     `jobs run` asks again, which is how lifting stop-work takes effect.
     """
+    _require_duration_control(duration_budget, controlled)
     jobs_list = client.pending_jobs()
     if not jobs_list:
         return 0
@@ -671,6 +687,10 @@ def execute_pending_jobs(
                 **({"expiring_grants": True} if expiring_grants else {}),
                 **({"concurrency_budget": True} if concurrency_budget else {}),
                 **({"target_budget": True} if target_budget else {}),
+                **cast(
+                    dict[str, Any],
+                    {"duration_budget": duration_budget} if duration_budget is not None else {},
+                ),
             )
         except errors.StopWorkError:
             # Reported already by _execute_one. Don't claim this engagement's other
@@ -711,6 +731,7 @@ def run_jobs(
     expiring_grants: bool = False,
     concurrency_budget: bool = False,
     target_budget: bool = False,
+    duration_budget: int | None = None,
 ) -> None:
     """Claim and execute all pending jobs for the authenticated user."""
     if concurrency_budget and not controlled:
@@ -718,6 +739,11 @@ def run_jobs(
         raise typer.Exit(2)
     if target_budget and not controlled:
         console.print("[red]--target-budget requires --controlled.[/red]")
+        raise typer.Exit(2)
+    if duration_budget is not None and (
+        not controlled or type(duration_budget) is not int or not 1 <= duration_budget <= 86400
+    ):
+        console.print("[red]--duration-budget requires --controlled and 1–86400 seconds.[/red]")
         raise typer.Exit(2)
     report = send_heartbeat(quiet=True)
     if isinstance(report, compatibility.CompatibilityReport) and not report.compatible:
@@ -749,6 +775,10 @@ def run_jobs(
         **({"expiring_grants": True} if expiring_grants else {}),
         **({"concurrency_budget": True} if concurrency_budget else {}),
         **({"target_budget": True} if target_budget else {}),
+        **cast(
+            dict[str, Any],
+            {"duration_budget": duration_budget} if duration_budget is not None else {},
+        ),
     )
     if executed == 0:
         console.print("[dim]No pending jobs.[/dim]")

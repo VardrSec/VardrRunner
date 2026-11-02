@@ -276,6 +276,7 @@ class VardrMapClient:
         *,
         concurrency_budget: bool = False,
         target_binding: dict | None = None,
+        duration_seconds: int | None = None,
     ) -> dict:
         """Explicit companion capability; old servers must refuse, never fall back."""
         response = self.session.post(
@@ -285,6 +286,7 @@ class VardrMapClient:
                 "origin": self.base,
                 **({"concurrency_budget": True} if concurrency_budget else {}),
                 **({"target_binding": target_binding} if target_binding is not None else {}),
+                **({"duration_seconds": duration_seconds} if duration_seconds is not None else {}),
             },
             timeout=(1, 1),
             allow_redirects=False,

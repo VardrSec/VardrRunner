@@ -40,6 +40,13 @@ def test_jobs_run_target_budget_routes_opt_in():
     run.assert_called_once_with(yes=False, controlled=True, target_budget=True)
 
 
+def test_jobs_run_duration_budget_routes_opt_in():
+    with patch("vardrrunner.commands.jobs.run_jobs") as run:
+        result = runner.invoke(app, ["jobs", "run", "--controlled", "--duration-budget", "5"])
+    assert result.exit_code == 0, result.output
+    run.assert_called_once_with(yes=False, controlled=True, duration_budget=5)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -1037,6 +1037,15 @@ legacy CLI option or behavior changes.
 
 ## Owned engagement capacity (local NM-2 increment)
 
+For finite cumulative permission allocations, invoke
+`jobs run --controlled --duration-budget 30`. Requires Map `0035durationbudget`
+and explicit full-scope owner duration policy. Seconds are 1–86400. The window
+starts before claim HTTP and covers later preparation and tool permission, using
+the strictest signed/local/budget deadline. It does not bound preclaim review or
+post-tool upload/finalization; existing graceful/forced cleanup is additional.
+Unused allocations are never refunded. Combine independent flags only where
+their profiles are supported. See ADR 0030 for timing and platform limitations.
+
 For a separately configured cumulative target ceiling, invoke
 `jobs run --controlled --target-budget`. Only fixed Gate request-guard cases are
 supported. Counts distinct represented origins per attempt, including auxiliary
