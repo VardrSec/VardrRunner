@@ -49,8 +49,10 @@ Revocation committed first blocks launch. Revocation after creation blocks
 subsequent use, not a tool already holding credentials. Provider-side revocation
 and active cancellation are distinct operations.
 
-Recheck the immutable signed execution deadline after grant-lock waiting and the
-controlled permission check. Retain a monotonic ceiling against clock rollback;
+Recheck both captured grant expiry and the immutable signed deadline after
+grant-lock waiting and the controlled permission callback. The final grant check
+uses the already-held transaction, without reacquiring a writer lock. Retain a
+monotonic execution-deadline ceiling against clock rollback;
 recompute process wait time after creation. Controlled supervision checks the
 deadline independently of lease renewal. Timeout shutdown retains documented
 cleanup latency; no instantaneous network cutoff is claimed.

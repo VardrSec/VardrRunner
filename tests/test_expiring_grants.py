@@ -428,3 +428,44 @@ def test_signed_deadline_stops_running_process(tmp_path, native_job):
 
     assert marker.exists() and not process_running(int(marker.read_text()))
     assert time.monotonic() - started < 4
+
+
+@pytest.mark.parametrize("signed_deadline", [None, 60])
+@pytest.mark.skipif(os.name != "nt", reason="Windows native permit-to-creation boundary")
+def test_grant_expiry_during_controlled_permission_callback(tmp_path, monkeypatch, signed_deadline):
+    from unittest.mock import Mock
+
+    from vardrrunner import windows_job
+    from vardrrunner.windows_job import WindowsJob
+
+    native_library = windows_job.ctypes.WinDLL
+    creates = []
+
+    def library(*args, **kwargs):
+        api = native_library(*args, **kwargs)
+        api.CreateProcessW = Mock(side_effect=AssertionError("creation must be refused"))
+        creates.append(api.CreateProcessW)
+        return api
+
+    monkeypatch.setattr(windows_job.ctypes, "WinDLL", library)
+    clock = [grants.now()]
+    monkeypatch.setattr(grants, "now", lambda: clock[0])
+    approve(seconds=1)
+    marker = tmp_path / "never-created"
+    code = f"open({str(marker)!r},'w').write('bad')"
+
+    def delayed_permission():
+        # Deterministic equivalent of a blocked local-stop journal read. The
+        # callback runs after grant-lock acquisition, without a second writer.
+        clock[0] += timedelta(seconds=2)
+
+    with grants.required(ISSUER):
+        check()
+        with launch_guard.deadline(time.time() + signed_deadline if signed_deadline else None):
+            with pytest.raises(grants.GrantError, match="expired"):
+                WindowsJob(
+                    [sys.executable, "-c", code], config.tool_environment(), delayed_permission
+                )
+    assert not marker.exists()
+    assert len(creates) == 1
+    creates[0].assert_not_called()

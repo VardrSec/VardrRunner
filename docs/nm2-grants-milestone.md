@@ -37,10 +37,10 @@ self-approve. These changes add no MCP approval surface.
 
 | Check | Result |
 |---|---|
-| Complete native Runner suite | 1,905 passed, 10 skipped; 95.77% coverage, above the unchanged 95% floor. |
-| Focused grant/runtime/CLI suite | 206 passed before final connection-close assertion strengthening; all final tests subsequently included in the full suite. |
+| Complete native Runner suite | Final corrected source: 1,907 passed, 10 skipped; 95.78% coverage, above the unchanged 95% floor. Earlier review commit: 1,905 passed, 10 skipped; 95.77%. |
+| Focused grant/runtime/CLI suite | 206 passed initially; the final grant/launch/runtime/recovery set passed 101 tests, including delayed-permission callback denial with both long and absent signed deadlines. |
 | Required static checks | Ruff lint/format including container, mypy and Bandit at existing medium/high CI threshold passed. The unrestricted Bandit scan reports 24 low-severity findings, zero medium/high; it is not an all-severity clean claim. |
-| Real guarded Gate with expiring grants | 14 requests across setup/preflight/resource/verification/reset, preserved case hash and zero replay requests. Synthetic environment values, isolated config and grant journal, ephemeral loopback only; no credentials in result. |
+| Real guarded Gate with expiring grants | Both legacy and native Windows controlled creation paths passed: 14 requests each across setup/preflight/resource/verification/reset, preserved case hash and zero replay requests. Synthetic environment values, isolated config and grant journal, ephemeral loopback only; no credentials in result. Managed signed authorization is not exercised. |
 | Writer-lock and creation faults | Concurrent revocation serialized with launch. Lock held beyond signed deadline prevented entering either Windows process-creation body. Injected post-creation guard-exit failures stopped real children, preserved partial files and retained conservative recovery fences. |
 | Map/frontend/PostgreSQL | No code changes in this increment; prior independently accepted cancellation evidence remains applicable. No retained database or Docker service was started. |
 
@@ -63,6 +63,10 @@ hashes. Public fixture signing material and synthetic provider values are test-o
 - Precomputed signed timeouts could outlive grant-lock waits. Deadline checks now
   run after the wait; older exact-integer timeout assertions were updated to verify
   the smaller positive remaining duration.
+- A controlled permission callback could delay creation past grant expiry after
+  the first locked check. The final combined check validates captured grants and
+  signed deadline after the callback in the same transaction. Regression tests
+  prove zero `CreateProcessW` calls with a short grant and long/absent deadline.
 - The scratch integration wrapper initially reapplied its opt-in recursively.
   Correcting the wrapper produced the passing real Gate evidence; no product
   workaround or security relaxation was needed.

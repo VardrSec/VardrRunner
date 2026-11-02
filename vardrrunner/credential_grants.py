@@ -279,8 +279,14 @@ class Policy:
             yield
             return
         with self.store.transaction() as (_, _, catalog, clock):
-            self.permitted(catalog, set(self.expected), clock)
-            yield  # Writer lock remains held through the process-creation call.
+            requested = set(self.expected)
+
+            def recheck():
+                self.permitted(catalog, requested, clock)
+
+            with launch_guard.revalidation(recheck):
+                recheck()
+                yield  # Writer lock remains held through the process-creation call.
 
 
 _POLICY: ContextVar[Policy | None] = ContextVar("expiring_credential_grants", default=None)

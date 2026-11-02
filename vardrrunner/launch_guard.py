@@ -11,6 +11,7 @@ _GATE: ContextVar[Callable[[], AbstractContextManager] | None] = ContextVar(
 _DEADLINE: ContextVar[tuple[float, float] | None] = ContextVar(
     "vardr_launch_deadline", default=None
 )
+_RECHECK: ContextVar[Callable[[], None] | None] = ContextVar("vardr_launch_recheck", default=None)
 
 
 class DeadlineExpired(RuntimeError):
@@ -21,8 +22,25 @@ class DeadlineExpired(RuntimeError):
 def boundary() -> Iterator[None]:
     gate = _GATE.get()
     with gate() if gate else nullcontext():
-        require_deadline()
+        require_permission()
         yield
+
+
+def require_permission() -> None:
+    check = _RECHECK.get()
+    if check:
+        check()
+    require_deadline()
+
+
+@contextmanager
+def revalidation(check: Callable[[], None]) -> Iterator[None]:
+    """Recheck captured permission inside the already-held launch transaction."""
+    token = _RECHECK.set(check)
+    try:
+        yield
+    finally:
+        _RECHECK.reset(token)
 
 
 def require_deadline() -> None:

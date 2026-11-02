@@ -219,7 +219,7 @@ class WindowsJob:
             with launch_guard.boundary():
                 if permit:
                     permit()
-                launch_guard.require_deadline()
+                launch_guard.require_permission()
                 self._check(
                     self.api.CreateProcessW(
                         executable,
