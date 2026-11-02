@@ -1034,3 +1034,37 @@ binaries fail on the required flag before contacting a target.
 The internal guarded adapter also refuses an expired launch after local preparation
 and caps the process timeout by the signed execution contract's own expiry. No
 legacy CLI option or behavior changes.
+
+## Expiring Gate reference grants (local NM-2 increment)
+
+Issue an explicit grant in a separate namespace; this command reads no secret:
+
+```text
+vardrrunner credentials approve -e ENGAGEMENT --origin https://api.example.test --env GATE_OWNER --issuer https://map.example.test --expires-in 3600
+vardrrunner credentials approvals --issuer https://map.example.test
+vardrrunner jobs run --expiring-grants
+vardrrunner credentials revoke -e ENGAGEMENT --origin https://api.example.test --env GATE_OWNER --issuer https://map.example.test
+```
+
+Use `--keychain ACCOUNT` instead of `--env NAME` for the local keychain provider.
+TTL must be 1–86400 seconds; issuer and TTL are both required for issuance. Issuer
+must match the configured Map base URL, including its deployment path. Standalone
+uses issuer `standalone` and explicit `execute_gate(..., expiring_grants=True)`;
+this adds no standalone CLI command.
+
+Protected mode currently supports Gate cases only. Approve every reference for
+every resource/setup/preflight/verification/reset origin. Literal credentials are
+refused. `--yes` does not approve references or bypass expiry/revocation. Signed
+human execution approval remains separate; reference grants do not approve work.
+
+Combine with `--controlled` on supported native Windows only. Linux/Docker and
+ffuf controlled execution remain unsupported. Commands without the grant flag
+and issuer options use the legacy namespace unchanged. No silent migration or
+protected-mode fallback is provided.
+
+Reapproval changes the UUID: use a fresh reviewed attempt rather than replacing
+an in-flight permission. Revocation/expiry blocks new use, not an already launched
+tool or provider credential. Use active cancellation to stop execution. Stale or
+missing paired config/journal state and clock rollback fail closed. No automated
+repair is provided. Ambiguous protected attempts retain their journal fence and
+partial files for explicit operator review.

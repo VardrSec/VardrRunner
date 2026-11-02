@@ -19,6 +19,13 @@ from vardrrunner.commands import run as run_cmd
 runner = CliRunner()
 
 
+def test_jobs_run_expiring_grants_routes_opt_in():
+    with patch("vardrrunner.commands.jobs.run_jobs") as run:
+        result = runner.invoke(app, ["jobs", "run", "--yes", "--expiring-grants"])
+    assert result.exit_code == 0, result.output
+    run.assert_called_once_with(yes=True, expiring_grants=True)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

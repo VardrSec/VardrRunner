@@ -1,5 +1,14 @@
 # VardrRunner — Architecture
 
+Opt-in expiring Gate reference grants are described in
+[ADR 0027](adr/0027-expiring-reference-grants.md). A separate config catalog uses
+the existing journal for writer serialization, digest anchoring and observed-time
+fencing. Checks cover claim, provider resolution and actual process creation,
+including auxiliary origins. Signed execution deadlines compose with grant/control
+checks after lock waiting. Post-creation failures preserve process ownership and
+partial-artifact fences. Default approval and execution behavior is unchanged;
+reference permission is distinct from human execution approval.
+
 Opt-in manual execution control and cancellation are described in
 [ADR 0026](adr/0026-controlled-cancellation.md). Map control is authenticated and
 attempt-bound, with bounded leases, conservative uncertainty and local emergency

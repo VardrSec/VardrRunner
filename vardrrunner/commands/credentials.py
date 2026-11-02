@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from vardrrunner import config, credentials
+from vardrrunner import config, credential_grants, credentials
 
 console = Console()
 
@@ -75,9 +75,32 @@ def _reference(env: str | None, keychain: str | None) -> tuple[str, str]:
     return ("env", str(env)) if env else ("keychain", str(keychain))
 
 
-def approve(engagement_id: str, origin: str, env: str | None, keychain: str | None) -> None:
+def approve(
+    engagement_id: str,
+    origin: str,
+    env: str | None,
+    keychain: str | None,
+    *,
+    issuer: str | None = None,
+    expires_in: int | None = None,
+) -> None:
     """Allow queued VardrGate cases to use one credential reference (ADR 0023)."""
     source, name = _reference(env, keychain)
+    if issuer is not None or expires_in is not None:
+        if issuer is None or expires_in is None:
+            console.print("[red]An expiring grant requires both --issuer and --expires-in.[/red]")
+            raise typer.Exit(2)
+        try:
+            grant = credential_grants.Store().approve(
+                issuer, engagement_id, origin, source, name, expires_in
+            )
+        except credential_grants.GrantError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        console.print(
+            f"Expiring reference grant approved: {grant['id']}; expires {grant['expires_at']}. Names only; legacy approvals unchanged."
+        )
+        return
     try:
         entry = config.approve_credential(engagement_id, origin, source, name)
     except config.InvalidApproval as e:
@@ -89,9 +112,30 @@ def approve(engagement_id: str, origin: str, env: str | None, keychain: str | No
     )
 
 
-def revoke(engagement_id: str, origin: str, env: str | None, keychain: str | None) -> None:
+def revoke(
+    engagement_id: str,
+    origin: str,
+    env: str | None,
+    keychain: str | None,
+    *,
+    issuer: str | None = None,
+) -> None:
     """Withdraw an approval."""
     source, name = _reference(env, keychain)
+    if issuer is not None:
+        try:
+            removed = credential_grants.Store().revoke(issuer, engagement_id, origin, source, name)
+        except credential_grants.GrantError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        console.print(
+            "Expiring grant revoked; running tools and provider credentials are unchanged."
+            if removed
+            else "No active matching expiring grant."
+        )
+        if not removed:
+            raise typer.Exit(1)
+        return
     try:
         removed = config.revoke_credential(engagement_id, origin, source, name)
     except config.InvalidApproval as e:
@@ -103,8 +147,34 @@ def revoke(engagement_id: str, origin: str, env: str | None, keychain: str | Non
     console.print("Approval removed.")
 
 
-def list_approvals() -> None:
+def list_approvals(*, issuer: str | None = None) -> None:
     """Print every approved reference. Names only; no secret is read."""
+    if issuer is not None:
+        try:
+            normalized = credential_grants.issuer(issuer)
+            grants = [g for g in credential_grants.Store().entries() if g["issuer"] == normalized]
+        except credential_grants.GrantError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        table = Table("Grant", "Engagement", "Origin", "Source", "Name", "Expires", "State")
+        for grant in grants:
+            state = grant["status"]
+            if (
+                state == "active"
+                and credential_grants.timestamp(grant["expires_at"]) <= credential_grants.now()
+            ):
+                state = "expired"
+            table.add_row(
+                grant["id"],
+                grant["engagement_id"],
+                grant["origin"],
+                grant["source"],
+                grant["name"],
+                grant["expires_at"],
+                state,
+            )
+        console.print(table)
+        return
     entries = config.credential_approvals()
     if not entries:
         console.print(

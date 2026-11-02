@@ -1,5 +1,26 @@
 # VardrRunner — Development
 
+## Local expiring-grant checks
+
+The normal suite includes `test_expiring_grants.py` and
+`test_expiring_grant_jobs.py`: synthetic bindings, TTL/revocation, all auxiliary
+origins, clock rollback, stale state, claim/provider/preparation races and audit
+privacy. Windows tests launch disposable Python processes for guard-exit failures,
+lock-delayed signed deadlines and confirmed termination. Recovery tests preserve
+the grant marker and ambiguous PID fence even without controlled execution.
+Suite-wide fixtures redirect config/journal/tool state; never point these tests at
+an installed workspace, retained database, real keychain or external target.
+
+After grant/launch changes, also run VardrSec's explicit real guarded Gate fixture
+with expiring standalone grants and a temporary grant journal. Use only its
+ephemeral loopback target, public test signing key and synthetic environment values.
+Require all 14 requests across five phases, preserved case hash and no additional
+replay requests. The fixture's legacy config patch alone is insufficient: the
+grant journal must also be redirected. No provider values belong in receipts.
+See [ADR 0027](adr/0027-expiring-reference-grants.md) for atomicity, rollback and
+unsupported-platform limits. This does not certify managed signed authorization,
+Linux/Docker containment, budgets or a future worker.
+
 NM-2 cancellation checks: `tests/test_execution_control.py` uses real bounded
 synthetic process trees; `tests/test_controlled_jobs.py` covers late cancellation,
 durable PID and upload state. On Windows, hidden private consoles verify actual

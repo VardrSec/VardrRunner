@@ -12,6 +12,8 @@ import subprocess
 from collections.abc import Callable
 from ctypes import wintypes as w
 
+from vardrrunner import launch_guard
+
 
 class Startup(ctypes.Structure):
     _fields_ = [
@@ -214,28 +216,42 @@ class WindowsJob:
             env = ctypes.create_unicode_buffer(
                 "\0".join(f"{k}={v}" for k, v in sorted(environment.items())) + "\0\0"
             )
-            if permit:
-                permit()
-            self._check(
-                self.api.CreateProcessW(
-                    executable,
-                    command,
-                    None,
-                    None,
-                    True,
-                    0x80000 | 0x400 | 0x200,
-                    env,
-                    None,
-                    ctypes.byref(startup),
-                    ctypes.byref(information),
+            with launch_guard.boundary():
+                if permit:
+                    permit()
+                launch_guard.require_deadline()
+                self._check(
+                    self.api.CreateProcessW(
+                        executable,
+                        command,
+                        None,
+                        None,
+                        True,
+                        0x80000 | 0x400 | 0x200,
+                        env,
+                        None,
+                        ctypes.byref(startup),
+                        ctypes.byref(information),
+                    )
                 )
-            )
-            self.process, self.pid = information.process, information.pid
-            self.api.CloseHandle(information.thread)
+                self.process, self.pid = information.process, information.pid
+                self.api.CloseHandle(information.thread)
             inside = w.BOOL()
             self._check(self.api.IsProcessInJob(self.process, self.job, ctypes.byref(inside)))
             self._check(inside.value)
         except BaseException:
+            if self.process is not None:
+                from vardrrunner.execution_control import ExecutionStopped, _stop
+
+                try:
+                    stopped = _stop(self, 0)
+                except BaseException:
+                    stopped = False
+                finally:
+                    self.close()
+                raise ExecutionStopped(
+                    "post_creation_permission_failure", stopped, pid=self.pid
+                ) from None
             self.close()
             raise
         finally:

@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
-from vardrrunner import config, configs, execution_control, toolchain
+from vardrrunner import config, configs, execution_control, launch_guard, toolchain
 
 # Allowlist maps subcommand names to their executable names.
 # Add new tools here only — never allow arbitrary executables.
@@ -205,16 +205,59 @@ def _spawn_tool(cmd: list[str]) -> subprocess.Popen:
     supervisor, a script, CI) makes them wait forever. Targets always arrive in
     files, so no tool needs stdin. The environment is ``config.tool_environment()``.
     """
+    environment = config.tool_environment()
+    process = None
+    try:
+        with launch_guard.boundary():
+            if os.name == "nt":
+                process = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    env=environment,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
+                )
+            else:
+                process = subprocess.Popen(
+                    cmd, stdin=subprocess.DEVNULL, env=environment, start_new_session=True
+                )
+        return process
+    except BaseException:
+        if process is not None:
+            observer = _PROCESS_OBSERVER.get()
+            if observer:
+                try:
+                    observer(process.pid)
+                except Exception:
+                    pass
+            try:
+                _cleanup_failed_launch(process)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            raise execution_control.ExecutionStopped(
+                "post_creation_permission_failure", False, pid=process.pid
+            ) from None
+        raise
+
+
+def _cleanup_failed_launch(process: subprocess.Popen) -> None:
+    """Bounded best effort; the caller retains an uncertain PID fence."""
     if os.name == "nt":
-        return subprocess.Popen(
-            cmd,
-            stdin=subprocess.DEVNULL,
-            env=config.tool_environment(),
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
-        )
-    return subprocess.Popen(
-        cmd, stdin=subprocess.DEVNULL, env=config.tool_environment(), start_new_session=True
-    )
+        try:
+            subprocess.run(
+                ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                capture_output=True,
+                timeout=2,
+                check=False,
+            )
+        finally:
+            if process.poll() is None:
+                process.kill()
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]
+        except ProcessLookupError:
+            pass
+    process.wait(timeout=2)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -339,7 +382,10 @@ def _run_tool_status(
                 _terminate_process_tree(process)
                 raise
         try:
-            returncode = process.wait(timeout=seconds)
+            remaining = launch_guard.timeout(seconds)
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(cmd, remaining)
+            returncode = process.wait(timeout=remaining)
         except subprocess.TimeoutExpired:
             _terminate_process_tree(process)
             raise
@@ -1024,10 +1070,14 @@ def run_vardrgate(
             if remaining <= 0:
                 raise ToolTimeout("VardrGate authorization deadline elapsed before launch")
             timeout = min(_resolve_timeout(timeout), remaining)
-        if preflight:
-            return _run_tool_status(cmd, None, "vardrgate", timeout, ok_codes=(0, 3))
-        _run_tool(cmd, None, "vardrgate", timeout)
-        return 0
+        with launch_guard.deadline(execution_deadline):
+            try:
+                if preflight:
+                    return _run_tool_status(cmd, None, "vardrgate", timeout, ok_codes=(0, 3))
+                _run_tool(cmd, None, "vardrgate", timeout)
+                return 0
+            except launch_guard.DeadlineExpired as exc:
+                raise ToolTimeout("VardrGate authorization deadline elapsed before launch") from exc
     except BaseException as exc:
         active_error = exc
         raise

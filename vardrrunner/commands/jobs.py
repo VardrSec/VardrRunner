@@ -26,6 +26,7 @@ from vardrrunner import (
     config,
     configs,
     controlled_jobs,
+    credential_grants,
     errors,
     execution_control,
     handlers,
@@ -131,8 +132,14 @@ def _execute_one(
     backend_url: str | None = None,
     limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
     controlled: bool = False,
+    expiring_grants: bool = False,
 ) -> None:
     """Run a single job through the uniform lifecycle, delegating specifics to its handler."""
+    if expiring_grants:
+        with credential_grants.required(str(client.base)):
+            return _execute_one(
+                client, con, job, yes, journal_store, backend_url, limits, controlled
+            )
     # Validate the job envelope before touching any field — a drifted/partial payload
     # must fail cleanly, not crash the loop with a KeyError.
     try:
@@ -167,6 +174,11 @@ def _execute_one(
             command_profile={
                 **_journal_profile(tool_type, cfg),
                 **({"controlled": True} if controlled else {}),
+                **(
+                    {"grant_policy": "expiring/1"}
+                    if credential_grants.current() is not None
+                    else {}
+                ),
             },
             job_schema_version=env.schema_version,
         )
@@ -228,6 +240,8 @@ def _execute_one(
             # this machine for this engagement and the case's targets (ADR 0023).
             tool_cfg = dataclasses.replace(tool_cfg, engagement_id=engagement_id)
             handlers.check_gate_case(tool_cfg.test_case, engagement_id)
+        elif credential_grants.current() is not None:
+            raise credential_grants.GrantError("expiring_grants_profile_supports_gate_only")
     except configs.ConfigError as e:
         fail(errors.FailureCategory.INVALID_CONFIG, f"invalid config: {e}")
         return
@@ -313,7 +327,15 @@ def _execute_one(
         record = journal_store.transition(record.run_id, Phase.CLAIMING)
 
     try:
+        if credential_grants.current() is not None and isinstance(
+            tool_cfg, configs.VardrGateConfig
+        ):
+            handlers.check_gate_case(tool_cfg.test_case, engagement_id)
         claimed = client.claim_job(job_id)
+    except credential_grants.GrantError as e:
+        finish(Phase.FAILED, "not_claimed", errors.FailureCategory.INVALID_CONFIG, str(e))
+        _emit(client, job_id, "blocked", str(e))
+        return
     except errors.StopWorkError as e:
         # The operator's own halt switch. Never presented as a claim failure,
         # and never silently retried; execute_pending_jobs skips the engagement's
@@ -367,6 +389,13 @@ def _execute_one(
                     "test case changed between polling and claim; review and queue a new job",
                 )
                 return
+
+    if credential_grants.current() is not None and isinstance(tool_cfg, configs.VardrGateConfig):
+        try:
+            handlers.check_gate_case(tool_cfg.test_case, engagement_id)
+        except credential_grants.GrantError as exc:
+            fail(errors.FailureCategory.INVALID_CONFIG, str(exc))
+            return
 
     # Advisory findings from the backend's policy evaluation. Shown before any
     # tool runs so the operator sees them while they can still intervene; they
@@ -499,7 +528,12 @@ def _execute_one(
     except execution_control.ExecutionStopped as e:
         # A partial scanner report is retained locally, never promoted/uploaded
         # as a completed assessment. Uncertain termination keeps the fence open.
-        tool_failure = str(e) in {"tool_timeout", "descendants_after_tool_exit"}
+        tool_failure = str(e) in {
+            "tool_timeout",
+            "descendants_after_tool_exit",
+            "post_creation_permission_failure",
+            "authorization_deadline",
+        }
         outcome = ("failed" if tool_failure else "cancelled") if e.confirmed else "uncertain"
         acknowledged = False
         if isinstance(client, controlled_jobs.OwnedClient):
@@ -513,7 +547,7 @@ def _execute_one(
             journal_store.transition(
                 record.run_id,
                 latest.phase,
-                pid=None if e.confirmed else latest.pid,
+                pid=None if e.confirmed else latest.pid or e.pid,
                 status=outcome,
                 last_event=str(e),
                 failure_reason=str(e),
@@ -523,7 +557,7 @@ def _execute_one(
                 if tool_failure:
                     category = (
                         errors.FailureCategory.TOOL_TIMEOUT
-                        if str(e) == "tool_timeout"
+                        if str(e) in {"tool_timeout", "authorization_deadline"}
                         else errors.FailureCategory.TOOL_FAILED
                     )
                 finish(
@@ -555,6 +589,7 @@ def execute_pending_jobs(
     limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
     client_factory: Callable[[], api.VardrMapClient] | None = None,
     controlled: bool = False,
+    expiring_grants: bool = False,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
@@ -599,6 +634,7 @@ def execute_pending_jobs(
                 backend_url=backend_url,
                 limits=limits,
                 **({"controlled": True} if controlled else {}),
+                **({"expiring_grants": True} if expiring_grants else {}),
             )
         except errors.StopWorkError:
             # Reported already by _execute_one. Don't claim this engagement's other
@@ -632,7 +668,7 @@ def execute_pending_jobs(
     return len(jobs_list)
 
 
-def run_jobs(yes: bool = False, *, controlled: bool = False) -> None:
+def run_jobs(yes: bool = False, *, controlled: bool = False, expiring_grants: bool = False) -> None:
     """Claim and execute all pending jobs for the authenticated user."""
     report = send_heartbeat(quiet=True)
     if isinstance(report, compatibility.CompatibilityReport) and not report.compatible:
@@ -661,6 +697,7 @@ def run_jobs(yes: bool = False, *, controlled: bool = False) -> None:
         limits=limits,
         client_factory=lambda: api.VardrMapClient(url, key),
         **({"controlled": True} if controlled else {}),
+        **({"expiring_grants": True} if expiring_grants else {}),
     )
     if executed == 0:
         console.print("[dim]No pending jobs.[/dim]")

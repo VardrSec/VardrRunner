@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add opt-in expiring/revocable Gate reference grants, claim/provider/launch
+  revalidation and conservative protected recovery. Preserve signed deadlines
+  across grant-lock waits; legacy approvals are unchanged. See
+  [the increment note](changelog/unreleased-expiring-reference-grants.md).
+
 - Add opt-in `jobs run --controlled` and `jobs stop RUN_ID`: owned control leases,
   graceful/forced process-tree cancellation and conservative partial-state recovery.
   Requires matching unreleased Map execution-control migration/endpoints. No worker,

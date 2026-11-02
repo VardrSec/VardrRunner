@@ -241,15 +241,34 @@ def credentials_approve(
     origin: str = _APPROVAL_ORIGIN,
     env: str | None = _APPROVAL_ENV,
     keychain: str | None = _APPROVAL_KEYCHAIN,
+    issuer: str | None = typer.Option(
+        None, "--issuer", help="Map URL or standalone for an expiring grant"
+    ),
+    expires_in: int | None = typer.Option(
+        None,
+        "--expires-in",
+        min=1,
+        max=86400,
+        help="Explicit lifetime in seconds; requires --issuer",
+    ),
 ):
     """Let VardrGate jobs for one engagement and origin use a credential reference."""
-    credentials_cmd.approve(engagement_id, origin, env, keychain)
+    if issuer is not None or expires_in is not None:
+        credentials_cmd.approve(
+            engagement_id, origin, env, keychain, issuer=issuer, expires_in=expires_in
+        )
+    else:
+        credentials_cmd.approve(engagement_id, origin, env, keychain)
 
 
 @credentials_app.command("approvals")
-def credentials_approvals():
+def credentials_approvals(
+    issuer: str | None = typer.Option(
+        None, "--issuer", help="Inspect this expiring-grant namespace"
+    ),
+):
     """List approved credential references (names only)."""
-    credentials_cmd.list_approvals()
+    credentials_cmd.list_approvals(**({"issuer": issuer} if issuer is not None else {}))
 
 
 @credentials_app.command("revoke")
@@ -258,9 +277,14 @@ def credentials_revoke(
     origin: str = _APPROVAL_ORIGIN,
     env: str | None = _APPROVAL_ENV,
     keychain: str | None = _APPROVAL_KEYCHAIN,
+    issuer: str | None = typer.Option(
+        None, "--issuer", help="Revoke only this expiring-grant namespace"
+    ),
 ):
     """Withdraw an approved credential reference."""
-    credentials_cmd.revoke(engagement_id, origin, env, keychain)
+    credentials_cmd.revoke(
+        engagement_id, origin, env, keychain, **({"issuer": issuer} if issuer is not None else {})
+    )
 
 
 audit_app = typer.Typer(
@@ -441,9 +465,18 @@ def jobs_run(
     controlled: bool = typer.Option(
         False, "--controlled", help="Require owned active-job control from a matching Map"
     ),
+    expiring_grants: bool = typer.Option(
+        False,
+        "--expiring-grants",
+        help="Require expiring Gate reference grants without legacy fallback",
+    ),
 ):
     """Claim and execute all pending scan jobs."""
-    jobs.run_jobs(yes=yes, **({"controlled": True} if controlled else {}))
+    jobs.run_jobs(
+        yes=yes,
+        **({"controlled": True} if controlled else {}),
+        **({"expiring_grants": True} if expiring_grants else {}),
+    )
 
 
 @jobs_app.command("stop")

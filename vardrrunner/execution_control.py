@@ -9,15 +9,16 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from vardrrunner import config
+from vardrrunner import config, launch_guard
 
 
 class ExecutionStopped(Exception):
     """Execution ended without successful completion; partial files are retained."""
 
-    def __init__(self, reason: str, confirmed: bool):
+    def __init__(self, reason: str, confirmed: bool, *, pid: int | None = None):
         super().__init__(reason)
         self.confirmed = confirmed
+        self.pid = pid
 
 
 class Control:
@@ -138,6 +139,8 @@ def run(
             observer(process.pid)
         while True:
             reason = control.stop_reason()
+            if launch_guard.timeout(seconds) <= 0:
+                reason = reason or "authorization_deadline"
             if time.monotonic() - started >= seconds:
                 reason = reason or "tool_timeout"
             code = process.poll()

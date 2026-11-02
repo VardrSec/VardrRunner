@@ -186,9 +186,12 @@ def reconcile(
         if record.backend_url != expected_backend:
             counts["foreign"] += 1
             continue
-        if record.command_profile.get("controlled"):
-            # Per-attempt capabilities are intentionally memory-only. A crash
-            # cannot turn a partial/uncertain controlled attempt into legacy done.
+        if (
+            record.command_profile.get("controlled")
+            or record.command_profile.get("grant_policy") == "expiring/1"
+        ):
+            # Neither owned control nor grant launch proof can be reconstructed
+            # from a partial artifact. Never promote these through legacy recovery.
             counts["deferred"] += 1
             continue
         if record.phase in {Phase.DISCOVERED, Phase.VALIDATING, Phase.TARGETS_RESOLVED}:
