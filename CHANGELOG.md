@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add a test-only managed HTTP probe composing shared authorization validation,
+  the durable ledger and an inert final-launch guard. No runtime adapter, CLI,
+  queue, tool execution or supported-platform behavior is enabled.
+
 - Preserve the authorization ledger's trusted clock high-water mark after denied
   issue/consume attempts. Recheck elapsed permission after writer locks and before
   reservation so delayed or rolled-back clocks cannot revive expired contracts.

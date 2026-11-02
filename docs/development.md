@@ -310,6 +310,20 @@ service left by 0.47.0 or earlier is removed by hand; see `docs/cli.md`.
 
 ## NM-1 conformance
 
+The later NM-2 `tests/managed_http_probe.py` is a test-only probe for Map's opt-in
+`tests/test_managed_http.py` harness. That ASGI harness transports JSON through
+real synthetic JWT/local-cookie/CSRF authentication, managed issuance and current
+control, then uses Runner's existing compiler, validator, durable ledger and launch
+guard. Its final callback is inert: it starts no process and contacts no targets.
+No product module imports the other application or loads this test helper.
+
+The matching Map fixture selects this checkout with `NM2_RUNNER_SOURCE`. Run only
+with a disposable profile/database, explicit child environment allowlist and dotenv
+disabled. ASGI HTTPS and tool digests are synthetic; this is not TLS deployment,
+tool provenance or Gate execution evidence. The test does not enable managed CLI,
+MCP, production routes, trust provisioning or queue execution. Map consumption and
+Runner consumption are not a distributed acknowledgement/exactly-once protocol.
+
 `tests/test_authorization_contract.py`, `test_authorization_cli.py` and
 `test_authorization_runtime.py` exercise synthetic signing vectors, negative
 permission cases, transactional replay/fencing and the explicit standalone adapter.
