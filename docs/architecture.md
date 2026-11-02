@@ -303,3 +303,7 @@ See [ADR 0025](adr/0025-authorization-contract-v1.md) and the
 check current time/binary/local grants, consume durably, then call the existing
 handler with a private request projection and approved timeout. It records known
 completion only after the handler returns. Managed live execution is refused.
+The deadline is the earliest execution-contract expiry, approval expiry or testing
+window end, capped by approved duration. The existing subprocess adapter rechecks
+it after credential and private-file preparation; elapsed setup time cannot restore
+permission. This is the existing timeout boundary, not managed cancellation.

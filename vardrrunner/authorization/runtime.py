@@ -46,17 +46,27 @@ def execute_gate(
     )
     current = replace(context, now=datetime.now(timezone.utc), managed_status_verified=False)
     permission = approved(approval, anchors)["context"]
-    deadline = min(timestamp(permission["expires_at"]), timestamp(permission["testing_end"]))
-    remaining = int((deadline - current.now).total_seconds())
-    timeout = min(permission["max_duration_seconds"], remaining)
-    require(timeout > 0, "execution_deadline")
     # Existing local grant checks run before reservation, then again at resolution.
     handlers.check_gate_case(case, current.engagement_id)
+    current = replace(current, now=datetime.now(timezone.utc))
     claimed = ledger.consume(envelope, approval, plan, case, execution, anchors, current)
+    deadline = min(
+        timestamp(claimed["expires_at"]),
+        timestamp(permission["expires_at"]),
+        timestamp(permission["testing_end"]),
+    )
+    remaining = int((deadline - datetime.now(timezone.utc)).total_seconds())
+    timeout = min(permission["max_duration_seconds"], remaining)
+    require(timeout > 0, "execution_deadline")
     cfg = configs.VardrGateConfig.from_dict({"test_case": case, "execution": plan["execution"]})
     cfg = replace(cfg, engagement_id=current.engagement_id)
     output = handlers.VardrGateHandler().execute(
-        [case["request"]["url"]], run_dir, cfg, request_guard=plan, total_timeout=timeout
+        [case["request"]["url"]],
+        run_dir,
+        cfg,
+        request_guard=plan,
+        total_timeout=timeout,
+        execution_deadline=deadline.timestamp(),
     )
     ledger.finish(claimed)
     require(output is not None, "missing_artifact")

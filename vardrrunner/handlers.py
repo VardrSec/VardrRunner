@@ -1099,6 +1099,7 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         *,
         request_guard: dict | None = None,
         total_timeout: int | None = None,
+        execution_deadline: float | None = None,
     ) -> Path | None:
         output = run_dir / "vardrgate_result.json"
         # Resolve credential references to real values locally, keeping secrets
@@ -1112,7 +1113,11 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         )
         job = {"config": {"test_case": test_case, "execution": execution}}
         timeout = execution.get("timeout_seconds")
-        guard_options = {"request_guard": request_guard} if request_guard is not None else {}
+        guard_options: dict[str, Any] = (
+            {"request_guard": request_guard} if request_guard is not None else {}
+        )
+        if execution_deadline is not None:
+            guard_options["execution_deadline"] = execution_deadline
         exit_code = runner.run_vardrgate(
             job,
             output,

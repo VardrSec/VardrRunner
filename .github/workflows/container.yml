@@ -18,7 +18,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: VardrSec/VardrGate
-          ref: af29a93140b54cf5b684a06f552a05cd92f6dee6
+          # NM-1 review companion; distribution pins remain unchanged.
+          ref: e99714b8567d1bc415c8feeeef4c7454e13aa905
           path: .gate-source
       - name: Build tool-enabled image and verify immutable tools
         run: |

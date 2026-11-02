@@ -1,14 +1,15 @@
 """Guarded execution cannot bypass reservation, local grants or capability flag."""
 
 from dataclasses import replace
+from datetime import timedelta
 from unittest.mock import MagicMock
 
 import pytest
 
-from tests.test_authorization_contract import NOW, TOOL, specimen  # noqa: F401
+from tests.test_authorization_contract import NOW, SEED, TOOL, specimen  # noqa: F401
 from vardrrunner import runner
 from vardrrunner.authorization import runtime
-from vardrrunner.authorization.codec import AuthorizationError, decoded
+from vardrrunner.authorization.codec import AuthorizationError, decoded, sign, unb64
 
 
 class Clock:
@@ -66,6 +67,54 @@ def test_guarded_standalone_reuses_handler_and_single_use(local_execution, tmp_p
     with pytest.raises(AuthorizationError, match="replayed"):
         launch(s, other)
     assert handler.call_count == 1
+
+
+def test_shorter_signed_contract_caps_execution_timeout(local_execution):
+    s, run_dir, handler, _ = local_execution
+    payload = decoded(unb64(s["contract"]["payload"]))
+    payload["expires_at"] = (NOW + timedelta(seconds=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    s["contract"] = sign(payload, SEED, "contract")
+    assert launch(s, run_dir).exists()
+    assert handler.call_args.kwargs["total_timeout"] == 20
+    assert (
+        handler.call_args.kwargs["execution_deadline"] == (NOW + timedelta(seconds=20)).timestamp()
+    )
+
+
+@pytest.mark.parametrize("preflight", [False, True])
+@pytest.mark.parametrize("elapsed", [15, 20])
+def test_deadline_rechecked_after_private_job_preparation(
+    tmp_path, monkeypatch, preflight, elapsed
+):
+    prepared = []
+    now = [NOW.timestamp()]
+    original_write = runner._write_private_job
+
+    def write_private(payload):
+        paths = original_write(payload)
+        prepared.append(paths)
+        if len(prepared) == 2:
+            now[0] += elapsed
+        return paths
+
+    process = MagicMock()
+    process.wait.return_value = 0
+    spawn = MagicMock(return_value=process)
+    monkeypatch.setattr(runner, "_write_private_job", write_private)
+    monkeypatch.setattr(runner, "_spawn_tool", spawn)
+    monkeypatch.setattr(runner.time, "time", lambda: now[0])
+    identities = [{"id": "owner", "preflight": {}}] if preflight else []
+    job = {"config": {"test_case": {"identities": identities}}}
+    kwargs = dict(request_guard={"schema": "fixture"}, execution_deadline=NOW.timestamp() + 20)
+    if elapsed == 20:
+        with pytest.raises(runner.ToolTimeout, match="deadline elapsed before launch"):
+            runner.run_vardrgate(job, tmp_path / "result.json", timeout=60, **kwargs)
+        spawn.assert_not_called()
+    else:
+        assert runner.run_vardrgate(job, tmp_path / "result.json", timeout=60, **kwargs) == 0
+        process.wait.assert_called_once_with(timeout=5)
+    assert len(prepared) == 2
+    assert all(not file.exists() and not directory.exists() for file, directory in prepared)
 
 
 @pytest.mark.parametrize(

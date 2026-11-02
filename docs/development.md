@@ -257,3 +257,5 @@ VardrSec's explicit `tests/nm1_contract_acceptance.py` checks Map/standalone iss
 ephemeral loopback fixture. Neither script modifies an installed Runner workspace.
 Run that real guarded fixture whenever the projection argv or Gate handler changes;
 the existing ffuf/dalfox smoke tests cover different adapters.
+Runtime regressions include a valid shorter-lived contract and permission expiring
+during private-file preparation, covering both preflight and ordinary Gate launches.

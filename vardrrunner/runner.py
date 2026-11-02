@@ -13,6 +13,7 @@ import ssl
 import stat
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -969,7 +970,12 @@ def run_dalfox(
 
 
 def run_vardrgate(
-    job: dict, output_path: Path, timeout: int | None = None, *, request_guard: dict | None = None
+    job: dict,
+    output_path: Path,
+    timeout: int | None = None,
+    *,
+    request_guard: dict | None = None,
+    execution_deadline: float | None = None,
 ) -> int:
     """Run a VardrGate API authorization test job locally.
 
@@ -1006,6 +1012,12 @@ def run_vardrgate(
         if request_guard is not None:
             guard_file, guard_dir = _write_private_job(request_guard)
             cmd.extend(["--request-guard", str(guard_file)])
+        if execution_deadline is not None:
+            # UTC epoch deadline from validated permission, after secret/file preparation.
+            remaining = int(execution_deadline - time.time())
+            if remaining <= 0:
+                raise ToolTimeout("VardrGate authorization deadline elapsed before launch")
+            timeout = min(_resolve_timeout(timeout), remaining)
         if preflight:
             return _run_tool_status(cmd, None, "vardrgate", timeout, ok_codes=(0, 3))
         _run_tool(cmd, None, "vardrgate", timeout)

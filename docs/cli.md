@@ -1025,3 +1025,6 @@ See the [contract specification](contracts/README.md) before using the prototype
 Guarded execution is an explicit library acceptance path, not another CLI command.
 It requires the companion unreleased Gate request-guard capability; older Gate
 binaries fail on the required flag before contacting a target.
+The internal guarded adapter also refuses an expired launch after local preparation
+and caps the process timeout by the signed execution contract's own expiry. No
+legacy CLI option or behavior changes.

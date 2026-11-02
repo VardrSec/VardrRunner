@@ -8,3 +8,8 @@ managed worker, live lease/cancellation, installer or engagement migration is ad
 The standalone library acceptance adapter uses the companion unreleased Gate
 `--request-guard` flag. Existing CLI/queue calls do not pass that flag. Missing
 capability fails closed; managed live execution remains unsupported.
+
+Guarded execution honors a shorter signed execution-contract expiry as well as
+approval/window limits. The existing subprocess adapter checks the UTC deadline
+after local credential and private-file preparation and refuses an expired launch.
+Legacy calls omit this internal deadline option and preserve their existing argv.

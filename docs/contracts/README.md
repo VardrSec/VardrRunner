@@ -21,6 +21,9 @@ the limits of the initial enforcement profile.
 - Window exceptions are unsupported by this first profile. Testing windows,
   contract/grant expiry, hard network and missing control capabilities always deny.
   Approve a corrected permission context rather than bypassing those checks.
+- A contract may expire before its approval. Standalone execution uses the earliest
+  contract/approval/window deadline and rechecks it after local preparation, before
+  launching the tool. This does not implement remote in-flight cancellation.
 - Additive journal tables contain identifiers/digests/counters only. Issuance
   allocations are conservative: expiry/failure does not refund an ordinal.
   Duplicate consumption and duplicate approval ordinals fail. Future multi-host

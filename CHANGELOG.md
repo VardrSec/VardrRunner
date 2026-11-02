@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Cap opt-in guarded execution by the execution contract's own expiry, approval
+  expiry and testing-window end. Recheck the deadline after credential/job-file
+  preparation; an expired contract cannot launch Gate. Container CI uses NM-1 Gate.
 - NM-1 opt-in standalone execution reuses the Gate handler with a private request
   projection, actual binary binding and durable single use; legacy argv is unchanged.
 - Add isolated NM-1 reference authorization contracts, bounded reusable operator
