@@ -37,3 +37,4 @@ the way it does.
 | [0023](0023-approved-gate-credential-references.md) | Operator-approved VardrGate credential references | Accepted |
 | [0024](0024-nmap-outside-supported-toolkit.md) | Nmap outside the supported toolkit; naabu for port discovery | Accepted |
 | [0025](0025-authorization-contract-v1.md) | NM-1 authorization contracts and bounded approvals | Accepted direction; opt-in prototypes |
+| [0031](0031-ledger-clock-denials.md) | Expiry observations survive denial and lock delay | Verified foundation correction |
