@@ -396,3 +396,14 @@ Keep the unchanged full-suite 95% floor and static checks. Map adds authenticate
 ASGI/verified TLS and PostgreSQL administrator/restricted-role tests for the new
 receipt. Real Windows stop receipt/containment verification remains deferred to
 Papachin. See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
+
+## Managed claim observation fixtures
+
+The claim observation tests cover lost claim replies, expired/revoked approvals,
+wrong enrolled keys, inconsistent state, races, source changes and receipt
+regressions. Runner restart fixtures require prior durable native result/stop
+proof; generic terminal metadata cannot close a run. Map's fixture-only HTTP and
+verified TLS adapters exercise the production Runner parser. PostgreSQL repeats
+absence, claim races and terminal receipts under both database roles. Full-suite
+coverage/static checks remain required. Windows/Papachin, independent acceptance,
+CI/security and migration gates remain open. No production route is registered.

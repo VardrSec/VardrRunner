@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicit capability-free managed claim observation bound to the original
+  enrolled principal and fingerprints. Require existing durable native proof for
+  receipt reconciliation; no retry, lease renewal or runtime activation. See ADR 0037.
+
 - Add unregistered managed known-stop receipts with one-shot durable sends and
   explicit observation. Preserve PIDs as audit metadata and hold unknown
   containment; no refund, replay or worker activation. See ADR 0036.

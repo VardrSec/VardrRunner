@@ -1110,3 +1110,7 @@ managed work. See [ADR 0035](adr/0035-managed-result-finalization.md).
 Managed known-stop reporting remains an explicit library operation. No CLI or
 automatic recovery path infers termination from a PID or retries a stop report.
 See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
+
+Claim observation and reconciliation after lost capabilities remain explicit
+library operations. No CLI command initiates observation or resumes managed work.
+See [ADR 0037](adr/0037-managed-claim-observation.md).

@@ -381,3 +381,12 @@ confirmed containment and a fixed known cause. Observer PIDs remain metadata, no
 a permission or liveness source. The explicit one-shot stop lane requires consumed
 owned binding and an exact remote receipt before local terminal state. Missing or
 uncertain receipt state stays held. See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
+
+### Managed claim observation after restart
+
+An explicit unregistered observation authenticates the original enrolled principal
+and plan/case/association fingerprints without returning a control capability.
+It records metadata only; absence never authorizes a retry. Reconciliation closes
+only an existing exact durable result/stop intent, preserving native proof and
+uncertainty fences. Ordinary recovery remains deferred. See
+[ADR 0037](adr/0037-managed-claim-observation.md).
