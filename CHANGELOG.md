@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Bind isolated recovery-test child profiles to disposable scratch on Windows,
+  preserving the explicit environment allowlist and source-origin assertions.
+
 - Record independently reviewed historical secret-scan false positives by exact
   commit fingerprint, preserving future-commit detection and default rules.
 

@@ -431,3 +431,7 @@ The API prefix tests preserve `/backend` and nested simple configured bases whil
 rejecting encoded/traversal/query ambiguity. Map's verified TLS fixture emulates
 existing Caddy prefix stripping and exercises signed result/stop/observation flows.
 This is compatibility verification, not installed Docker Desktop acceptance.
+
+Fresh-process managed-observation tests supply a disposable `USERPROFILE` on
+Windows as well as the existing POSIX home. The child asserts its resolved home
+equals its scratch working directory; real profiles and credentials are not inherited.

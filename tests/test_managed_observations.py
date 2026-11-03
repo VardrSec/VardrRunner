@@ -332,6 +332,7 @@ from vardrrunner.recovery import reconcile
 
 args = json.load(sys.stdin)
 assert Path(vardrrunner.__file__).resolve().parent.parent == Path(args['source'])
+assert Path.home().resolve() == Path.cwd().resolve()
 assert not any(k.startswith('VARDRMAP_') for k in os.environ)
 journal = Journal(Path(args['journal']))
 client = Mock()
@@ -359,6 +360,8 @@ def fresh_process(t, reply, kind, tmp_path, *, interrupt=False):
     home = tmp_path / "recovery-child-home"
     home.mkdir(exist_ok=True)
     environment = {"PATH": os.defpath, "HOME": str(home)}
+    if os.name == "nt":
+        environment["USERPROFILE"] = str(home)
     for name in ("SYSTEMROOT", "WINDIR"):
         if name in os.environ:
             environment[name] = os.environ[name]
