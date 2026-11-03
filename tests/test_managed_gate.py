@@ -50,6 +50,9 @@ def specimen(tmp_path, monkeypatch):
     )
     binary = tmp_path / "unit-only-not-executable.exe"
     binary.write_bytes(b"synthetic unit fingerprint; never executed")
+    # which() requires the executable bit on POSIX even though all dispatch in
+    # these policy tests uses an inert handler, never this fingerprint file.
+    binary.chmod(0o700)
     monkeypatch.setattr(runner, "program", lambda _: str(binary))
     plan = compile_gate_plan(
         vector["case"], vector["execution"], tool_sha256=digest(binary.read_bytes())

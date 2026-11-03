@@ -235,9 +235,10 @@ class ManagedGate:
         if self.control is not None:
             execution_control.require_permission(self.control)
 
-    def execute(self, run_dir: Path) -> Path:
-        require(not self._used, "single_managed_attempt")
-        self._used = True
+    def execute(self, run_dir: Path, *, consume: Callable[[dict], None] | None = None) -> Path:
+        with self._state_lock:
+            require(not self._used, "single_managed_attempt")
+            self._used = True
         require(execution_control.available(), "controlled_process_tree_unsupported")
         require(
             run_dir.is_dir() and not (run_dir / "vardrgate_result.json").exists(),
@@ -286,6 +287,11 @@ class ManagedGate:
                 self.anchors,
                 checked,
             )
+            if consume is not None:
+                consume({**self.request, "contract_sha256": digest(encoded(self.envelope))})
+                # The acknowledgement is not a renewal. RPC/journal delays count
+                # against the last verified lease; recheck before native launch.
+                self.refresh()
             entered = time.monotonic()
             self.control = execution_control.Control(
                 self.refresh,

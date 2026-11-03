@@ -25,7 +25,16 @@ from vardrrunner import (
 )
 from vardrrunner.journal import Journal, Phase, normalize_backend_url, utc_now
 
-from .codec import AuthorizationError, TrustAnchor, digest, encoded, integer, require, verify
+from .codec import (
+    AuthorizationError,
+    TrustAnchor,
+    digest,
+    encoded,
+    fields,
+    integer,
+    require,
+    verify,
+)
 from .contracts import ValidationContext, approved
 from .ledger import AuthorizationLedger
 from .managed import ManagedGate
@@ -44,6 +53,7 @@ class ClaimStore:
     def __init__(self, journal: Journal):
         self.journal = journal
         with journal._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
             con.execute("""CREATE TABLE IF NOT EXISTS managed_claim_intents (
                 run_id TEXT PRIMARY KEY, backend TEXT NOT NULL, job TEXT NOT NULL,
                 owner TEXT NOT NULL, state TEXT NOT NULL, plan_sha256 TEXT NOT NULL,
@@ -56,6 +66,13 @@ class ClaimStore:
                 row["name"] for row in con.execute("PRAGMA table_info(managed_claim_intents)")
             }
             require("association_sha256" in columns, "unsupported_managed_claim_schema")
+            # Additive audit markers survive a later held state. They never
+            # reconstruct permission, transport capabilities, or retry rights.
+            for name in ("consumption_sent", "consumption_acknowledged"):
+                if name not in columns:
+                    con.execute(
+                        f"ALTER TABLE managed_claim_intents ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+                    )
 
     def reserve(self, run_id: str, fingerprint: dict, identity: dict) -> str:
         owner = uuid.uuid4().hex
@@ -138,7 +155,7 @@ class ClaimStore:
         with self.journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
             changed = con.execute(
-                "UPDATE managed_claim_intents SET state=? WHERE run_id=? AND owner=? AND state IN ('reserved','claim_in_flight','bound')",
+                "UPDATE managed_claim_intents SET state=? WHERE run_id=? AND owner=? AND state IN ('reserved','claim_in_flight','bound','consume_in_flight','consume_acknowledged')",
                 (state, run_id, owner),
             ).rowcount
             require(changed == 1, "managed_claim_not_owned")
@@ -170,16 +187,57 @@ class ClaimStore:
                 (Phase.CLAIMED.value, utc_now(), "managed_claim_bound", utc_now(), run_id),
             )
 
+    def consumption(self, run_id: str, owner: str, *, acknowledged: bool) -> None:
+        before, after = (
+            ("consume_in_flight", "consume_acknowledged")
+            if acknowledged
+            else ("bound", "consume_in_flight")
+        )
+        with self.journal._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            changed = con.execute(
+                "UPDATE managed_claim_intents SET state=?,consumption_sent=1,consumption_acknowledged=? WHERE run_id=? AND owner=? AND state=?",
+                (after, int(acknowledged), run_id, owner, before),
+            ).rowcount
+            require(changed == 1, "managed_consumption_not_owned")
+
 
 class ManagedRun:
     """In-memory capability handle. Durable state never reconstructs this handle."""
 
     def __init__(
-        self, gate: ManagedGate, store: ClaimStore, run_id: str, owner: str, artifact_limit: int
+        self,
+        gate: ManagedGate,
+        store: ClaimStore,
+        run_id: str,
+        owner: str,
+        artifact_limit: int,
+        consume: Callable[[dict], dict] | None = None,
     ):
         self.gate, self.store, self.run_id, self._owner = gate, store, run_id, owner
         self._artifact_limit = artifact_limit
         self._used, self._lock = False, threading.Lock()
+        self._consume = consume
+
+    def _acknowledge(self, request: dict) -> None:
+        require(self._consume is not None, "managed_consumption_transport_required")
+        assert self._consume is not None
+        self.store.consumption(self.run_id, self._owner, acknowledged=False)
+        try:
+            reply = self._consume(request)
+        except Exception:
+            raise ClaimError("managed_consumption_outcome_unknown") from None
+        expected = {
+            **self.gate.binding,
+            "schema": "vardr.managed-consumption/1",
+            "contract_sha256": digest(encoded(self.gate.envelope)),
+            "consumed": True,
+        }
+        fields(reply, set(expected))
+        integer(reply["fence"], 1)
+        integer(reply["authority_revision"])
+        require(reply["consumed"] is True and reply == expected, "managed_consumption_binding")
+        self.store.consumption(self.run_id, self._owner, acknowledged=True)
 
     def execute(self, directory: Path) -> Path:
         with self._lock:
@@ -199,7 +257,7 @@ class ManagedRun:
                 last_event="managed_local_execution",
             )
             with runner.observe_process(observed):
-                output = self.gate.execute(directory)
+                output = self.gate.execute(directory, consume=self._acknowledge)
             resources.enforce_artifact(
                 output, min(self._artifact_limit, self.gate.permission["max_artifact_bytes"])
             )
@@ -240,6 +298,7 @@ class ManagedEntry:
         anchors: tuple[TrustAnchor, ...],
         claim: Callable[[dict], dict],
         current: Callable[[dict], dict],
+        consume: Callable[[dict], dict] | None = None,
         clock: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ):
@@ -251,6 +310,7 @@ class ManagedEntry:
         self.case, self.execution = copy.deepcopy(case), copy.deepcopy(execution)
         self.allocated_seconds = allocated_seconds
         self._claim, self._current = claim, current
+        self._consume = consume
         self.clock, self.monotonic = clock or (lambda: datetime.now(timezone.utc)), monotonic
         self._used = False
         self._artifact_limit: int | None = None
@@ -422,4 +482,6 @@ class ManagedEntry:
                     pass
                 raise ClaimError("claimed_handoff_held") from None
             assert self._artifact_limit is not None
-            return ManagedRun(gate, self.store, record.run_id, owner, self._artifact_limit)
+            return ManagedRun(
+                gate, self.store, record.run_id, owner, self._artifact_limit, self._consume
+            )

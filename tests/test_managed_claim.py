@@ -28,10 +28,15 @@ specimen = _fixture.specimen
 
 
 @pytest.fixture
-def entry_fixture(specimen, tmp_path):
+def entry_fixture(specimen, tmp_path, monkeypatch):
+    from vardrrunner import execution_control
+
+    # Exercise policy/journal decisions through an inert handler on every host.
+    # Native Windows containment remains a separate, real OS acceptance gate.
+    monkeypatch.setattr(execution_control, "available", lambda: True)
     s = specimen
     journal = Journal(config.journal_file())
-    rpc, current_calls = [], []
+    rpc, current_calls, consume_calls = [], [], []
     directory = tmp_path / "entry-result"
     directory.mkdir()
 
@@ -42,6 +47,19 @@ def entry_fixture(specimen, tmp_path):
     def current(body):
         current_calls.append(True)
         return copy.deepcopy(s.reply)
+
+    def consume(body):
+        consume_calls.append(copy.deepcopy(body))
+        return {
+            **{
+                k: v
+                for k, v in s.reply.items()
+                if k not in {"action", "lease_seconds", "lease_expires_at"}
+            },
+            "schema": "vardr.managed-consumption/1",
+            "contract_sha256": body["contract_sha256"],
+            "consumed": True,
+        }
 
     def make(**kwargs):
         args = dict(
@@ -57,6 +75,7 @@ def entry_fixture(specimen, tmp_path):
             anchors=s.anchors,
             claim=claim,
             current=current,
+            consume=consume,
             clock=lambda: NOW + timedelta(seconds=s.ticks[0]),
             monotonic=lambda: s.ticks[0],
         )
@@ -70,6 +89,7 @@ def entry_fixture(specimen, tmp_path):
             "make": staticmethod(make),
             "rpc": rpc,
             "current_calls": current_calls,
+            "consume_calls": consume_calls,
             "journal": journal,
             "directory": directory,
             "s": s,
@@ -516,3 +536,127 @@ def test_local_stop_before_rpc_is_durably_denied(entry_fixture, monkeypatch):
     with pytest.raises(ClaimError, match="denied_before_rpc"):
         f.make().acquire(f.directory)
     assert not f.rpc and state(f) == "denied_before_rpc"
+
+
+def inert_artifact(monkeypatch):
+    from vardrrunner import launch_guard
+
+    def inert(self, targets, directory, config, **kwargs):
+        with launch_guard.boundary():
+            output = directory / "vardrgate_result.json"
+            output.write_text("{}")
+        return output
+
+    monkeypatch.setattr(handlers.VardrGateHandler, "execute", inert)
+
+
+def test_consumption_ack_is_durable_before_inert_launch(entry_fixture, monkeypatch):
+    f = entry_fixture
+    inert_artifact(monkeypatch)
+    handle = f.make().acquire(f.directory)
+    assert handle.execute(f.directory).is_file()
+    assert state(f) == "consume_acknowledged" and len(f.consume_calls) == 1
+    client = Mock()
+    assert reconcile(f.journal, client, f.s.claim["execution_control"]["origin"]).deferred == 1
+    assert not client.mock_calls
+
+
+@pytest.mark.parametrize("failure", ["missing", "lost", "binding", "bool_fence", "late"])
+def test_unacknowledged_consumption_never_dispatches_or_retries(
+    entry_fixture, monkeypatch, failure
+):
+    f = entry_fixture
+    native = Mock(side_effect=AssertionError("must not dispatch"))
+    monkeypatch.setattr(handlers.VardrGateHandler, "execute", native)
+    calls = []
+
+    def callback(body):
+        calls.append(body)
+        if failure == "lost":
+            raise OSError("synthetic lost post-commit acknowledgement")
+        reply = {
+            **{
+                k: v
+                for k, v in f.s.reply.items()
+                if k not in {"action", "lease_seconds", "lease_expires_at"}
+            },
+            "schema": "vardr.managed-consumption/1",
+            "consumed": True,
+            "contract_sha256": body["contract_sha256"],
+        }
+        if failure == "binding":
+            reply["contract_sha256"] = "0" * 64
+        elif failure == "bool_fence":
+            reply["fence"] = True
+        elif failure == "late":
+            f.s.ticks[0] = 11
+        return reply
+
+    handle = f.make(consume=None if failure == "missing" else callback).acquire(f.directory)
+    with pytest.raises(AuthorizationError):
+        handle.execute(f.directory)
+    assert state(f) == "held_after_claim"
+    with pytest.raises(AuthorizationError, match="single_managed_execution"):
+        handle.execute(f.directory)
+    with pytest.raises(AuthorizationError, match="existing_invocation"):
+        f.make().acquire(f.directory)
+    assert len(calls) == (0 if failure == "missing" else 1)
+    native.assert_not_called()
+    with f.journal._connection() as con:
+        assert con.execute("SELECT consumed FROM authorization_contracts").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("point", ["before_send", "after_reply"])
+def test_consumption_journal_failure_holds_without_dispatch(entry_fixture, monkeypatch, point):
+    f = entry_fixture
+    native = Mock(side_effect=AssertionError("must not dispatch"))
+    monkeypatch.setattr(handlers.VardrGateHandler, "execute", native)
+    original = ClaimStore.consumption
+
+    def failure(self, run_id, owner, *, acknowledged):
+        if acknowledged == (point == "after_reply"):
+            raise JournalError("synthetic consumption journal failure")
+        original(self, run_id, owner, acknowledged=acknowledged)
+
+    monkeypatch.setattr(ClaimStore, "consumption", failure)
+    handle = f.make().acquire(f.directory)
+    with pytest.raises(JournalError):
+        handle.execute(f.directory)
+    assert len(f.consume_calls) == (1 if point == "after_reply" else 0)
+    assert state(f) == "held_after_claim"
+    native.assert_not_called()
+
+
+def test_portable_fixture_does_not_bypass_real_platform_denial(entry_fixture, monkeypatch):
+    from vardrrunner import execution_control
+
+    f = entry_fixture
+    monkeypatch.setattr(execution_control, "available", lambda: False)
+    with pytest.raises(AuthorizationError, match="controlled_process_tree_unsupported"):
+        f.make().acquire(f.directory)
+    assert not f.rpc and not f.consume_calls
+
+
+def test_acknowledgement_marker_survives_later_hold(entry_fixture, monkeypatch):
+    f = entry_fixture
+    inert_artifact(monkeypatch)
+    handle = f.make().acquire(f.directory)
+    handle.execute(f.directory)
+    f.make().store.hold(handle.run_id, handle._owner, "held_after_claim")
+    with f.journal._connection() as con:
+        row = con.execute("SELECT * FROM managed_claim_intents").fetchone()
+        assert row["state"] == "held_after_claim"
+        assert row["consumption_sent"] == row["consumption_acknowledged"] == 1
+
+
+def test_existing_claim_schema_gets_additive_audit_markers(entry_fixture):
+    f = entry_fixture
+    handle = f.make().acquire(f.directory)
+    with f.journal._connection() as con:
+        con.execute("ALTER TABLE managed_claim_intents DROP COLUMN consumption_sent")
+        con.execute("ALTER TABLE managed_claim_intents DROP COLUMN consumption_acknowledged")
+    store = ClaimStore(f.journal)
+    with store.journal._connection() as con:
+        row = con.execute("SELECT * FROM managed_claim_intents").fetchone()
+        assert row["run_id"] == handle.run_id and row["state"] == "bound"
+        assert row["consumption_sent"] == row["consumption_acknowledged"] == 0

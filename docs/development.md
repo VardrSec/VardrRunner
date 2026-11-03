@@ -354,3 +354,19 @@ Run that real guarded fixture whenever the projection argv or Gate handler chang
 the existing ffuf/dalfox smoke tests cover different adapters.
 Runtime regressions include a valid shorter-lived contract and permission expiring
 during private-file preparation, covering both preflight and ordinary Gate launches.
+
+## Local NM-2 consumption verification
+
+The full local candidate includes the portable native API boundary tests from the
+separate coverage correction branch. Managed preclaim tests mock only native
+availability and dispatch an inert handler; their executable fixture fingerprint
+is never launched. A negative test restores the platform denial before any RPC.
+This is not Linux controlled-execution support.
+
+`tests/test_managed_claim.py` covers the one-shot consumption transport, exact ACK,
+write failures, expiry, no replay and additive journal markers. Run the full suite
+with the unchanged `--cov=vardrrunner --cov-fail-under=95`, both mypy platforms and
+the existing lint/format/security checks. Map's explicit cross-repository fixture
+checks real authentication and JSON against the Runner ACK parser. The Windows
+entry fixture uses the new unregistered consume adapter; real Windows containment
+and independent acceptance remain required. See [ADR 0034](adr/0034-managed-consumption-barrier.md).

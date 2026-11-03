@@ -355,3 +355,12 @@ The deadline is the earliest execution-contract expiry, approval expiry or testi
 window end, capped by approved duration. The existing subprocess adapter rechecks
 it after credential and private-file preparation; elapsed setup time cannot restore
 permission. This is the existing timeout boundary, not managed cancellation.
+
+### Unregistered managed consumption barrier
+
+The preclaim handle reserves local consumption, journals its one-shot send,
+requires Map's exact current owned-contract ACK, and journals that observation
+before native dispatch. Neither an ACK nor a locally retained artifact completes
+Map work or releases capacity. Recovery defers all such attempts without network
+replay. Separate send/ACK markers survive later held states. See
+[ADR 0034](adr/0034-managed-consumption-barrier.md); this remains a local prototype.

@@ -1098,3 +1098,7 @@ tool or provider credential. Use active cancellation to stop execution. Stale or
 missing paired config/journal state and clock rollback fail closed. No automated
 repair is provided. Ambiguous protected attempts retain their journal fence and
 partial files for explicit operator review.
+
+The NM-2 consumption acknowledgement prototype is library-only. No CLI flag,
+queue command or recovery action enables it; its one-shot send/ACK and retained
+uncertainty rules are described in [ADR 0034](adr/0034-managed-consumption-barrier.md).

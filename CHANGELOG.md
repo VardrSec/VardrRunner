@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add an unregistered one-shot managed consumption ACK barrier with durable
+  send/ACK observations, exact contract binding and no retry after uncertainty.
+  Preserve reservations and native platform guards; no upload/completion or
+  production activation. See ADR 0034.
+
 - Add an unregistered one-shot managed pre-claim entry and durable journal
   handoff fence. Validate local preparation before RPC, preserve the original
   claim clock and grant identity/expiry, and defer managed recovery without
