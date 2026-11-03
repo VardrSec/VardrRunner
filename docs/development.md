@@ -407,3 +407,12 @@ verified TLS adapters exercise the production Runner parser. PostgreSQL repeats
 absence, claim races and terminal receipts under both database roles. Full-suite
 coverage/static checks remain required. Windows/Papachin, independent acceptance,
 CI/security and migration gates remain open. No production route is registered.
+
+## NM-2 recovery audit
+
+The [checklist audit](nm2-checklist-audit.md) distinguishes the scoped handoff
+evidence matrix from the missing complete approved checklist. Fresh-process tests
+in `tests/test_managed_observations.py` verify exact result/stop receipt closure,
+missing-receipt holds and abrupt observer interruption with no network, process
+creation or PID signaling. They do not certify native Windows owner-crash
+containment. This is verification only; no runtime or activation changes.

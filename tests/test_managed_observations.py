@@ -3,6 +3,9 @@
 import copy
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -316,3 +319,126 @@ def test_missing_claim_journal_or_original_runner_prevents_transport(entry_fixtu
             Journal(tmp_path / "empty.db"), "absent", f.s.context.runner_id, callback
         )
     callback.assert_not_called()
+
+
+RECOVERY_CHILD = r"""
+import json, os, sys
+from pathlib import Path
+from unittest.mock import Mock, patch
+import vardrrunner
+from vardrrunner.authorization import observations
+from vardrrunner.journal import Journal
+from vardrrunner.recovery import reconcile
+
+args = json.load(sys.stdin)
+assert Path(vardrrunner.__file__).resolve().parent.parent == Path(args['source'])
+assert not any(k.startswith('VARDRMAP_') for k in os.environ)
+journal = Journal(Path(args['journal']))
+client = Mock()
+assert reconcile(journal, client, args['reply']['origin']).deferred == 1
+assert not client.mock_calls
+calls = []
+def forbidden(*args, **kwargs):
+    raise AssertionError('Recovery attempted network, process creation or PID signaling')
+def observe(body):
+    calls.append(body)
+    assert set(body) == observations.ROOT - {'job_id'}
+    if args['interrupt']:
+        os._exit(7)
+    return args['reply']
+with patch('socket.socket', forbidden), patch('subprocess.Popen', forbidden), patch('os.kill', forbidden):
+    operation = observations.reconcile_result if args['kind'] == 'result' else observations.reconcile_stop
+    outcome = operation(journal, args['run_id'], args['runner_id'], observe)
+assert len(calls) == 1
+run = journal.get(args['run_id'])
+print(json.dumps({'outcome':outcome, 'phase':run.phase.value, 'pid':run.pid}))
+"""
+
+
+def fresh_process(t, reply, kind, tmp_path, *, interrupt=False):
+    home = tmp_path / "recovery-child-home"
+    home.mkdir(exist_ok=True)
+    environment = {"PATH": os.defpath, "HOME": str(home)}
+    for name in ("SYSTEMROOT", "WINDIR"):
+        if name in os.environ:
+            environment[name] = os.environ[name]
+    payload = {
+        "source": str(Path(__file__).resolve().parents[1]),
+        "journal": str(t.f.journal.path),
+        "run_id": t.handle.run_id,
+        "runner_id": t.f.s.context.runner_id,
+        "reply": reply,
+        "kind": kind,
+        "interrupt": interrupt,
+    }
+    serialized = json.dumps(payload)
+    assert all(value not in serialized for value in ('"token"', '"envelope"', '"lease_seconds"'))
+    child = subprocess.run(
+        [sys.executable, "-I", "-c", RECOVERY_CHILD],
+        input=serialized,
+        text=True,
+        capture_output=True,
+        env=environment,
+        cwd=home,
+        timeout=15,
+    )
+    assert child.returncode == (7 if interrupt else 0), child.stdout + child.stderr
+    return None if interrupt else json.loads(child.stdout)
+
+
+@pytest.mark.parametrize("kind", ["result", "stop"])
+@pytest.mark.parametrize("scenario", ["terminal", "missing_receipt", "interrupted_observation"])
+def test_process_restart_observes_receipts_without_capability_or_live_handle(
+    request, tmp_path, kind, scenario
+):
+    """Portable RECOVER evidence; native owner-crash containment remains Windows-only."""
+    t = request.getfixturevalue("result_fixture" if kind == "result" else "stopped")
+    if kind == "result":
+        t.handle.execute(t.f.directory)
+
+        def lost(body):
+            t.finish(body)
+            raise OSError("synthetic terminal response loss")
+
+        with pytest.raises(AuthorizationError):
+            t.handle.finalize(t.submit, lost)
+    else:
+        t.execute()
+
+        def lost(body):
+            t.send(body)
+            raise OSError("synthetic stop response loss")
+
+        with pytest.raises(AuthorizationError):
+            t.handle.report_stop(lost)
+    reply = public_reply(t.f, t.handle.run_id, t.handle.gate)
+    reply["claim"]["consumed"] = True
+    reply.update(**t.state, execution_state="completed" if kind == "result" else "cancelled")
+    reply["capacity_reserved"] = False
+    before = t.f.journal.get(t.handle.run_id)
+    files = {p: p.read_bytes() for p in t.f.directory.iterdir() if p.is_file()}
+    calls = t.calls.copy()
+    if scenario == "missing_receipt":
+        reply.update(result=None, completion=None, stop=None)
+        reply.update(execution_state="uncertain", capacity_reserved=True)
+    elif scenario == "interrupted_observation":
+        fresh_process(t, reply, kind, tmp_path, interrupt=True)
+        assert t.f.journal.get(t.handle.run_id) == before
+    outcome = fresh_process(t, reply, kind, tmp_path)
+    assert t.calls == calls
+    assert {p: p.read_bytes() for p in files} == files
+    assert outcome["pid"] == before.pid
+    with t.f.journal._connection() as con:
+        consumed = con.execute("SELECT consumed FROM authorization_contracts").fetchone()[0]
+    if scenario == "missing_receipt":
+        assert outcome["outcome"] == (
+            "held_no_receipt" if kind == "result" else "held_no_stop_receipt"
+        )
+        assert t.f.journal.get(t.handle.run_id) == before and consumed == 1
+    else:
+        expected = (
+            "terminal_receipt_observed" if kind == "result" else "terminal_stop_receipt_observed"
+        )
+        assert outcome["outcome"] == expected
+        assert outcome["phase"] == (Phase.DONE.value if kind == "result" else Phase.STOP_WORK.value)
+        assert consumed == 2
