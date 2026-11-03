@@ -7,9 +7,93 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
+  retain real link rejection checks and add an explicit synthetic guard assertion.
+
+- Bind isolated recovery-test child profiles to disposable scratch on Windows,
+  preserving the explicit environment allowlist and source-origin assertions.
+
+- Record independently reviewed historical secret-scan false positives by exact
+  commit fingerprint, preserving future-commit detection and default rules.
+
+- Make the tool-environment allowlist test independent of inherited proxy-variable
+  casing without changing subprocess environment behavior or network settings.
+
+- Preserve a configured simple API base prefix (including Full's `/backend`) in
+  explicit managed requests without changing signed origin binding. Continue to
+  reject ambiguous prefixes, redirects and retries. No activation change.
+
+- Add an explicit bounded one-shot managed JSON transport with strict finite JSON,
+  TLS verification, no retries/redirects and fixed errors. No production route or
+  worker activation; canonical Docker Desktop exit remains open. See ADR 0038.
+
+- Add explicit capability-free managed claim observation bound to the original
+  enrolled principal and fingerprints. Require existing durable native proof for
+  receipt reconciliation; no retry, lease renewal or runtime activation. See ADR 0037.
+
+- Add unregistered managed known-stop receipts with one-shot durable sends and
+  explicit observation. Preserve PIDs as audit metadata and hold unknown
+  containment; no refund, replay or worker activation. See ADR 0036.
+
+- Add explicit managed result/terminal receipts and observation-only reconciliation
+  after known native return. Preserve one-shot sends, uncertainty fences, charges
+  and legacy recovery; no CLI/worker activation. See ADR 0035.
+
+- Add an unregistered one-shot managed consumption ACK barrier with durable
+  send/ACK observations, exact contract binding and no retry after uncertainty.
+  Preserve reservations and native platform guards; no upload/completion or
+  production activation. See ADR 0034.
+
+- Add an unregistered one-shot managed pre-claim entry and durable journal
+  handoff fence. Validate local preparation before RPC, preserve the original
+  claim clock and grant identity/expiry, and defer managed recovery without
+  replay, upload or completion. See ADR 0033; no CLI/queue activation.
+
+- Compose nested launch rechecks and add an optional verified absolute lease cap.
+  Add an unregistered managed Gate library composition reusing shared validation,
+  strict existing budget receipts, durable consumption, grants and native control.
+  No CLI/queue activation or managed upload/completion is enabled.
+
+- Add a test-only verified loopback HTTPS transport around the existing API
+  client. Disposable trust and bounded no-redirect/no-retry settings apply only
+  to fixture instances; runtime defaults and supported execution stay unchanged.
+
+- Add a test-only managed HTTP probe composing shared authorization validation,
+  the durable ledger and an inert final-launch guard. No runtime adapter, CLI,
+  queue, tool execution or supported-platform behavior is enabled.
+
 - Preserve the authorization ledger's trusted clock high-water mark after denied
   issue/consume attempts. Recheck elapsed permission after writer locks and before
   reservation so delayed or rolled-back clocks cannot revive expired contracts.
+
+- Add opt-in native Windows fault evidence for real loopback control loss/delay
+  and ambiguous owned finalization, with accounting and journal replay checks.
+  Test coverage only; execution behavior and supported profiles are unchanged.
+
+- Add explicit `--controlled --duration-budget SECONDS`, bound cumulative Map
+  allocation receipt and monotonic deadline composition. Requires unreleased Map
+  `0035durationbudget`. Default calls stay unchanged; cleanup/transport scope is
+  documented separately from the finite permission window.
+  Owned claims and monitor entry are single-use, including unknown responses and
+  failed monitor setup, so retries cannot renew permission or create parallel windows.
+
+- Add explicit `--controlled --target-budget` for fixed Gate plans, bound Map
+  cumulative origin-attempt receipts and guarded dispatch. Requires unreleased Map
+  `0034targetbudget` and owner configuration. Default paths remain unchanged.
+
+- Add explicit `jobs run --controlled --concurrency-budget` and mandatory Map
+  reservation receipt. Requires matching unreleased Map `0033concurrencybudget`
+  and owner configuration; default calls remain unchanged.
+
+- Add opt-in expiring/revocable Gate reference grants, claim/provider/launch
+  revalidation and conservative protected recovery. Preserve signed deadlines
+  across grant-lock waits; legacy approvals are unchanged. See
+  [the increment note](changelog/unreleased-expiring-reference-grants.md).
+
+- Add opt-in `jobs run --controlled` and `jobs stop RUN_ID`: owned control leases,
+  graceful/forced process-tree cancellation and conservative partial-state recovery.
+  Requires matching unreleased Map execution-control migration/endpoints. No worker,
+  default CLI behavior, distribution pin or Strict authorization claim changes.
 
 - Cap opt-in guarded execution by the execution contract's own expiry, approval
   expiry and testing-window end. Recheck the deadline after credential/job-file

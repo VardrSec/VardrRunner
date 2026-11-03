@@ -597,6 +597,32 @@ def check_gate_case(test_case: dict, engagement_id: str) -> None:
     ``ConfigError`` naming the first unapproved reference; resolves nothing.
     """
     _refuse_environment_references(test_case)
+    from vardrrunner import credential_grants
+
+    grant_policy = credential_grants.current()
+    if grant_policy is not None:
+        for identity in configs.gate_identities(test_case):
+            cred = identity.get("credential")
+            if cred is None:
+                continue
+            if not isinstance(cred, dict):
+                raise credential_grants.GrantError("malformed_grant_reference")
+            if cred.get("value"):
+                raise credential_grants.GrantError(
+                    "literal_credentials_unsupported_for_expiring_grants"
+                )
+            supplied = [key for key, _ in _REFERENCE_SOURCES if key in cred]
+            if len(supplied) > 1:
+                raise credential_grants.GrantError("malformed_grant_reference")
+            for key in supplied:
+                if type(cred[key]) is not str or not cred[key] or cred[key] != cred[key].strip():
+                    raise credential_grants.GrantError("malformed_grant_reference")
+        try:
+            origins = _case_origins(test_case)
+        except configs.ConfigError:
+            raise credential_grants.GrantError("invalid_grant_target") from None
+        grant_policy.check(engagement_id, origins, credential_references(test_case))
+        return
     refs = credential_references(test_case)
     if not refs:
         return
@@ -628,10 +654,19 @@ def _resolve_identity_secrets(test_case: dict, engagement_id: str) -> dict:
     """
     check_gate_case(test_case, engagement_id)
     resolved = copy.deepcopy(test_case)
-    for idx, identity in enumerate(configs.gate_identities(resolved)):
-        cred = identity.get("credential")
-        if isinstance(cred, dict):
-            _resolve_one_credential(cred, str(identity.get("id", f"#{idx}")))
+    from vardrrunner import credential_grants
+
+    try:
+        for idx, identity in enumerate(configs.gate_identities(resolved)):
+            cred = identity.get("credential")
+            if isinstance(cred, dict):
+                _resolve_one_credential(cred, str(identity.get("id", f"#{idx}")))
+    except Exception:
+        if credential_grants.current() is not None:
+            raise credential_grants.GrantError("credential_resolution_failed") from None
+        raise
+    if credential_grants.current() is not None:
+        check_gate_case(test_case, engagement_id)
     return resolved
 
 

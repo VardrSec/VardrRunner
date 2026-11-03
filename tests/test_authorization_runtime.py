@@ -7,9 +7,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from tests.test_authorization_contract import NOW, SEED, TOOL, specimen  # noqa: F401
-from vardrrunner import runner
+from vardrrunner import credential_grants, handlers, runner
 from vardrrunner.authorization import runtime
 from vardrrunner.authorization.codec import AuthorizationError, decoded, sign, unb64
+
+REAL_CHECK = handlers.check_gate_case
 
 
 class Clock:
@@ -112,7 +114,8 @@ def test_deadline_rechecked_after_private_job_preparation(
         spawn.assert_not_called()
     else:
         assert runner.run_vardrgate(job, tmp_path / "result.json", timeout=60, **kwargs) == 0
-        process.wait.assert_called_once_with(timeout=5)
+        process.wait.assert_called_once()
+        assert 0 < process.wait.call_args.kwargs["timeout"] <= 5
     assert len(prepared) == 2
     assert all(not file.exists() and not directory.exists() for file, directory in prepared)
 
@@ -165,3 +168,31 @@ def test_projection_file_is_private_bound_and_removed(tmp_path, monkeypatch):
         request_guard={"schema": "fixture-projection"},
     )
     assert not captured["job"].exists() and not captured["projection"].exists()
+
+
+def test_standalone_expiring_mode_is_explicit_and_required(local_execution, monkeypatch):
+    s, run_dir, handler, _ = local_execution
+    # Restore the real checker that the fixture normally mocks.
+    monkeypatch.setattr(handlers, "check_gate_case", REAL_CHECK)
+    monkeypatch.setattr(credential_grants, "now", lambda: NOW)
+    args = (
+        s["ledger"],
+        s["contract"],
+        s["approval"],
+        s["plan"],
+        s["case"],
+        s["execution"],
+        (s["anchor"],),
+        s["runtime"],
+        run_dir,
+    )
+    with pytest.raises(credential_grants.GrantError, match="missing"):
+        runtime.execute_gate(*args, expiring_grants=True)
+    handler.assert_not_called()
+    credential_grants.Store().approve(
+        "standalone", "eng-1", "https://api.example.test", "env", "NM1_OWNER", 60
+    )
+    # Handler launch is mocked; the real contract validator, ledger and local
+    # grant authority still run. No target or provider is contacted.
+    monkeypatch.setattr(handlers.VardrGateHandler, "execute", handler)
+    assert runtime.execute_gate(*args, expiring_grants=True).exists()

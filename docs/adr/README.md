@@ -37,4 +37,12 @@ the way it does.
 | [0023](0023-approved-gate-credential-references.md) | Operator-approved VardrGate credential references | Accepted |
 | [0024](0024-nmap-outside-supported-toolkit.md) | Nmap outside the supported toolkit; naabu for port discovery | Accepted |
 | [0025](0025-authorization-contract-v1.md) | NM-1 authorization contracts and bounded approvals | Accepted direction; opt-in prototypes |
+| [0026](0026-controlled-cancellation.md) | Explicit owned execution control | Local NM-2 increment for review |
+| [0027](0027-expiring-reference-grants.md) | Explicit expiring/revocable reference grants | Local NM-2 increment for review |
+| [0028](0028-engagement-capacity.md) | Explicit owned engagement capacity | Local NM-2 increment for review |
+| [0029](0029-cumulative-target-attempts.md) | Cumulative represented-origin attempts | Local NM-2 increment for review |
+| [0030](0030-allocated-duration-permission.md) | Finite allocated wall-permission windows | Local NM-2 increment for review |
 | [0031](0031-ledger-clock-denials.md) | Expiry observations survive denial and lock delay | Verified foundation correction |
+| [0032](0032-unregistered-managed-native-gate.md) | Unregistered managed Gate/native composition | Local NM-2 increment for review |
+| [0033](0033-managed-preclaim-entry.md) | One-shot managed pre-claim entry | Local NM-2 increment for review |
+| [0038](0038-explicit-managed-json-transport.md) | Explicit bounded managed JSON transport | Local unregistered prerequisite; canonical worker exit open |

@@ -13,6 +13,8 @@ import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractContextManager, nullcontext
+from typing import Any, cast
 
 import typer
 from rich.console import Console
@@ -23,7 +25,10 @@ from vardrrunner import (
     compatibility,
     config,
     configs,
+    controlled_jobs,
+    credential_grants,
     errors,
+    execution_control,
     handlers,
     policy,
     redaction,
@@ -31,6 +36,7 @@ from vardrrunner import (
     runner,
     target_safety,
 )
+from vardrrunner import target_budget as target_limits
 from vardrrunner import targets as targets_module
 from vardrrunner.commands.heartbeat import send_heartbeat
 from vardrrunner.commands.run import _confirm, _make_run_dir
@@ -118,6 +124,15 @@ def _complete_done(client: api.VardrMapClient, job_id: str, note: str = "") -> N
     _emit(client, job_id, "done", note)
 
 
+def _require_duration_control(seconds: int | None, controlled: bool) -> None:
+    if seconds is not None and (
+        not controlled or type(seconds) is not int or not 1 <= seconds <= 86400
+    ):
+        raise configs.ConfigError(
+            "duration budget requires controlled execution and 1–86400 seconds"
+        )
+
+
 def _execute_one(
     client: api.VardrMapClient,
     con: Console,
@@ -126,8 +141,29 @@ def _execute_one(
     journal_store: Journal | None = None,
     backend_url: str | None = None,
     limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
+    controlled: bool = False,
+    expiring_grants: bool = False,
+    concurrency_budget: bool = False,
+    target_budget: bool = False,
+    duration_budget: int | None = None,
 ) -> None:
     """Run a single job through the uniform lifecycle, delegating specifics to its handler."""
+    _require_duration_control(duration_budget, controlled)
+    if expiring_grants:
+        with credential_grants.required(str(client.base)):
+            return _execute_one(
+                client,
+                con,
+                job,
+                yes,
+                journal_store,
+                backend_url,
+                limits,
+                controlled,
+                concurrency_budget=concurrency_budget,
+                target_budget=target_budget,
+                duration_budget=duration_budget,
+            )
     # Validate the job envelope before touching any field — a drifted/partial payload
     # must fail cleanly, not crash the loop with a KeyError.
     try:
@@ -147,6 +183,15 @@ def _execute_one(
     cfg = env.config
 
     record: RunRecord | None = None
+    if controlled:
+        if journal_store is None:
+            raise ValueError("controlled execution requires a durable journal")
+        client = cast(
+            api.VardrMapClient,
+            controlled_jobs.OwnedClient(
+                client, concurrency_budget=concurrency_budget, duration_seconds=duration_budget
+            ),
+        )
     if journal_store is not None:
         record = journal_store.begin(
             job_id=job_id,
@@ -155,7 +200,15 @@ def _execute_one(
             job_type=tool_type,
             tool=tool_type,
             target_source=target_src,
-            command_profile=_journal_profile(tool_type, cfg),
+            command_profile={
+                **_journal_profile(tool_type, cfg),
+                **({"controlled": True} if controlled else {}),
+                **(
+                    {"grant_policy": "expiring/1"}
+                    if credential_grants.current() is not None
+                    else {}
+                ),
+            },
             job_schema_version=env.schema_version,
         )
         if record.phase != Phase.DISCOVERED:
@@ -192,11 +245,24 @@ def _execute_one(
             runner.disabled_tool_reason(tool_type) or f"unknown tool type {tool_type!r}",
         )
         return
+    if controlled and not execution_control.available():
+        fail(
+            errors.FailureCategory.UNSUPPORTED_JOB,
+            "controlled process-tree containment is currently supported on native Windows only",
+        )
+        return
+    if controlled and tool_type == "ffuf":
+        fail(
+            errors.FailureCategory.UNSUPPORTED_JOB,
+            "ffuf's in-process HTTP preflight has no active cancellation boundary; controlled mode unsupported",
+        )
+        return
     # Capability check before claiming — never claim work this runner can't do.
     if not runner.tool_available(handler.tool):
         fail(errors.FailureCategory.TOOL_MISSING, f"'{handler.tool}' not found on PATH")
         return
 
+    target_guard = None
     try:
         tool_cfg = handler.parse_config(cfg)
         if isinstance(tool_cfg, configs.VardrGateConfig):
@@ -204,6 +270,14 @@ def _execute_one(
             # this machine for this engagement and the case's targets (ADR 0023).
             tool_cfg = dataclasses.replace(tool_cfg, engagement_id=engagement_id)
             handlers.check_gate_case(tool_cfg.test_case, engagement_id)
+        elif credential_grants.current() is not None:
+            raise credential_grants.GrantError("expiring_grants_profile_supports_gate_only")
+        if target_budget:
+            if not isinstance(client, controlled_jobs.OwnedClient):
+                raise configs.ConfigError("target budgets require controlled execution")
+            client.target_binding, target_guard = target_limits.prepare(tool_cfg)
+            if isinstance(tool_cfg, configs.VardrGateConfig):
+                tool_cfg = dataclasses.replace(tool_cfg, execution=target_guard["execution"])
     except configs.ConfigError as e:
         fail(errors.FailureCategory.INVALID_CONFIG, f"invalid config: {e}")
         return
@@ -289,7 +363,15 @@ def _execute_one(
         record = journal_store.transition(record.run_id, Phase.CLAIMING)
 
     try:
+        if credential_grants.current() is not None and isinstance(
+            tool_cfg, configs.VardrGateConfig
+        ):
+            handlers.check_gate_case(tool_cfg.test_case, engagement_id)
         claimed = client.claim_job(job_id)
+    except credential_grants.GrantError as e:
+        finish(Phase.FAILED, "not_claimed", errors.FailureCategory.INVALID_CONFIG, str(e))
+        _emit(client, job_id, "blocked", str(e))
+        return
     except errors.StopWorkError as e:
         # The operator's own halt switch. Never presented as a claim failure,
         # and never silently retried; execute_pending_jobs skips the engagement's
@@ -343,6 +425,13 @@ def _execute_one(
                     "test case changed between polling and claim; review and queue a new job",
                 )
                 return
+
+    if credential_grants.current() is not None and isinstance(tool_cfg, configs.VardrGateConfig):
+        try:
+            handlers.check_gate_case(tool_cfg.test_case, engagement_id)
+        except credential_grants.GrantError as exc:
+            fail(errors.FailureCategory.INVALID_CONFIG, str(exc))
+            return
 
     # Advisory findings from the backend's policy evaluation. Shown before any
     # tool runs so the operator sees them while they can still intervene; they
@@ -398,7 +487,13 @@ def _execute_one(
         )
     label = redaction.redact_text(str(handler.running_label(targets, tool_cfg)))
     stage = Phase.EXECUTING
+    monitor: AbstractContextManager = nullcontext()
+    if isinstance(client, controlled_jobs.OwnedClient):
+        assert journal_store is not None and record is not None
+        monitored_id = record.run_id
+        monitor = client.monitor(lambda: journal_store.stop_requested(monitored_id))
     try:
+        monitor.__enter__()
         con.print(f"Running {redaction.redact_rich_text(label)}…")
         _emit(client, job_id, "running", f"running {label}")
         if journal_store is not None and record is not None:
@@ -408,9 +503,19 @@ def _execute_one(
                 journal_store.transition(run_id, Phase.EXECUTING, pid=pid)
 
             with runner.observe_process(record_pid):
-                output = handler.execute(targets, run_dir, tool_cfg)
+                output = handler.execute(
+                    targets,
+                    run_dir,
+                    tool_cfg,
+                    **({"request_guard": target_guard} if target_guard is not None else {}),
+                )
         else:
-            output = handler.execute(targets, run_dir, tool_cfg)
+            output = handler.execute(
+                targets,
+                run_dir,
+                tool_cfg,
+                **({"request_guard": target_guard} if target_guard is not None else {}),
+            )
 
         if output is None or not output.exists() or output.stat().st_size == 0:
             con.print("[yellow]No output produced — nothing to upload.[/yellow]")
@@ -466,6 +571,45 @@ def _execute_one(
             return
         _complete_done(client, job_id)
         finish(Phase.DONE, "done")
+    except execution_control.ExecutionStopped as e:
+        # A partial scanner report is retained locally, never promoted/uploaded
+        # as a completed assessment. Uncertain termination keeps the fence open.
+        tool_failure = str(e) in {
+            "tool_timeout",
+            "descendants_after_tool_exit",
+            "post_creation_permission_failure",
+            "authorization_deadline",
+        }
+        outcome = ("failed" if tool_failure else "cancelled") if e.confirmed else "uncertain"
+        acknowledged = False
+        if isinstance(client, controlled_jobs.OwnedClient):
+            try:
+                client.finalize(outcome)
+                acknowledged = True
+            except Exception:
+                logging.warning("Controlled execution finalization is unacknowledged")
+        if journal_store is not None and record is not None:
+            latest = journal_store.get(record.run_id) or record
+            journal_store.transition(
+                record.run_id,
+                latest.phase,
+                pid=None if e.confirmed else latest.pid or e.pid,
+                status=outcome,
+                last_event=str(e),
+                failure_reason=str(e),
+            )
+            if e.confirmed and acknowledged:
+                category = errors.FailureCategory.STOP_WORK
+                if tool_failure:
+                    category = (
+                        errors.FailureCategory.TOOL_TIMEOUT
+                        if str(e) in {"tool_timeout", "authorization_deadline"}
+                        else errors.FailureCategory.TOOL_FAILED
+                    )
+                finish(
+                    Phase.FAILED if tool_failure else Phase.INTERRUPTED, outcome, category, str(e)
+                )
+        con.print(f"[yellow]Execution {outcome}; partial files retained.[/yellow]")
     except runner.ToolTimeout as e:
         _fail_job(client, con, job_id, str(e))
         finish(Phase.FAILED, "failed", errors.FailureCategory.TOOL_TIMEOUT, str(e))
@@ -477,6 +621,8 @@ def _execute_one(
             else errors.FailureCategory.TOOL_FAILED
         )
         finish(Phase.FAILED, "failed", category, str(e))
+    finally:
+        monitor.__exit__(None, None, None)
 
 
 def execute_pending_jobs(
@@ -488,6 +634,11 @@ def execute_pending_jobs(
     backend_url: str | None = None,
     limits: resources.RunnerLimits = resources.DEFAULT_LIMITS,
     client_factory: Callable[[], api.VardrMapClient] | None = None,
+    controlled: bool = False,
+    expiring_grants: bool = False,
+    concurrency_budget: bool = False,
+    target_budget: bool = False,
+    duration_budget: int | None = None,
 ) -> int:
     """Claim and execute all pending jobs. Returns the number of jobs found.
 
@@ -495,6 +646,7 @@ def execute_pending_jobs(
     the rest of this run, so one halt is reported once instead of once per job. The next
     `jobs run` asks again, which is how lifting stop-work takes effect.
     """
+    _require_duration_control(duration_budget, controlled)
     jobs_list = client.pending_jobs()
     if not jobs_list:
         return 0
@@ -531,6 +683,14 @@ def execute_pending_jobs(
                 journal_store=journal_store,
                 backend_url=backend_url,
                 limits=limits,
+                **({"controlled": True} if controlled else {}),
+                **({"expiring_grants": True} if expiring_grants else {}),
+                **({"concurrency_budget": True} if concurrency_budget else {}),
+                **({"target_budget": True} if target_budget else {}),
+                **cast(
+                    dict[str, Any],
+                    {"duration_budget": duration_budget} if duration_budget is not None else {},
+                ),
             )
         except errors.StopWorkError:
             # Reported already by _execute_one. Don't claim this engagement's other
@@ -564,8 +724,27 @@ def execute_pending_jobs(
     return len(jobs_list)
 
 
-def run_jobs(yes: bool = False) -> None:
+def run_jobs(
+    yes: bool = False,
+    *,
+    controlled: bool = False,
+    expiring_grants: bool = False,
+    concurrency_budget: bool = False,
+    target_budget: bool = False,
+    duration_budget: int | None = None,
+) -> None:
     """Claim and execute all pending jobs for the authenticated user."""
+    if concurrency_budget and not controlled:
+        console.print("[red]--concurrency-budget requires --controlled.[/red]")
+        raise typer.Exit(2)
+    if target_budget and not controlled:
+        console.print("[red]--target-budget requires --controlled.[/red]")
+        raise typer.Exit(2)
+    if duration_budget is not None and (
+        not controlled or type(duration_budget) is not int or not 1 <= duration_budget <= 86400
+    ):
+        console.print("[red]--duration-budget requires --controlled and 1–86400 seconds.[/red]")
+        raise typer.Exit(2)
     report = send_heartbeat(quiet=True)
     if isinstance(report, compatibility.CompatibilityReport) and not report.compatible:
         console.print(
@@ -592,7 +771,21 @@ def run_jobs(yes: bool = False) -> None:
         backend_url=url,
         limits=limits,
         client_factory=lambda: api.VardrMapClient(url, key),
+        **({"controlled": True} if controlled else {}),
+        **({"expiring_grants": True} if expiring_grants else {}),
+        **({"concurrency_budget": True} if concurrency_budget else {}),
+        **({"target_budget": True} if target_budget else {}),
+        **cast(
+            dict[str, Any],
+            {"duration_budget": duration_budget} if duration_budget is not None else {},
+        ),
     )
     if executed == 0:
         console.print("[dim]No pending jobs.[/dim]")
         raise typer.Exit(0)
+
+
+def stop_job(run_id: str) -> None:
+    """Request local emergency stop; the owning invocation confirms termination."""
+    Journal(config.journal_file()).request_stop(run_id)
+    console.print("Local stop requested; termination is not yet confirmed.")

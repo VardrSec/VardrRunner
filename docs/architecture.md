@@ -6,6 +6,37 @@ forget expiry, and permission transactions recheck time after writer-lock waits
 and before reservation. Monotonic elapsed time composes with the runtime clock;
 unknown ordinals/fences remain spent. See [ADR 0031](adr/0031-ledger-clock-denials.md).
 
+Opt-in duration allocations use an immutable claim-start monotonic deadline,
+composed through existing launch checks and native supervision. Map accounts
+nonrefundable allocated seconds; Runner measures and enforces the permission
+window. Claim and monitor entry are atomically single-use per owned facade,
+including unknown responses and failed monitor setup. See
+[ADR 0030](adr/0030-allocated-duration-permission.md) for exclusions.
+
+Opt-in cumulative target accounting uses Map's owned claim receipt and Runner's
+existing fixed Gate compiler/request guard, including auxiliary origins. Default
+execution remains unchanged. See [ADR 0029](adr/0029-cumulative-target-attempts.md).
+
+Explicit owned engagement capacity uses Map reservations via
+`jobs run --controlled --concurrency-budget`. Map accounts; Runner executes and
+requires the receipt. This does not count unregistered manual work or enable a
+worker. See [ADR 0028](adr/0028-engagement-capacity.md).
+
+Opt-in expiring Gate reference grants are described in
+[ADR 0027](adr/0027-expiring-reference-grants.md). A separate config catalog uses
+the existing journal for writer serialization, digest anchoring and observed-time
+fencing. Checks cover claim, provider resolution and actual process creation,
+including auxiliary origins. Signed execution deadlines compose with grant/control
+checks after lock waiting. Post-creation failures preserve process ownership and
+partial-artifact fences. Default approval and execution behavior is unchanged;
+reference permission is distinct from human execution approval.
+
+Opt-in manual execution control and cancellation are described in
+[ADR 0026](adr/0026-controlled-cancellation.md). Map control is authenticated and
+attempt-bound, with bounded leases, conservative uncertainty and local emergency
+requests in the existing journal. It does not grant execution approval or enable
+a worker; legacy paths and Gate evidence semantics remain unchanged.
+
 The first Compose distribution uses a one-shot, non-root Runner container; native execution remains supported. See [ADR 0019](adr/0019-container-packaging.md).
 
 The toolkit's existing Katana, DNSx, Naabu, httpx, Subfinder, FFUF and Nuclei use recorded source builds with dependency patches
@@ -298,6 +329,17 @@ evidence and fail the job. Deploy the matching Map support before this feature.
 
 ## NM-1 opt-in authorization foundation
 
+The unregistered `authorization.claim.ManagedEntry` adds a one-shot pre-claim
+boundary and same-journal durable intent fence around that managed composition.
+It preserves pre-RPC clock/grant identity through local artifact creation;
+recovery holds uncertainty without replay or legacy finalization. See
+[ADR 0033](adr/0033-managed-preclaim-entry.md).
+
+The later unregistered `authorization.managed.ManagedGate` prototype composes the
+same handler with current-control verification, durable consumption, expiring grants
+and native Windows containment. It is not a CLI/queue adapter and does not finalize
+managed Map success. See [ADR 0032](adr/0032-unregistered-managed-native-gate.md).
+
 The independent `authorization` package adds signed bounded approvals, single-use
 execution contracts and additive journal state. It reuses the Gate handler with a
 request projection for the explicitly supported `gate-fixed-http/1` profile.
@@ -313,3 +355,53 @@ The deadline is the earliest execution-contract expiry, approval expiry or testi
 window end, capped by approved duration. The existing subprocess adapter rechecks
 it after credential and private-file preparation; elapsed setup time cannot restore
 permission. This is the existing timeout boundary, not managed cancellation.
+
+### Unregistered managed consumption barrier
+
+The preclaim handle reserves local consumption, journals its one-shot send,
+requires Map's exact current owned-contract ACK, and journals that observation
+before native dispatch. Neither an ACK nor a locally retained artifact completes
+Map work or releases capacity. Recovery defers all such attempts without network
+replay. Separate send/ACK markers survive later held states. See
+[ADR 0034](adr/0034-managed-consumption-barrier.md); this remains a local prototype.
+
+### Managed result and terminal receipts
+
+The unregistered preclaim handle now exposes explicit finalization after known
+native return. Result retention and completion have separate durable sends and
+exact acknowledgements; evidence receipt alone releases nothing. Explicit
+reconciliation observes a trusted authenticated receipt and closes local state
+only for the exact terminal outcome. Ordinary recovery still defers managed rows.
+See [ADR 0035](adr/0035-managed-result-finalization.md).
+
+### Managed known-stop receipts
+
+A managed native `ExecutionStopped` can establish a report right only with literal
+confirmed containment and a fixed known cause. Observer PIDs remain metadata, not
+a permission or liveness source. The explicit one-shot stop lane requires consumed
+owned binding and an exact remote receipt before local terminal state. Missing or
+uncertain receipt state stays held. See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
+
+### Managed claim observation after restart
+
+An explicit unregistered observation authenticates the original enrolled principal
+and plan/case/association fingerprints without returning a control capability.
+It records metadata only; absence never authorizes a retry. Reconciliation closes
+only an existing exact durable result/stop intent, preserving native proof and
+uncertainty fences. Ordinary recovery remains deferred. See
+[ADR 0037](adr/0037-managed-claim-observation.md).
+
+### Explicit managed JSON transport
+
+`api.VardrMapClient.managed_post` is a library-only one-shot HTTPS primitive with
+strict finite JSON and request/response size limits, no retries or redirects,
+fresh header-authenticated sessions and inherited proxy/CA configuration. It does
+not register managed Map routes or enable execution. Read-idle waits are not a
+total transfer deadline; existing signed/monotonic ceilings remain mandatory.
+See [ADR 0038](adr/0038-explicit-managed-json-transport.md) and the
+[canonical NM-2 exit status](nm2-canonical-exit-status.md).
+
+Managed transport also preserves a trusted configured API base prefix such as
+Full's `/backend`; it does not strip or rewrite the signed origin/association
+identity. Only simple path segments are accepted. Prefix compatibility supplies
+no new route activation or execution right.

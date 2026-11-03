@@ -12,7 +12,9 @@ GET/HEAD/PUT/DELETE/OPTIONS/TRACE) — POST and PATCH are never auto-retried, so
 dropped response can't cause a double-claim, double-import, or duplicate event.
 """
 
+import math
 import platform
+import re
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,18 @@ from vardrrunner import __version__, errors
 # Statuses worth retrying: rate-limit + transient server/proxy errors.
 _RETRY_STATUSES = (429, 500, 502, 503, 504)
 PYPI_METADATA_URL = "https://pypi.org/pypi/vardrrunner/json"
+_MANAGED_REQUEST_BYTES = 1024 * 1024
+_MANAGED_RESPONSE_BYTES = 256 * 1024
+
+
+class ManagedTransportError(RuntimeError):
+    """A fixed transport failure; never includes credentials or response bodies."""
+
+
+class _ManagedHeaderAuth(requests.auth.AuthBase):
+    def __call__(self, request):
+        # Prevent requests' implicit netrc lookup from replacing the configured key.
+        return request
 
 
 class ReleaseMetadataError(RuntimeError):
@@ -129,6 +143,100 @@ class VardrMapClient:
         r = self.session.post(self._url(path), json=json, files=files, data=data, timeout=60)
         r.raise_for_status()
         return r.json()
+
+    def managed_post(
+        self, path: str, payload: dict, *, timeout: tuple[float, float] = (3.05, 3)
+    ) -> dict:
+        """Explicit bounded JSON transport; no route, enrollment or execution activation.
+
+        Use a fresh one-shot session so legacy retry/cookie defaults cannot apply.
+        Timeouts bound connect/read-idle waits, not total wall-clock transfer time;
+        managed callers retain their original signed/monotonic permission ceilings.
+        """
+        from vardrrunner.authorization.codec import decoded, encoded, require
+        from vardrrunner.authorization.plan import origin
+
+        try:
+            parts = urllib.parse.urlsplit(self.base)
+            origin(self.base)
+            require(
+                parts.scheme == "https"
+                and re.fullmatch(r"(?:/[A-Za-z0-9_-]+)*", parts.path) is not None
+                and not parts.query
+                and "?" not in self.base
+                and "#" not in self.base
+                and (
+                    self.session.verify is True
+                    or (type(self.session.verify) is str and bool(self.session.verify))
+                )
+                and isinstance(path, str)
+                and len(path) <= 512
+                and re.fullmatch(r"/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", path) is not None
+                and type(payload) is dict
+                and type(timeout) is tuple
+                and len(timeout) == 2
+                and all(
+                    type(v) in (int, float) and math.isfinite(v) and 0 < v <= 10 for v in timeout
+                ),
+                "invalid_managed_transport",
+            )
+            body = encoded(payload)
+            require(len(body) <= _MANAGED_REQUEST_BYTES, "managed_request_size")
+            with requests.Session() as session:
+                session.auth = _ManagedHeaderAuth()
+                session.trust_env = self.session.trust_env
+                session.verify, session.cert = self.session.verify, self.session.cert
+                session.proxies.update(self.session.proxies)
+                session.headers.update(
+                    {
+                        "Authorization": self.session.headers["Authorization"],
+                        "User-Agent": self.session.headers["User-Agent"],
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                        "Accept-Encoding": "identity",
+                    }
+                )
+                session.mount("https://", HTTPAdapter(max_retries=0))
+                with session.post(
+                    self._url(path), data=body, timeout=timeout, stream=True, allow_redirects=False
+                ) as response:
+                    length = response.headers.get("Content-Length")
+                    require(
+                        response.status_code == 200
+                        and response.headers.get("Content-Type", "").split(";")[0].lower()
+                        == "application/json"
+                        and response.headers.get("Content-Encoding", "identity").lower()
+                        == "identity"
+                        and (
+                            length is None
+                            or (
+                                length.isascii()
+                                and length.isdecimal()
+                                and int(length) <= _MANAGED_RESPONSE_BYTES
+                            )
+                        ),
+                        "invalid_managed_response",
+                    )
+                    data = bytearray()
+                    for chunk in response.iter_content(chunk_size=1024):
+                        require(
+                            len(data) + len(chunk) <= _MANAGED_RESPONSE_BYTES,
+                            "managed_response_size",
+                        )
+                        data.extend(chunk)
+                    result = decoded(bytes(data), _MANAGED_RESPONSE_BYTES)
+                    require(type(result) is dict, "managed_response_object")
+                    encoded(result)  # Reject exponent overflow/nonfinite decoded numbers too.
+                    return result
+        except (
+            requests.RequestException,
+            ValueError,
+            TypeError,
+            KeyError,
+            OverflowError,
+            RecursionError,
+        ):
+            raise ManagedTransportError("managed request failed") from None
 
     def whoami(self) -> dict:
         return self.get("/me")
@@ -268,6 +376,41 @@ class VardrMapClient:
             payload["error_message"] = error
         r = self.session.patch(self._url(f"/jobs/{job_id}"), json=payload, timeout=30)
         return self._classified(r)
+
+    def claim_controlled(
+        self,
+        job_id: str,
+        runner_id: str,
+        *,
+        concurrency_budget: bool = False,
+        target_binding: dict | None = None,
+        duration_seconds: int | None = None,
+    ) -> dict:
+        """Explicit companion capability; old servers must refuse, never fall back."""
+        response = self.session.post(
+            self._url(f"/jobs/{job_id}/claim"),
+            json={
+                "runner_id": runner_id,
+                "origin": self.base,
+                **({"concurrency_budget": True} if concurrency_budget else {}),
+                **({"target_binding": target_binding} if target_binding is not None else {}),
+                **({"duration_seconds": duration_seconds} if duration_seconds is not None else {}),
+            },
+            timeout=(1, 1),
+            allow_redirects=False,
+        )
+        return self._classified(response)
+
+    def execution_control(self, job_id: str, payload: dict, *, finish: bool = False) -> dict:
+        """No redirects or retries for capability-bearing control messages."""
+        endpoint = "execution-finish" if finish else "control"
+        response = self.session.post(
+            self._url(f"/jobs/{job_id}/{endpoint}"),
+            json=payload,
+            timeout=(1, 1),
+            allow_redirects=False,
+        )
+        return self._classified(response)
 
     def patch(self, path: str, json: dict | None = None) -> Any:
         r = self.session.patch(self._url(path), json=json, timeout=30)

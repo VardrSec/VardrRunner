@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
-from vardrrunner import configs, handlers, resources, runner
+from vardrrunner import configs, credential_grants, handlers, resources, runner
 
 from .codec import TrustAnchor, digest, require
 from .contracts import ValidationContext, approved, timestamp
@@ -25,12 +25,19 @@ def execute_gate(
     anchors: tuple[TrustAnchor, ...],
     context: ValidationContext,
     run_dir: Path,
+    *,
+    expiring_grants: bool = False,
 ) -> Path:
     """Validate/reserve, reuse local secret approvals and execute a guarded Gate.
 
     This standalone prototype supplies no Mapless workspace or managed control.
     Operator invocation and a signed approval are both required by the caller.
     """
+    if expiring_grants:
+        with credential_grants.required("standalone"):
+            return execute_gate(
+                ledger, envelope, approval, plan, case, execution, anchors, context, run_dir
+            )
     require(context.origin == "standalone", "managed_control_unsupported")
     require(
         run_dir.is_dir() and not (run_dir / "vardrgate_result.json").exists(),

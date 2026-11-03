@@ -14,7 +14,7 @@ from pathlib import Path
 from rich.console import Console
 
 from vardrrunner import api, errors, handlers, redaction
-from vardrrunner.journal import Journal, Phase, RunRecord, normalize_backend_url
+from vardrrunner.journal import Journal, JournalError, Phase, RunRecord, normalize_backend_url
 
 
 @dataclass(frozen=True)
@@ -185,6 +185,22 @@ def reconcile(
         counts["examined"] += 1
         if record.backend_url != expected_backend:
             counts["foreign"] += 1
+            continue
+        try:
+            managed = record.command_profile.get(
+                "managed_profile"
+            ) == "managed-claim/1" or store.managed_claim_exists(record.run_id)
+        except JournalError:
+            counts["deferred"] += 1
+            continue
+        if (
+            managed
+            or record.command_profile.get("controlled")
+            or record.command_profile.get("grant_policy") == "expiring/1"
+        ):
+            # Neither owned control nor grant launch proof can be reconstructed
+            # from a partial artifact. Never promote these through legacy recovery.
+            counts["deferred"] += 1
             continue
         if record.phase in {Phase.DISCOVERED, Phase.VALIDATING, Phase.TARGETS_RESOLVED}:
             store.finish(

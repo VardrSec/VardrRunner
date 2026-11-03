@@ -19,6 +19,34 @@ from vardrrunner.commands import run as run_cmd
 runner = CliRunner()
 
 
+def test_jobs_run_expiring_grants_routes_opt_in():
+    with patch("vardrrunner.commands.jobs.run_jobs") as run:
+        result = runner.invoke(app, ["jobs", "run", "--yes", "--expiring-grants"])
+    assert result.exit_code == 0, result.output
+    run.assert_called_once_with(yes=True, expiring_grants=True)
+
+
+def test_jobs_run_concurrency_budget_routes_opt_in():
+    with patch("vardrrunner.commands.jobs.run_jobs") as run:
+        result = runner.invoke(app, ["jobs", "run", "--controlled", "--concurrency-budget"])
+    assert result.exit_code == 0, result.output
+    run.assert_called_once_with(yes=False, controlled=True, concurrency_budget=True)
+
+
+def test_jobs_run_target_budget_routes_opt_in():
+    with patch("vardrrunner.commands.jobs.run_jobs") as run:
+        result = runner.invoke(app, ["jobs", "run", "--controlled", "--target-budget"])
+    assert result.exit_code == 0, result.output
+    run.assert_called_once_with(yes=False, controlled=True, target_budget=True)
+
+
+def test_jobs_run_duration_budget_routes_opt_in():
+    with patch("vardrrunner.commands.jobs.run_jobs") as run:
+        result = runner.invoke(app, ["jobs", "run", "--controlled", "--duration-budget", "5"])
+    assert result.exit_code == 0, result.output
+    run.assert_called_once_with(yes=False, controlled=True, duration_budget=5)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -392,6 +420,16 @@ class TestJobsCommands:
         with patch("vardrrunner.commands.jobs.run_jobs") as mock:
             invoke("jobs", "run", "--yes")
         mock.assert_called_once_with(yes=True)
+
+    def test_jobs_controlled_flag(self):
+        with patch("vardrrunner.commands.jobs.run_jobs") as mock:
+            invoke("jobs", "run", "--yes", "--controlled")
+        mock.assert_called_once_with(yes=True, controlled=True)
+
+    def test_jobs_stop(self):
+        with patch("vardrrunner.commands.jobs.stop_job") as mock:
+            invoke("jobs", "stop", "local-run-uuid")
+        mock.assert_called_once_with("local-run-uuid")
 
 
 # ---------------------------------------------------------------------------

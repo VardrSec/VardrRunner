@@ -8,6 +8,7 @@ backend (today: VardrMap) over HTTP. See https://github.com/VardrSec/VardrRunner
 import importlib
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import typer
 from rich.console import Console
@@ -241,15 +242,34 @@ def credentials_approve(
     origin: str = _APPROVAL_ORIGIN,
     env: str | None = _APPROVAL_ENV,
     keychain: str | None = _APPROVAL_KEYCHAIN,
+    issuer: str | None = typer.Option(
+        None, "--issuer", help="Map URL or standalone for an expiring grant"
+    ),
+    expires_in: int | None = typer.Option(
+        None,
+        "--expires-in",
+        min=1,
+        max=86400,
+        help="Explicit lifetime in seconds; requires --issuer",
+    ),
 ):
     """Let VardrGate jobs for one engagement and origin use a credential reference."""
-    credentials_cmd.approve(engagement_id, origin, env, keychain)
+    if issuer is not None or expires_in is not None:
+        credentials_cmd.approve(
+            engagement_id, origin, env, keychain, issuer=issuer, expires_in=expires_in
+        )
+    else:
+        credentials_cmd.approve(engagement_id, origin, env, keychain)
 
 
 @credentials_app.command("approvals")
-def credentials_approvals():
+def credentials_approvals(
+    issuer: str | None = typer.Option(
+        None, "--issuer", help="Inspect this expiring-grant namespace"
+    ),
+):
     """List approved credential references (names only)."""
-    credentials_cmd.list_approvals()
+    credentials_cmd.list_approvals(**({"issuer": issuer} if issuer is not None else {}))
 
 
 @credentials_app.command("revoke")
@@ -258,9 +278,14 @@ def credentials_revoke(
     origin: str = _APPROVAL_ORIGIN,
     env: str | None = _APPROVAL_ENV,
     keychain: str | None = _APPROVAL_KEYCHAIN,
+    issuer: str | None = typer.Option(
+        None, "--issuer", help="Revoke only this expiring-grant namespace"
+    ),
 ):
     """Withdraw an approved credential reference."""
-    credentials_cmd.revoke(engagement_id, origin, env, keychain)
+    credentials_cmd.revoke(
+        engagement_id, origin, env, keychain, **({"issuer": issuer} if issuer is not None else {})
+    )
 
 
 audit_app = typer.Typer(
@@ -438,9 +463,50 @@ def jobs_list():
 @jobs_app.command("run")
 def jobs_run(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
+    controlled: bool = typer.Option(
+        False, "--controlled", help="Require owned active-job control from a matching Map"
+    ),
+    expiring_grants: bool = typer.Option(
+        False,
+        "--expiring-grants",
+        help="Require expiring Gate reference grants without legacy fallback",
+    ),
+    concurrency_budget: bool = typer.Option(
+        False,
+        "--concurrency-budget",
+        help="Require an explicitly configured engagement capacity reservation; needs --controlled",
+    ),
+    target_budget: bool = typer.Option(
+        False,
+        "--target-budget",
+        help="Require cumulative represented-origin allowance for fixed Gate; needs --controlled",
+    ),
+    duration_budget: int | None = typer.Option(
+        None,
+        "--duration-budget",
+        min=1,
+        max=86400,
+        help="Allocate finite wall-permission seconds; requires --controlled and Map policy",
+    ),
 ):
     """Claim and execute all pending scan jobs."""
-    jobs.run_jobs(yes=yes)
+    jobs.run_jobs(
+        yes=yes,
+        **({"controlled": True} if controlled else {}),
+        **({"expiring_grants": True} if expiring_grants else {}),
+        **({"concurrency_budget": True} if concurrency_budget else {}),
+        **({"target_budget": True} if target_budget else {}),
+        **cast(
+            dict[str, Any],
+            {"duration_budget": duration_budget} if duration_budget is not None else {},
+        ),
+    )
+
+
+@jobs_app.command("stop")
+def jobs_stop(run_id: str = typer.Argument(..., help="Local journal run UUID")):
+    """Request emergency stop of one locally owned controlled execution."""
+    jobs.stop_job(run_id)
 
 
 # --------------------------------------------------------------------------- #

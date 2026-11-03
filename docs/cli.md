@@ -1,5 +1,11 @@
 # VardrRunner — CLI Reference
 
+Opt-in NM-2 source builds add `vardrrunner jobs run --controlled [--yes]` with
+matching Map execution-control endpoints, and `vardrrunner jobs stop RUN_ID` to
+request local emergency stop of that journal run. A stop request is not confirmed
+termination. Ordinary invocation keeps existing behavior. See [ADR 0026](adr/0026-controlled-cancellation.md)
+for lease, ownership, platform and partial-evidence limits. No worker is enabled.
+
 For `vardrgate_api_test` jobs, reviewed identities can additionally declare
 `preflight: {url, expected_status, json_fields}`. The matching Gate build checks a
 same-origin GET session endpoint against public principal metadata before resource
@@ -1028,3 +1034,90 @@ binaries fail on the required flag before contacting a target.
 The internal guarded adapter also refuses an expired launch after local preparation
 and caps the process timeout by the signed execution contract's own expiry. No
 legacy CLI option or behavior changes.
+
+## Owned engagement capacity (local NM-2 increment)
+
+For finite cumulative permission allocations, invoke
+`jobs run --controlled --duration-budget 30`. Requires Map `0035durationbudget`
+and explicit full-scope owner duration policy. Seconds are 1–86400. The window
+starts before claim HTTP and covers later preparation and tool permission, using
+the strictest signed/local/budget deadline. It does not bound preclaim review or
+post-tool upload/finalization; existing graceful/forced cleanup is additional.
+Unused allocations are never refunded. Combine independent flags only where
+their profiles are supported. See ADR 0030 for timing and platform limitations.
+Unknown owned attempts remain fenced; rerunning a command cannot reset their
+allocated time or reopen their ownership.
+
+For a separately configured cumulative target ceiling, invoke
+`jobs run --controlled --target-budget`. Only fixed Gate request-guard cases are
+supported. Counts distinct represented origins per attempt, including auxiliary
+requests; repeats charge again. Requires Map `0034targetbudget` and explicit owner
+policy. Missing/mismatched charge receipts refuse execution. Spent allowance is
+never refunded or silently reset. This counts no arbitrary manual work and adds
+no duration budget, worker or global RPS promise. Flags can combine with separately
+configured concurrency and expiring-grant controls. See ADR 0029.
+
+For separately configured Map engagement capacity, explicitly invoke
+`jobs run --controlled --concurrency-budget`. Requires matching unreleased Map
+`0033concurrencybudget` and owner/full-scope policy configuration while idle.
+No fallback occurs without a reservation receipt. Slots count owned attempts
+through finalization, not manual/direct work, requests, targets or duration.
+Uncertain attempts retain slots. This enables no worker; Linux/Docker and ffuf
+controlled execution remain unsupported. See ADR 0028 for limits.
+
+## Expiring Gate reference grants (local NM-2 increment)
+
+Issue an explicit grant in a separate namespace; this command reads no secret:
+
+```text
+vardrrunner credentials approve -e ENGAGEMENT --origin https://api.example.test --env GATE_OWNER --issuer https://map.example.test --expires-in 3600
+vardrrunner credentials approvals --issuer https://map.example.test
+vardrrunner jobs run --expiring-grants
+vardrrunner credentials revoke -e ENGAGEMENT --origin https://api.example.test --env GATE_OWNER --issuer https://map.example.test
+```
+
+Use `--keychain ACCOUNT` instead of `--env NAME` for the local keychain provider.
+TTL must be 1–86400 seconds; issuer and TTL are both required for issuance. Issuer
+must match the configured Map base URL, including its deployment path. Standalone
+uses issuer `standalone` and explicit `execute_gate(..., expiring_grants=True)`;
+this adds no standalone CLI command.
+
+Protected mode currently supports Gate cases only. Approve every reference for
+every resource/setup/preflight/verification/reset origin. Literal credentials are
+refused. `--yes` does not approve references or bypass expiry/revocation. Signed
+human execution approval remains separate; reference grants do not approve work.
+
+Combine with `--controlled` on supported native Windows only. Linux/Docker and
+ffuf controlled execution remain unsupported. Commands without the grant flag
+and issuer options use the legacy namespace unchanged. No silent migration or
+protected-mode fallback is provided.
+
+Reapproval changes the UUID: use a fresh reviewed attempt rather than replacing
+an in-flight permission. Revocation/expiry blocks new use, not an already launched
+tool or provider credential. Use active cancellation to stop execution. Stale or
+missing paired config/journal state and clock rollback fail closed. No automated
+repair is provided. Ambiguous protected attempts retain their journal fence and
+partial files for explicit operator review.
+
+The NM-2 consumption acknowledgement prototype is library-only. No CLI flag,
+queue command or recovery action enables it; its one-shot send/ACK and retained
+uncertainty rules are described in [ADR 0034](adr/0034-managed-consumption-barrier.md).
+
+Managed result finalization and receipt reconciliation remain explicit library
+operations only. No existing recovery command reconstructs a capability or retries
+managed work. See [ADR 0035](adr/0035-managed-result-finalization.md).
+
+Managed known-stop reporting remains an explicit library operation. No CLI or
+automatic recovery path infers termination from a PID or retries a stop report.
+See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
+
+Claim observation and reconciliation after lost capabilities remain explicit
+library operations. No CLI command initiates observation or resumes managed work.
+See [ADR 0037](adr/0037-managed-claim-observation.md).
+
+The bounded managed JSON primitive remains library-only. No CLI command enables
+a worker, enrolls credentials or selects new managed routes. Existing commands
+retain their behavior. See the [canonical exit status](nm2-canonical-exit-status.md).
+
+The library-only managed transport honors the configured API base prefix used by
+the existing Full distribution. This adds no CLI command, worker or enrollment.

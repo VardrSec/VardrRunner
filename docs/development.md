@@ -1,11 +1,75 @@
 # VardrRunner — Development
 
+`tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
+journal connections, preparation/grant/clock failures and conservative recovery.
+Map's explicit `tests/test_managed_entry.py` adds real verified loopback TLS and
+native Windows Gate execution; it additionally requires `NM2_PRECLAIM_ENTRY=1`
+and the existing native fixture opt-ins. Use disposable profiles/databases, an
+explicit child environment allowlist and dotenv disabled. No production route,
+enrollment or completion is enabled. See [ADR 0033](adr/0033-managed-preclaim-entry.md).
+
 Authorization-ledger checks include denial followed by clock rollback, reload,
 contended writer locks and validation delayed beyond signed expiry. Historical
 reference-vector tests explicitly freeze injected monotonic clocks; runtime uses
 real elapsed time and managed adapters must also supply their trusted UTC clock.
 No signed payload timestamp may supply that clock. Cross-repository managed wire
 vectors are conformance evidence only, not authenticated online-control proof.
+
+Duration tests distinguish allocation from measured preparation, process runtime
+and cleanup. Include native cooperative/refusing trees, late claim responses,
+grant-lock/environment/permit delays, clock changes and receipt/library-entry
+failures. PostgreSQL verifies accounting and policy races; the combined loopback
+fixture checks real Gate with all controls. No test may use retained state.
+Competing claim/monitor tests must hold setup open to verify the single-use entry
+is reserved before callbacks can race; failed setup cannot restart permission.
+
+Target-budget checks cover exact receipt binding, conservative auxiliary origins,
+unsupported fixed profiles and actual handler guard wiring. Map PostgreSQL fixtures
+verify cumulative atomicity and enable/disable races; real guarded Gate loopback
+must also pass. See [ADR 0029](adr/0029-cumulative-target-attempts.md).
+
+Concurrency-budget regressions cover CLI opt-in, required controlled mode and
+refusal of absent/false reservation receipts. Map's production-dialect tests
+verify atomic accounting; Runner unit tests do not certify database locking.
+See [ADR 0028](adr/0028-engagement-capacity.md) before integration testing.
+
+## Local expiring-grant checks
+
+The normal suite includes `test_expiring_grants.py` and
+`test_expiring_grant_jobs.py`: synthetic bindings, TTL/revocation, all auxiliary
+origins, clock rollback, stale state, claim/provider/preparation races and audit
+privacy. Windows tests launch disposable Python processes for guard-exit failures,
+lock-delayed signed deadlines and confirmed termination. Recovery tests preserve
+the grant marker and ambiguous PID fence even without controlled execution.
+Suite-wide fixtures redirect config/journal/tool state; never point these tests at
+an installed workspace, retained database, real keychain or external target.
+
+After grant/launch changes, also run VardrSec's explicit real guarded Gate fixture
+with expiring standalone grants and a temporary grant journal. Use only its
+ephemeral loopback target, public test signing key and synthetic environment values.
+Require all 14 requests across five phases, preserved case hash and no additional
+replay requests. The fixture's legacy config patch alone is insufficient: the
+grant journal must also be redirected. No provider values belong in receipts.
+See [ADR 0027](adr/0027-expiring-reference-grants.md) for atomicity, rollback and
+unsupported-platform limits. This does not certify managed signed authorization,
+Linux/Docker containment, budgets or a future worker.
+
+NM-2 cancellation checks: `tests/test_execution_control.py` uses real bounded
+synthetic process trees; `tests/test_controlled_jobs.py` covers late cancellation,
+durable PID and upload state. On Windows, hidden private consoles verify actual
+graceful signalling and owner-crash cleanup. No scanner/external target is used.
+The explicit `tests/nm2_control_acceptance.py --map-source <checkout> --out <new-dir>`
+harness needs Map's test dependencies and exercises real loopback HTTP with a new
+SQLite database. Production-dialect races live in Map's `postgres_tests` and must
+pass separately. Never point these checks at retained installations or databases.
+
+`tests/nm2_native_fault_acceptance.py --map-source <checkout> --out <new-dir>`
+adds real HTTP proxy loss/delay and ambiguous owned-finalization coverage. Run
+with Map's existing Windows test Python and Runner's existing `.venv` available;
+redirect `TEMP`/`TMP` to disposable scratch. It creates its own SQLite database,
+synthetic authentication, grant catalog and three-process trees. It is explicitly
+opt-in, outside normal pytest discovery. See [native fault coverage](nm2-native-faults.md)
+for the case matrix, transport-timeout injection and evidence limits.
 
 Container development: see [the container guide](container.md) for build, persistent state, credentials and trust configuration.
 
@@ -254,6 +318,30 @@ service left by 0.47.0 or earlier is removed by hand; see `docs/cli.md`.
 
 ## NM-1 conformance
 
+The later `tests/managed_tls_transport.py` reuses the existing API client for
+Map's `tests/test_managed_tls.py` fixture. In addition to `NM2_RUNNER_SOURCE`,
+that suite requires explicit `NM2_TLS_LOOPBACK=1` in the isolated child. It opens
+only fixture-owned loopback listeners and verifies a disposable named certificate
+against an explicit CA file. It changes no machine trust or runtime client defaults.
+Fixture sessions use zero retries/redirects and bounded timeouts; certificate,
+redirect, truncated-response, timeout and fixed-expiry failures remain fail-closed.
+Neither the TLS fixture nor the inert probe starts Gate or proves deployed support,
+real enrollment, public/VPN/fresh-host networking or distributed consumption/ACK.
+
+The later NM-2 `tests/managed_http_probe.py` is a test-only probe for Map's opt-in
+`tests/test_managed_http.py` harness. That ASGI harness transports JSON through
+real synthetic JWT/local-cookie/CSRF authentication, managed issuance and current
+control, then uses Runner's existing compiler, validator, durable ledger and launch
+guard. Its final callback is inert: it starts no process and contacts no targets.
+No product module imports the other application or loads this test helper.
+
+The matching Map fixture selects this checkout with `NM2_RUNNER_SOURCE`. Run only
+with a disposable profile/database, explicit child environment allowlist and dotenv
+disabled. ASGI HTTPS and tool digests are synthetic; this is not TLS deployment,
+tool provenance or Gate execution evidence. The test does not enable managed CLI,
+MCP, production routes, trust provisioning or queue execution. Map consumption and
+Runner consumption are not a distributed acknowledgement/exactly-once protocol.
+
 `tests/test_authorization_contract.py`, `test_authorization_cli.py` and
 `test_authorization_runtime.py` exercise synthetic signing vectors, negative
 permission cases, transactional replay/fencing and the explicit standalone adapter.
@@ -266,3 +354,90 @@ Run that real guarded fixture whenever the projection argv or Gate handler chang
 the existing ffuf/dalfox smoke tests cover different adapters.
 Runtime regressions include a valid shorter-lived contract and permission expiring
 during private-file preparation, covering both preflight and ordinary Gate launches.
+
+## Local NM-2 consumption verification
+
+The full local candidate includes the portable native API boundary tests from the
+separate coverage correction branch. Managed preclaim tests mock only native
+availability and dispatch an inert handler; their executable fixture fingerprint
+is never launched. A negative test restores the platform denial before any RPC.
+This is not Linux controlled-execution support.
+
+`tests/test_managed_claim.py` covers the one-shot consumption transport, exact ACK,
+write failures, expiry, no replay and additive journal markers. Run the full suite
+with the unchanged `--cov=vardrrunner --cov-fail-under=95`, both mypy platforms and
+the existing lint/format/security checks. Map's explicit cross-repository fixture
+checks real authentication and JSON against the Runner ACK parser. The Windows
+entry fixture uses the new unregistered consume adapter; real Windows containment
+and independent acceptance remain required. See [ADR 0034](adr/0034-managed-consumption-barrier.md).
+
+## Managed result protocol fixtures
+
+`tests/test_managed_results.py` exercises one-shot result/finish intents, malformed
+and lost replies, journal failures, immutable artifact binding and explicit
+observation without replay. Native dispatch uses an inert handler in portable
+policy tests. Map adds authenticated ASGI and real loopback TLS receipt checks
+and real PostgreSQL migrations/races under both database roles.
+
+Keep the unchanged 95% full-suite coverage gate, both mypy platforms and existing
+static checks. The real Windows/TLS entry finalization test remains opt-in and
+requires Papachin verification; portable tests cannot accept Windows containment.
+See [ADR 0035](adr/0035-managed-result-finalization.md).
+
+## Managed known-stop protocol checks
+
+`tests/test_managed_stops.py` covers strict native confirmation, preserved observer
+PID/partial files, wrong ownership, lost/malformed stop receipts, marker/receipt
+write failures and observation without replay. An initial inert fixture incorrectly
+wrote the journal while holding the launch grant writer; it was corrected to match
+the native observer ordering after that boundary ends. Runtime guards were retained.
+
+Keep the unchanged full-suite 95% floor and static checks. Map adds authenticated
+ASGI/verified TLS and PostgreSQL administrator/restricted-role tests for the new
+receipt. Real Windows stop receipt/containment verification remains deferred to
+Papachin. See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
+
+## Managed claim observation fixtures
+
+The claim observation tests cover lost claim replies, expired/revoked approvals,
+wrong enrolled keys, inconsistent state, races, source changes and receipt
+regressions. Runner restart fixtures require prior durable native result/stop
+proof; generic terminal metadata cannot close a run. Map's fixture-only HTTP and
+verified TLS adapters exercise the production Runner parser. PostgreSQL repeats
+absence, claim races and terminal receipts under both database roles. Full-suite
+coverage/static checks remain required. Windows/Papachin, independent acceptance,
+CI/security and migration gates remain open. No production route is registered.
+
+## NM-2 recovery audit
+
+The [checklist audit](nm2-checklist-audit.md) distinguishes the scoped handoff
+evidence matrix from the missing complete approved checklist. Fresh-process tests
+in `tests/test_managed_observations.py` verify exact result/stop receipt closure,
+missing-receipt holds and abrupt observer interruption with no network, process
+creation or PID signaling. They do not certify native Windows owner-crash
+containment. This is verification only; no runtime or activation changes.
+
+## Explicit managed transport verification
+
+`tests/test_managed_transport.py` tests no-retry/no-redirect sessions, TLS and
+origin/path requirements, inherited proxy/CA settings, bounded bodies and strict
+finite JSON. Map's explicit `test_managed_tls.py` cases run real verified sockets
+and authenticated result/stop receipt flows against this production-code method.
+No real target is dispatched. Full regression coverage and static gates remain
+required. The [canonical exit status](nm2-canonical-exit-status.md) supersedes the
+derived handoff matrix; Docker worker/native Windows acceptance stays open.
+
+The API prefix tests preserve `/backend` and nested simple configured bases while
+rejecting encoded/traversal/query ambiguity. Map's verified TLS fixture emulates
+existing Caddy prefix stripping and exercises signed result/stop/observation flows.
+This is compatibility verification, not installed Docker Desktop acceptance.
+
+Fresh-process managed-observation tests supply a disposable `USERPROFILE` on
+Windows as well as the existing POSIX home. The child asserts its resolved home
+equals its scratch working directory; real profiles and credentials are not inherited.
+
+Managed result tests keep actual file-symlink rejection on capable filesystems.
+Only Windows `symlink_to` error 1314 marks that real fixture unavailable/unproven;
+no host privilege/settings change or link substitute is permitted. A separately
+labeled synthetic marker test always checks fail-closed rejection and zero RPCs;
+it does not certify an OS boundary. Required real-link evidence remains separate.

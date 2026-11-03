@@ -371,6 +371,45 @@ class Journal:
             row = con.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
         return self._record(row) if row else None
 
+    def request_stop(self, run_id: str) -> None:
+        """Durable local request only; never signal an unverified/reused PID."""
+        record = self.get(run_id)
+        if record is None or record.phase in TERMINAL_PHASES:
+            raise JournalError("run is missing or already terminal")
+        if not record.command_profile.get("controlled"):
+            raise JournalError("run has no controlled execution monitor")
+        with self._connection() as con:
+            con.execute("CREATE TABLE IF NOT EXISTS local_stop_requests (run_id TEXT PRIMARY KEY)")
+            con.execute("INSERT OR IGNORE INTO local_stop_requests VALUES (?)", (run_id,))
+
+    def stop_requested(self, run_id: str) -> bool:
+        with self._connection() as con:
+            exists = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='local_stop_requests'"
+            ).fetchone()
+            return bool(
+                exists
+                and con.execute(
+                    "SELECT 1 FROM local_stop_requests WHERE run_id = ?", (run_id,)
+                ).fetchone()
+            )
+
+    def managed_claim_exists(self, run_id: str) -> bool:
+        """Read-only recovery fence; never initialize prototype tables here."""
+        try:
+            with self._connection() as con:
+                exists = con.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_claim_intents'"
+                ).fetchone()
+                return bool(
+                    exists
+                    and con.execute(
+                        "SELECT 1 FROM managed_claim_intents WHERE run_id=?", (run_id,)
+                    ).fetchone()
+                )
+        except sqlite3.Error:
+            raise JournalError("managed_claim_state_unavailable") from None
+
     def active_for_job(self, job_id: str) -> RunRecord | None:
         with self._connection() as con:
             return self._active_for_job(con, job_id)

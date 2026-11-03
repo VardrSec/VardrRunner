@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -144,13 +145,23 @@ def test_load_error_message_includes_filename(tmp_path, monkeypatch):
 
 
 def test_tool_environment_keeps_only_what_tools_need(monkeypatch):
-    monkeypatch.setenv("PATH", "/usr/bin")
-    monkeypatch.setenv("XDG_CONFIG_HOME", "/home/runner/.vardrmap")
-    monkeypatch.setenv("LC_ALL", "C.UTF-8")
-    monkeypatch.setenv("https_proxy", "http://127.0.0.1:8080")
-    monkeypatch.setenv(config.ENV_API_KEY, "vmap_must_not_leak")
-    monkeypatch.setenv("OWNER_TOKEN", "identity-secret")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "unrelated-secret")
+    # A supplied mapping avoids inherited upper/lowercase proxy collisions and
+    # leaves the execution environment's real network configuration untouched.
+    monkeypatch.setattr(
+        config,
+        "os",
+        SimpleNamespace(
+            environ={
+                "PATH": "/usr/bin",
+                "XDG_CONFIG_HOME": "/home/runner/.vardrmap",
+                "LC_ALL": "C.UTF-8",
+                "https_proxy": "http://127.0.0.1:8080",
+                config.ENV_API_KEY: "vmap_must_not_leak",
+                "OWNER_TOKEN": "identity-secret",
+                "AWS_SECRET_ACCESS_KEY": "unrelated-secret",
+            }
+        ),
+    )
 
     env = config.tool_environment()
 
