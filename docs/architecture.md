@@ -373,3 +373,11 @@ exact acknowledgements; evidence receipt alone releases nothing. Explicit
 reconciliation observes a trusted authenticated receipt and closes local state
 only for the exact terminal outcome. Ordinary recovery still defers managed rows.
 See [ADR 0035](adr/0035-managed-result-finalization.md).
+
+### Managed known-stop receipts
+
+A managed native `ExecutionStopped` can establish a report right only with literal
+confirmed containment and a fixed known cause. Observer PIDs remain metadata, not
+a permission or liveness source. The explicit one-shot stop lane requires consumed
+owned binding and an exact remote receipt before local terminal state. Missing or
+uncertain receipt state stays held. See [ADR 0036](adr/0036-managed-known-stop-receipts.md).

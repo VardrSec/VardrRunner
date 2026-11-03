@@ -383,3 +383,16 @@ Keep the unchanged 95% full-suite coverage gate, both mypy platforms and existin
 static checks. The real Windows/TLS entry finalization test remains opt-in and
 requires Papachin verification; portable tests cannot accept Windows containment.
 See [ADR 0035](adr/0035-managed-result-finalization.md).
+
+## Managed known-stop protocol checks
+
+`tests/test_managed_stops.py` covers strict native confirmation, preserved observer
+PID/partial files, wrong ownership, lost/malformed stop receipts, marker/receipt
+write failures and observation without replay. An initial inert fixture incorrectly
+wrote the journal while holding the launch grant writer; it was corrected to match
+the native observer ordering after that boundary ends. Runtime guards were retained.
+
+Keep the unchanged full-suite 95% floor and static checks. Map adds authenticated
+ASGI/verified TLS and PostgreSQL administrator/restricted-role tests for the new
+receipt. Real Windows stop receipt/containment verification remains deferred to
+Papachin. See [ADR 0036](adr/0036-managed-known-stop-receipts.md).

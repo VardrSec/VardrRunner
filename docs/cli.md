@@ -1106,3 +1106,7 @@ uncertainty rules are described in [ADR 0034](adr/0034-managed-consumption-barri
 Managed result finalization and receipt reconciliation remain explicit library
 operations only. No existing recovery command reconstructs a capability or retries
 managed work. See [ADR 0035](adr/0035-managed-result-finalization.md).
+
+Managed known-stop reporting remains an explicit library operation. No CLI or
+automatic recovery path infers termination from a PID or retries a stop report.
+See [ADR 0036](adr/0036-managed-known-stop-receipts.md).

@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add unregistered managed known-stop receipts with one-shot durable sends and
+  explicit observation. Preserve PIDs as audit metadata and hold unknown
+  containment; no refund, replay or worker activation. See ADR 0036.
+
 - Add explicit managed result/terminal receipts and observation-only reconciliation
   after known native return. Preserve one-shot sends, uncertainty fences, charges
   and legacy recovery; no CLI/worker activation. See ADR 0035.

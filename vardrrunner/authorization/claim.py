@@ -219,6 +219,7 @@ class ManagedRun:
         self._used, self._lock = False, threading.Lock()
         self._consume = consume
         self._returned_artifact: tuple[Path, str, int] | None = None
+        self._confirmed_stop: tuple[str, str] | None = None
 
     def _acknowledge(self, request: dict) -> None:
         require(self._consume is not None, "managed_consumption_transport_required")
@@ -278,7 +279,24 @@ class ManagedRun:
                 record.artifact_size or 0,
             )
             return output
-        except BaseException:
+        except BaseException as exc:
+            if isinstance(exc, execution_control.ExecutionStopped) and exc.confirmed is True:
+                from .stops import CANCEL_CAUSES, CAUSES
+
+                cause = exc.args[0] if len(exc.args) == 1 else None
+                if type(cause) is str and cause in CAUSES:
+                    try:
+                        journal.transition(
+                            self.run_id,
+                            Phase.EXECUTING,
+                            last_event="managed_native_stop_confirmed",
+                        )
+                        self._confirmed_stop = (
+                            "cancelled" if cause in CANCEL_CAUSES else "failed",
+                            cause,
+                        )
+                    except Exception:
+                        pass  # Lost durable proof is a hold, never a report right.
             try:
                 self.store.hold(self.run_id, self._owner, "held_after_claim")
             except Exception:
@@ -289,6 +307,11 @@ class ManagedRun:
         from .results import finalize
 
         finalize(self, submit, finish)
+
+    def report_stop(self, send: Callable[[dict], dict]) -> None:
+        from .stops import report
+
+        report(self, send)
 
 
 class ManagedEntry:
