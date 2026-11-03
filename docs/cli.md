@@ -1114,3 +1114,7 @@ See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
 Claim observation and reconciliation after lost capabilities remain explicit
 library operations. No CLI command initiates observation or resumes managed work.
 See [ADR 0037](adr/0037-managed-claim-observation.md).
+
+The bounded managed JSON primitive remains library-only. No CLI command enables
+a worker, enrolls credentials or selects new managed routes. Existing commands
+retain their behavior. See the [canonical exit status](nm2-canonical-exit-status.md).

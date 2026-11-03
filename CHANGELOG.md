@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add an explicit bounded one-shot managed JSON transport with strict finite JSON,
+  TLS verification, no retries/redirects and fixed errors. No production route or
+  worker activation; canonical Docker Desktop exit remains open. See ADR 0038.
+
 - Add explicit capability-free managed claim observation bound to the original
   enrolled principal and fingerprints. Require existing durable native proof for
   receipt reconciliation; no retry, lease renewal or runtime activation. See ADR 0037.

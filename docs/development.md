@@ -416,3 +416,13 @@ in `tests/test_managed_observations.py` verify exact result/stop receipt closure
 missing-receipt holds and abrupt observer interruption with no network, process
 creation or PID signaling. They do not certify native Windows owner-crash
 containment. This is verification only; no runtime or activation changes.
+
+## Explicit managed transport verification
+
+`tests/test_managed_transport.py` tests no-retry/no-redirect sessions, TLS and
+origin/path requirements, inherited proxy/CA settings, bounded bodies and strict
+finite JSON. Map's explicit `test_managed_tls.py` cases run real verified sockets
+and authenticated result/stop receipt flows against this production-code method.
+No real target is dispatched. Full regression coverage and static gates remain
+required. The [canonical exit status](nm2-canonical-exit-status.md) supersedes the
+derived handoff matrix; Docker worker/native Windows acceptance stays open.

@@ -1,5 +1,7 @@
 # NM-2 checklist audit and recovery verification
 
+> Superseded as the phase denominator by [the canonical roadmap reconciliation](nm2-canonical-exit-status.md). The parent located the original Library roadmap after this historical scoped audit. Its former missing-checklist blocker and 8/12 row estimate are no longer current phase-status measures.
+
 Status: scoped local evidence only; whole NM-2 remains incomplete and unaccepted.
 
 The supplied independent-review package contains a 14-row `ACCEPTANCE_EVIDENCE.json` matrix. It explicitly disclaims full phase certification. The complete approved master checklist was not found in the supplied handoff, repositories or authorized staging folder. This audit preserves that uncertainty and does not invent additional requirements.

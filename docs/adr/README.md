@@ -44,3 +44,4 @@ the way it does.
 | [0030](0030-allocated-duration-permission.md) | Finite allocated wall-permission windows | Local NM-2 increment for review |
 | [0032](0032-unregistered-managed-native-gate.md) | Unregistered managed Gate/native composition | Local NM-2 increment for review |
 | [0033](0033-managed-preclaim-entry.md) | One-shot managed pre-claim entry | Local NM-2 increment for review |
+| [0038](0038-explicit-managed-json-transport.md) | Explicit bounded managed JSON transport | Local unregistered prerequisite; canonical worker exit open |

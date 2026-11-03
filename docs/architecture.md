@@ -390,3 +390,13 @@ It records metadata only; absence never authorizes a retry. Reconciliation close
 only an existing exact durable result/stop intent, preserving native proof and
 uncertainty fences. Ordinary recovery remains deferred. See
 [ADR 0037](adr/0037-managed-claim-observation.md).
+
+### Explicit managed JSON transport
+
+`api.VardrMapClient.managed_post` is a library-only one-shot HTTPS primitive with
+strict finite JSON and request/response size limits, no retries or redirects,
+fresh header-authenticated sessions and inherited proxy/CA configuration. It does
+not register managed Map routes or enable execution. Read-idle waits are not a
+total transfer deadline; existing signed/monotonic ceilings remain mandatory.
+See [ADR 0038](adr/0038-explicit-managed-json-transport.md) and the
+[canonical NM-2 exit status](nm2-canonical-exit-status.md).
