@@ -93,7 +93,7 @@ def process_running(pid: int) -> bool:
     api.CloseHandle.argtypes, api.CloseHandle.restype = [w.HANDLE], w.BOOL
     handle = api.OpenProcess(0x100000, False, pid)
     if not handle:
-        if ctypes.get_last_error() == 87:
+        if ctypes.get_last_error() == 87:  # type: ignore[attr-defined]
             return False
         raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
     try:
@@ -302,7 +302,7 @@ class WindowsJob:
                         continue
                     handle = self.api.OpenProcess(0x101000, False, pid)
                     if not handle:
-                        if ctypes.get_last_error() == 87:
+                        if ctypes.get_last_error() == 87:  # type: ignore[attr-defined]
                             continue
                         self._check(False)
                     inside = w.BOOL()
@@ -314,7 +314,7 @@ class WindowsJob:
                     else:
                         self.api.CloseHandle(handle)
                 return
-            if ctypes.get_last_error() != 234:
+            if ctypes.get_last_error() != 234:  # type: ignore[attr-defined]
                 self._check(False)
             count = w.DWORD.from_buffer(buffer).value + 64
             if count > 100000:

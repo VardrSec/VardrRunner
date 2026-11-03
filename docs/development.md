@@ -1,5 +1,9 @@
 # VardrRunner — Development
 
+Controlled-execution consolidation also checks `mypy --platform linux` and
+`mypy --platform win32`: ctypes Windows-only declarations must not break the Linux
+hosted type-check job. Native containment behavior remains Windows-only.
+
 Authorization-ledger checks include denial followed by clock rollback, reload,
 contended writer locks and validation delayed beyond signed expiry. Historical
 reference-vector tests explicitly freeze injected monotonic clocks; runtime uses
