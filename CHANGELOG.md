@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Record independently reviewed historical secret-scan false positives by exact
+  commit fingerprint, preserving future-commit detection and default rules.
+
 - Make the tool-environment allowlist test independent of inherited proxy-variable
   casing without changing subprocess environment behavior or network settings.
 

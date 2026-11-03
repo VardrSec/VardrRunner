@@ -1,0 +1,3 @@
+# Independently reviewed immutable synthetic-test/plain-prose false positives only.
+4890e31b9c783bcd631c63fc85b622c0e875047f:tests/test_redaction.py:generic-api-key:36
+4890e31b9c783bcd631c63fc85b622c0e875047f:tests/test_redaction.py:generic-api-key:41
