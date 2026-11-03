@@ -1118,3 +1118,6 @@ See [ADR 0037](adr/0037-managed-claim-observation.md).
 The bounded managed JSON primitive remains library-only. No CLI command enables
 a worker, enrolls credentials or selects new managed routes. Existing commands
 retain their behavior. See the [canonical exit status](nm2-canonical-exit-status.md).
+
+The library-only managed transport honors the configured API base prefix used by
+the existing Full distribution. This adds no CLI command, worker or enrollment.

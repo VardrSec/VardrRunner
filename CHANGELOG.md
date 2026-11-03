@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Preserve a configured simple API base prefix (including Full's `/backend`) in
+  explicit managed requests without changing signed origin binding. Continue to
+  reject ambiguous prefixes, redirects and retries. No activation change.
+
 - Add an explicit bounded one-shot managed JSON transport with strict finite JSON,
   TLS verification, no retries/redirects and fixed errors. No production route or
   worker activation; canonical Docker Desktop exit remains open. See ADR 0038.

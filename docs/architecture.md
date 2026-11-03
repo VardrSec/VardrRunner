@@ -400,3 +400,8 @@ not register managed Map routes or enable execution. Read-idle waits are not a
 total transfer deadline; existing signed/monotonic ceilings remain mandatory.
 See [ADR 0038](adr/0038-explicit-managed-json-transport.md) and the
 [canonical NM-2 exit status](nm2-canonical-exit-status.md).
+
+Managed transport also preserves a trusted configured API base prefix such as
+Full's `/backend`; it does not strip or rewrite the signed origin/association
+identity. Only simple path segments are accepted. Prefix compatibility supplies
+no new route activation or execution right.

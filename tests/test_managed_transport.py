@@ -53,7 +53,8 @@ def test_managed_request_is_separate_exact_and_never_retries_or_redirects(wire):
     [
         "http://localhost",
         "https://user:secret@map.example.test",
-        "https://map.example.test/api",
+        "https://map.example.test/../api",
+        "https://map.example.test/backend%2Fother",
         "https://map.example.test?",
         "https://map.example.test#",
         "https://map.example.test:0",
@@ -65,6 +66,18 @@ def test_managed_origin_failure_precedes_transport(wire, base):
     with pytest.raises(ManagedTransportError, match="^managed request failed$"):
         client.managed_post("/fixture/claim", {})
     factory.assert_not_called()
+
+
+@pytest.mark.parametrize("prefix", ["/backend", "/services/map-api"])
+def test_configured_api_prefix_is_preserved_without_changing_request_binding(wire, prefix):
+    client, session, _, _ = wire
+    client.base += prefix
+    payload = {"origin": client.base, "runner_id": "synthetic-runner"}
+    assert client.managed_post("/jobs/job-1/managed/observation", payload) == {"ok": True}
+    call = session.post.call_args
+    assert call.args == (client.base + "/jobs/job-1/managed/observation",)
+    assert prefix.encode() in call.kwargs["data"]
+    assert client.base == "https://map.example.test" + prefix
 
 
 @pytest.mark.parametrize(

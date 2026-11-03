@@ -41,3 +41,12 @@ not Linux inside the preferred images. Native Windows evidence cannot substitute
 for container containment and queue acceptance. See the canonical exit status.
 Independent review, Windows, hosted CI/security, migration comparison and phase
 consolidation remain open. Owner backup waiver is retained. NM-3 has not begun.
+
+## Compatibility correction: configured API base prefix
+
+The root-only restriction above was unnecessarily narrower than the existing Full
+distribution, whose API URL ends in `/backend`. Accept only simple configured path
+segments and preserve the exact base for routing and existing signed origin
+binding. No origin or authority normalization changes. Synthetic prefix-stripping
+TLS receipt flows and ambiguity negatives verify this correction. No production
+registration, containment, worker or trust decision changes.

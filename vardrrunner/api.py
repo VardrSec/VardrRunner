@@ -161,7 +161,7 @@ class VardrMapClient:
             origin(self.base)
             require(
                 parts.scheme == "https"
-                and parts.path in {"", "/"}
+                and re.fullmatch(r"(?:/[A-Za-z0-9_-]+)*", parts.path) is not None
                 and not parts.query
                 and "?" not in self.base
                 and "#" not in self.base

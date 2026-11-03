@@ -426,3 +426,8 @@ and authenticated result/stop receipt flows against this production-code method.
 No real target is dispatched. Full regression coverage and static gates remain
 required. The [canonical exit status](nm2-canonical-exit-status.md) supersedes the
 derived handoff matrix; Docker worker/native Windows acceptance stays open.
+
+The API prefix tests preserve `/backend` and nested simple configured bases while
+rejecting encoded/traversal/query ambiguity. Map's verified TLS fixture emulates
+existing Caddy prefix stripping and exercises signed result/stop/observation flows.
+This is compatibility verification, not installed Docker Desktop acceptance.
