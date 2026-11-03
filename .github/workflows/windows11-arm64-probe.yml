@@ -1,0 +1,67 @@
+# LOCAL REVIEW PAYLOAD; publishing the approved branch automatically starts one probe.
+name: Experimental Windows 11 ARM64 synthetic Runner probe
+
+on:
+  push:
+    branches: [codex/windows11-arm64-probe-20261103]
+    paths:
+      - .github/workflows/windows11-arm64-probe.yml
+      - ci/windows-arm64/requirements.txt
+      - ci/windows-arm64/run_probe.py
+
+concurrency:
+  group: isolated-windows11-arm64-probe-20261103
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  native-runner:
+    if: github.repository == 'VardrSec/VardrRunner' && github.ref == 'refs/heads/codex/windows11-arm64-probe-20261103'
+    runs-on: windows-11-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: VardrSec/VardrRunner
+          ref: 602a5423dcede0e37dacad52aab3bdad900c9021
+          path: _sources/runner
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.14.10'
+          architecture: arm64
+          check-latest: false
+          pip-version: '26.2.1'
+      - name: Assert hosted Windows 11 ARM64 identity (read only)
+        shell: pwsh
+        env:
+          ACTUAL_RUNNER_ARCH: ${{ runner.arch }}
+        run: |
+          if ($env:ACTUAL_RUNNER_ARCH -ne 'ARM64') { throw 'ARM64 runner required' }
+          $os = Get-CimInstance Win32_OperatingSystem
+          if ($os.ProductType -ne 1 -or [int]$os.BuildNumber -lt 22000) {
+            throw 'Windows 11 client OS required'
+          }
+          Write-Output "OS=$($os.Caption); Build=$($os.BuildNumber); Image=$env:ImageOS/$env:ImageVersion"
+          $actual = git -C _sources/runner rev-parse HEAD
+          if ($actual -ne '602a5423dcede0e37dacad52aab3bdad900c9021') { throw 'Source mismatch' }
+      - name: Install exact core and pytest wheels without source builds
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes --no-deps -r ci/windows-arm64/requirements.txt
+      - name: Run bounded synthetic native process tests
+        run: python ci/windows-arm64/run_probe.py _sources/runner "${{ runner.temp }}/windows-arm64-probe"
+      - name: Retain only synthetic verdicts and runtime metadata
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows11-arm64-synthetic-runner
+          path: |
+            ${{ runner.temp }}/windows-arm64-probe/runtime.json
+            ${{ runner.temp }}/windows-arm64-probe/tests.xml
+          if-no-files-found: warn
+          retention-days: 7
