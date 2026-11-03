@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Make the tool-environment allowlist test independent of inherited proxy-variable
+  casing without changing subprocess environment behavior or network settings.
+
 - Preserve a configured simple API base prefix (including Full's `/backend`) in
   explicit managed requests without changing signed origin binding. Continue to
   reject ambiguous prefixes, redirects and retries. No activation change.
