@@ -522,6 +522,27 @@ you have reviewed them. Nothing is queued: run a saved case from the job compose
 
 ---
 
+## `workspace` — local workspace metadata
+
+```bash
+vardrrunner workspace create "Local assessment"
+vardrrunner workspace show <workspace-id>
+```
+
+These commands create and inspect inert metadata without a Map account, API key
+or `--local` flag. Each create returns a new full workspace ID, label, creation
+time and metadata schema version as JSON. Repeated labels do not overwrite an
+existing workspace. Labels must be short printable text without credentials.
+
+This first NM-3 increment records metadata only. It does not configure scope,
+approve a contract, select an active engagement, run a tool or enable a worker.
+Existing connected commands retain their meaning and still require Map as
+documented. Workspace state shares the existing local journal; `audit` continues
+to inspect/export run evidence. Full Mapless execution and portable workspace
+export are not delivered by this metadata increment.
+
+---
+
 ## `audit` — local execution evidence
 
 Queue-driven jobs are recorded in `~/.vardrmap/runner-journal.sqlite3`. Audit commands are

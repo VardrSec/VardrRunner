@@ -24,6 +24,7 @@ from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
 from vardrrunner.commands import test_cases as test_cases_cmd
 from vardrrunner.commands import updates as updates_cmd
+from vardrrunner.commands import workspace as workspace_cmd
 
 # Characters the CLI's output uses that legacy code pages (Windows cp1252 when
 # output is piped or redirected) cannot encode.
@@ -286,6 +287,25 @@ def credentials_revoke(
     credentials_cmd.revoke(
         engagement_id, origin, env, keychain, **({"issuer": issuer} if issuer is not None else {})
     )
+
+
+workspace_app = typer.Typer(
+    help="Create and inspect local workspace metadata. Does not authorize execution.",
+    no_args_is_help=True,
+)
+app.add_typer(workspace_app, name="workspace")
+
+
+@workspace_app.command("create")
+def workspace_create(name: str = typer.Argument(..., help="Short workspace label, no credentials")):
+    """Create an inert local workspace and print its metadata as JSON."""
+    workspace_cmd.create(name)
+
+
+@workspace_app.command("show")
+def workspace_show(workspace_id: str = typer.Argument(..., help="Full local workspace ID")):
+    """Show workspace metadata as JSON without contacting Map."""
+    workspace_cmd.show(workspace_id)
 
 
 audit_app = typer.Typer(

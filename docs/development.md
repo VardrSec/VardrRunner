@@ -1,5 +1,16 @@
 # VardrRunner — Development
 
+## Local workspace metadata
+
+`tests/test_workspaces.py` covers fresh and existing journal preservation,
+concurrent creation, collision refusal, invalid/future/corrupt state and CLI
+operation without Map authentication, network or process creation. Tests use
+disposable journals, never an installed workspace. Creation stores metadata only;
+it does not establish scope, grant approval or enable execution. Existing audit
+and connected CLI regressions remain applicable. The normal full suite and 95%
+coverage floor are unchanged; do not lower resource policies to accommodate a
+small test host. Report simulated resource inputs separately from actual capacity.
+
 `tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
 journal connections, preparation/grant/clock failures and conservative recovery.
 Map's explicit `tests/test_managed_entry.py` adds real verified loopback TLS and

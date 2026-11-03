@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicit local `workspace create` and `workspace show` metadata in the
+  existing SQLite journal, without Map authentication or execution authority.
+  Preserve connected commands, execution records and existing audit/export.
+
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.
 

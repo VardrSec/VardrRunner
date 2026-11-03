@@ -129,6 +129,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
+| `vardrrunner/workspaces.py`, `commands/workspace.py` | Explicit `workspace create|show` metadata in an additive table of the existing SQLite journal. No Map client, credential provider, approval, active-context selection or execution path. Existing run identities and journal schema version remain unchanged. This is the first metadata-only NM-3 slice, not complete Mapless operation. |
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
 | `vardrrunner/commands/updates.py` | `update` — install the newest release in the foreground with pipx (`updates.upgrade_argv`/`run_upgrade`), confirm it from an isolated interpreter, or name the installer's command for uv/virtualenv installs; `update check` — report only. Both always ask the registry. Nothing installs unless the operator runs `update`. |
 | `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, tool installation, and doctor into one idempotent guided/provisioning workflow. |
