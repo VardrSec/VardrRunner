@@ -435,3 +435,9 @@ This is compatibility verification, not installed Docker Desktop acceptance.
 Fresh-process managed-observation tests supply a disposable `USERPROFILE` on
 Windows as well as the existing POSIX home. The child asserts its resolved home
 equals its scratch working directory; real profiles and credentials are not inherited.
+
+Managed result tests keep actual file-symlink rejection on capable filesystems.
+Only Windows `symlink_to` error 1314 marks that real fixture unavailable/unproven;
+no host privilege/settings change or link substitute is permitted. A separately
+labeled synthetic marker test always checks fail-closed rejection and zero RPCs;
+it does not certify an OS boundary. Required real-link evidence remains separate.

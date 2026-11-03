@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -152,9 +153,37 @@ def test_no_known_valid_artifact_never_sends(result_fixture, monkeypatch, failur
         else:
             renamed = path.with_suffix(".retained")
             path.rename(renamed)
-            path.symlink_to(renamed)
+            try:
+                path.symlink_to(renamed)
+            except OSError as error:
+                if os.name == "nt" and getattr(error, "winerror", None) == 1314:
+                    pytest.skip(
+                        "Host cannot create file symlinks (WinError 1314); "
+                        "real OS symlink rejection remains UNPROVEN here"
+                    )
+                raise
     with pytest.raises(AuthorizationError):
         t.handle.finalize(t.submit, t.finish)
+    assert not t.calls
+
+
+def test_synthetic_symlink_marker_never_sends(result_fixture, monkeypatch):
+    """Portable guard-branch proof only; real OS links use the separate case."""
+    t = result_fixture
+    path = t.handle.execute(t.f.directory)
+    original = Path.is_symlink
+    observations = []
+
+    def marked(candidate):
+        if candidate == path:
+            observations.append(candidate)
+            return True
+        return original(candidate)
+
+    monkeypatch.setattr(Path, "is_symlink", marked)
+    with pytest.raises(AuthorizationError, match="managed_artifact_binding"):
+        t.handle.finalize(t.submit, t.finish)
+    assert observations == [path]
     assert not t.calls
 
 

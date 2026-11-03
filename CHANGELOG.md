@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
+  retain real link rejection checks and add an explicit synthetic guard assertion.
+
 - Bind isolated recovery-test child profiles to disposable scratch on Windows,
   preserving the explicit environment allowlist and source-origin assertions.
 
