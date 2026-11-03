@@ -1102,3 +1102,7 @@ partial files for explicit operator review.
 The NM-2 consumption acknowledgement prototype is library-only. No CLI flag,
 queue command or recovery action enables it; its one-shot send/ACK and retained
 uncertainty rules are described in [ADR 0034](adr/0034-managed-consumption-barrier.md).
+
+Managed result finalization and receipt reconciliation remain explicit library
+operations only. No existing recovery command reconstructs a capability or retries
+managed work. See [ADR 0035](adr/0035-managed-result-finalization.md).

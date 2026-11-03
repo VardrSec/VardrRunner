@@ -1,4 +1,4 @@
-"""Unregistered one-shot pre-claim handoff. No CLI, queue, ACK or automatic recovery."""
+"""Unregistered one-shot managed handoff; explicit receipts, no automatic recovery."""
 
 from __future__ import annotations
 
@@ -218,6 +218,7 @@ class ManagedRun:
         self._artifact_limit = artifact_limit
         self._used, self._lock = False, threading.Lock()
         self._consume = consume
+        self._returned_artifact: tuple[Path, str, int] | None = None
 
     def _acknowledge(self, request: dict) -> None:
         require(self._consume is not None, "managed_consumption_transport_required")
@@ -261,7 +262,7 @@ class ManagedRun:
             resources.enforce_artifact(
                 output, min(self._artifact_limit, self.gate.permission["max_artifact_bytes"])
             )
-            journal.transition(
+            record = journal.transition(
                 self.run_id,
                 Phase.ARTIFACT_READY,
                 pid=None,
@@ -271,6 +272,11 @@ class ManagedRun:
                 status="local_artifact_held",
                 last_event="managed_artifact_not_uploaded",
             )
+            self._returned_artifact = (
+                output,
+                record.artifact_sha256 or "",
+                record.artifact_size or 0,
+            )
             return output
         except BaseException:
             try:
@@ -279,9 +285,14 @@ class ManagedRun:
                 pass
             raise
 
+    def finalize(self, submit: Callable[[dict], dict], finish: Callable[[dict], dict]) -> None:
+        from .results import finalize
+
+        finalize(self, submit, finish)
+
 
 class ManagedEntry:
-    """One explicit invocation; zero permission to retry, upload or complete."""
+    """One explicit claim invocation; finalization uses the returned one-shot handle."""
 
     def __init__(
         self,

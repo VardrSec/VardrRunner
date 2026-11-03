@@ -370,3 +370,16 @@ the existing lint/format/security checks. Map's explicit cross-repository fixtur
 checks real authentication and JSON against the Runner ACK parser. The Windows
 entry fixture uses the new unregistered consume adapter; real Windows containment
 and independent acceptance remain required. See [ADR 0034](adr/0034-managed-consumption-barrier.md).
+
+## Managed result protocol fixtures
+
+`tests/test_managed_results.py` exercises one-shot result/finish intents, malformed
+and lost replies, journal failures, immutable artifact binding and explicit
+observation without replay. Native dispatch uses an inert handler in portable
+policy tests. Map adds authenticated ASGI and real loopback TLS receipt checks
+and real PostgreSQL migrations/races under both database roles.
+
+Keep the unchanged 95% full-suite coverage gate, both mypy platforms and existing
+static checks. The real Windows/TLS entry finalization test remains opt-in and
+requires Papachin verification; portable tests cannot accept Windows containment.
+See [ADR 0035](adr/0035-managed-result-finalization.md).

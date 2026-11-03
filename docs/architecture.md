@@ -364,3 +364,12 @@ before native dispatch. Neither an ACK nor a locally retained artifact completes
 Map work or releases capacity. Recovery defers all such attempts without network
 replay. Separate send/ACK markers survive later held states. See
 [ADR 0034](adr/0034-managed-consumption-barrier.md); this remains a local prototype.
+
+### Managed result and terminal receipts
+
+The unregistered preclaim handle now exposes explicit finalization after known
+native return. Result retention and completion have separate durable sends and
+exact acknowledgements; evidence receipt alone releases nothing. Explicit
+reconciliation observes a trusted authenticated receipt and closes local state
+only for the exact terminal outcome. Ordinary recovery still defers managed rows.
+See [ADR 0035](adr/0035-managed-result-finalization.md).

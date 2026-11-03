@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicit managed result/terminal receipts and observation-only reconciliation
+  after known native return. Preserve one-shot sends, uncertainty fences, charges
+  and legacy recovery; no CLI/worker activation. See ADR 0035.
+
 - Add an unregistered one-shot managed consumption ACK barrier with durable
   send/ACK observations, exact contract binding and no retry after uncertainty.
   Preserve reservations and native platform guards; no upload/completion or
