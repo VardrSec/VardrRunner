@@ -2,9 +2,12 @@
 
 import copy
 import json
+import sqlite3
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -138,7 +141,7 @@ def specimen(tmp_path):
     runtime = ValidationContext(
         "runner-1", "eng-1", "job-1", "attempt-1", 1, "standalone", NOW, 1, TOOL, "b" * 64
     )
-    ledger = AuthorizationLedger(Journal(tmp_path / "journal.sqlite3"))
+    ledger = AuthorizationLedger(Journal(tmp_path / "journal.sqlite3"), monotonic=lambda: 0)
     ledger.set_state("issuer-1", "eng-1", 1, False, "b" * 64)
     receipt = approve(
         context, issuer, "standalone", "operator-1", "approval-1", "2026-11-01T17:59:00Z", SEED
@@ -603,7 +606,7 @@ def test_same_revision_cannot_hide_changed_authority_snapshot(specimen):
 
 def test_remote_consumer_reserves_ordinal_and_rejects_duplicate_fence(specimen, tmp_path):
     s = specimen
-    consumer = AuthorizationLedger(Journal(tmp_path / "consumer.sqlite3"))
+    consumer = AuthorizationLedger(Journal(tmp_path / "consumer.sqlite3"), monotonic=lambda: 0)
     consumer.set_state("issuer-1", "eng-1", 1, False, "b" * 64)
     consumer.consume(
         s["contract"], s["approval"], s["plan"], s["case"], {}, (s["anchor"],), s["runtime"]
@@ -640,7 +643,7 @@ def test_remote_consumer_reserves_ordinal_and_rejects_duplicate_fence(specimen, 
 
 def test_remote_higher_fence_cannot_displace_active_attempt(specimen, tmp_path):
     s = specimen
-    consumer = AuthorizationLedger(Journal(tmp_path / "consumer.sqlite3"))
+    consumer = AuthorizationLedger(Journal(tmp_path / "consumer.sqlite3"), monotonic=lambda: 0)
     consumer.set_state("issuer-1", "eng-1", 1, False, "b" * 64)
     payload = consumer.consume(
         s["contract"], s["approval"], s["plan"], s["case"], {}, (s["anchor"],), s["runtime"]
@@ -687,3 +690,177 @@ def test_clock_rollback_and_unknown_prototype_schema_fail_closed(specimen, tmp_p
         AuthorizationLedger(journal)
     with journal._connection() as con:
         assert con.execute("SELECT issuer FROM authorization_state").fetchone()[0] == "retained"
+
+
+@pytest.mark.parametrize("operation", ["consume", "issue"])
+def test_expiry_denial_survives_ledger_reload_and_clock_rollback(specimen, operation):
+    s = specimen
+    later = replace(s["runtime"], now=NOW + timedelta(hours=2))
+    if operation == "consume":
+        with pytest.raises(AuthorizationError, match="expired_or_not_yet_valid"):
+            s["ledger"].consume(
+                s["contract"], s["approval"], s["plan"], s["case"], {}, (s["anchor"],), later
+            )
+    else:
+        with pytest.raises(AuthorizationError, match="expired_or_not_yet_valid"):
+            s["ledger"].issue(
+                s["approval"],
+                (s["anchor"],),
+                s["issuer"],
+                SEED,
+                "expired-issue",
+                "attempt-2",
+                replace(later, attempt_id="attempt-2", fence=2),
+                s["plan"],
+                s["case"],
+                {},
+            )
+    reloaded = AuthorizationLedger(s["ledger"].journal, monotonic=lambda: 0)
+    with pytest.raises(AuthorizationError, match="clock_rollback"):
+        reloaded.consume(
+            s["contract"], s["approval"], s["plan"], s["case"], {}, (s["anchor"],), s["runtime"]
+        )
+    with reloaded.journal._connection() as con:
+        assert con.execute("SELECT consumed FROM authorization_contracts").fetchone()[0] == 0
+        assert con.execute("SELECT issued FROM authorization_approvals").fetchone()[0] == 1
+
+
+def test_clock_observation_uses_runtime_not_signed_payload_time(specimen):
+    s = specimen
+    forged = decoded(unb64(s["contract"]["payload"]))
+    forged["issued_at"] = "2099-01-01T00:00:00Z"
+    with pytest.raises(AuthorizationError, match="invalid_issuance_time"):
+        s["ledger"].consume(
+            sign(forged, SEED, "contract"),
+            s["approval"],
+            s["plan"],
+            s["case"],
+            {},
+            (s["anchor"],),
+            s["runtime"],
+        )
+    with s["ledger"].journal._connection() as con:
+        assert (
+            con.execute("SELECT observed FROM authorization_clock").fetchone()[0] == NOW.isoformat()
+        )
+    assert (
+        s["ledger"].consume(
+            s["contract"], s["approval"], s["plan"], s["case"], {}, (s["anchor"],), s["runtime"]
+        )["execution_index"]
+        == 1
+    )
+
+
+def test_clock_storage_failure_denies_before_permission_or_consumption(specimen):
+    s = specimen
+    with patch.object(s["ledger"].journal, "_connection", side_effect=sqlite3.OperationalError):
+        with pytest.raises(AuthorizationError, match="clock_state_failed"):
+            s["ledger"].consume(
+                s["contract"], s["approval"], s["plan"], s["case"], {}, (s["anchor"],), s["runtime"]
+            )
+    with s["ledger"].journal._connection() as con:
+        assert con.execute("SELECT consumed FROM authorization_contracts").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("operation", ["consume", "issue"])
+@pytest.mark.parametrize("delay", ["writer_lock", "validation"])
+def test_expiry_after_entry_cannot_reserve_and_survives_denial(
+    specimen, tmp_path, operation, delay
+):
+    s = specimen
+    ticks = [0.0]
+    entered = threading.Event()
+
+    def monotonic():
+        entered.set()
+        return ticks[0]
+
+    ledger = AuthorizationLedger(Journal(tmp_path / "delayed.sqlite3"), monotonic=monotonic)
+    ledger.set_state("issuer-1", "eng-1", 1, False, "b" * 64)
+    permission = {**s["context"], "expires_at": "2026-11-01T18:00:01Z"}
+    approval = approve(
+        permission, s["issuer"], "standalone", "operator-1", "short", "2026-11-01T17:59:00Z", SEED
+    )
+    payload = decoded(unb64(s["contract"]["payload"]))
+    contract = sign(
+        {
+            **payload,
+            "approval_id": "short",
+            "approval_sha256": digest(encoded(approval)),
+            "expires_at": permission["expires_at"],
+        },
+        SEED,
+        "contract",
+    )
+
+    def attempt():
+        if operation == "consume":
+            return ledger.consume(
+                contract, approval, s["plan"], s["case"], {}, (s["anchor"],), s["runtime"]
+            )
+        return ledger.issue(
+            approval,
+            (s["anchor"],),
+            s["issuer"],
+            SEED,
+            "short",
+            "attempt-1",
+            s["runtime"],
+            s["plan"],
+            s["case"],
+            {},
+        )
+
+    if delay == "writer_lock":
+        with ledger.journal._connection() as writer, ThreadPoolExecutor(max_workers=1) as pool:
+            writer.execute("BEGIN IMMEDIATE")
+            future = pool.submit(attempt)
+            assert entered.wait(2) and not future.done()
+            ticks[0] = 2.0  # Explicit trusted fixture clock, while writer lock remains held.
+            writer.commit()
+            with pytest.raises(AuthorizationError, match="expired_or_not_yet_valid"):
+                future.result(timeout=5)
+    else:
+        from vardrrunner.authorization import ledger as module
+
+        original = module.validate
+
+        def delayed(*args):
+            result = original(*args)
+            ticks[0] = 2.0
+            return result
+
+        with patch.object(module, "validate", delayed):
+            with pytest.raises(AuthorizationError, match="expired_or_not_yet_valid"):
+                attempt()
+    with ledger.journal._connection() as con:
+        assert con.execute("SELECT count(*) FROM authorization_contracts").fetchone()[0] == 0
+        assert con.execute("SELECT count(*) FROM authorization_approvals").fetchone()[0] == 0
+        assert con.execute("SELECT count(*) FROM authorization_fences").fetchone()[0] == 0
+        assert (
+            con.execute("SELECT observed FROM authorization_clock").fetchone()[0]
+            >= (NOW + timedelta(seconds=2)).isoformat()
+        )
+    # Subsequent rollback cannot restore the unused short contract's permission.
+    ticks[0] = 0.0
+    with pytest.raises(AuthorizationError, match="clock_rollback"):
+        attempt()
+
+
+def test_trusted_runtime_clock_and_corrupt_observation_fail_closed(specimen):
+    s = specimen
+    wall = [NOW + timedelta(hours=2)]
+    ledger = AuthorizationLedger(s["ledger"].journal, clock=lambda: wall[0], monotonic=lambda: 0)
+    args = (s["contract"], s["approval"], s["plan"], s["case"], {}, (s["anchor"],), s["runtime"])
+    with pytest.raises(AuthorizationError, match="expired_or_not_yet_valid"):
+        ledger.consume(*args)
+    wall[0] = NOW
+    with pytest.raises(AuthorizationError, match="clock_rollback"):
+        ledger.consume(*args)
+    with ledger.journal._connection() as con:
+        con.execute("UPDATE authorization_clock SET observed='corrupt'")
+    with pytest.raises(AuthorizationError, match="clock_state_failed"):
+        ledger.consume(*args)
+    wall[0] = NOW.replace(tzinfo=None)
+    with pytest.raises(AuthorizationError, match="invalid_clock"):
+        ledger.consume(*args)

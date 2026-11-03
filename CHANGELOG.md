@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Preserve the authorization ledger's trusted clock high-water mark after denied
+  issue/consume attempts. Recheck elapsed permission after writer locks and before
+  reservation so delayed or rolled-back clocks cannot revive expired contracts.
+
 - Add opt-in expiring/revocable Gate reference grants, claim/provider/launch
   revalidation and conservative protected recovery. Preserve signed deadlines
   across grant-lock waits; legacy approvals are unchanged. See

@@ -1,5 +1,11 @@
 # VardrRunner — Architecture
 
+The opt-in authorization ledger records trusted observed time in a short separate
+transaction, independent of permission changes. Denied issuance/consumption cannot
+forget expiry, and permission transactions recheck time after writer-lock waits
+and before reservation. Monotonic elapsed time composes with the runtime clock;
+unknown ordinals/fences remain spent. See [ADR 0031](adr/0031-ledger-clock-denials.md).
+
 Opt-in expiring Gate reference grants are described in
 [ADR 0027](adr/0027-expiring-reference-grants.md). A separate config catalog uses
 the existing journal for writer serialization, digest anchoring and observed-time
