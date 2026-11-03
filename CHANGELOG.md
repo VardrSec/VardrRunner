@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Exercise native process creation, permission ordering, handle ownership, liveness,
+  membership races and bounded capture failures through a portable fake WinAPI.
+  Keep the 95% suite coverage requirement and real Windows containment tests.
+  These contract tests do not enable controlled execution on other platforms.
+
 - Preserve Windows native error handling while allowing the Windows-only ctypes
   API to pass Linux-hosted static checks. Linux controlled execution stays unsupported.
 

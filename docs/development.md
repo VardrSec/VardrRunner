@@ -300,3 +300,15 @@ Run that real guarded fixture whenever the projection argv or Gate handler chang
 the existing ffuf/dalfox smoke tests cover different adapters.
 Runtime regressions include a valid shorter-lived contract and permission expiring
 during private-file preparation, covering both preflight and ordinary Gate launches.
+
+## Portable native boundary regressions
+
+`tests/test_windows_job_boundary.py` injects a fake WinAPI to exercise native
+permission ordering, handle ownership, liveness, membership races and fail-closed
+cleanup on every test host. Run it with
+`python -m pytest tests/test_windows_job_boundary.py`.
+It launches no process and loads no native DLL.
+It models Windows 32-bit DWORD/BOOL values explicitly on LP64 hosts, but does not
+validate Windows structure ABI or actual kernel containment. Keep the real Windows
+process-tree acceptance tests and the full suite's 95% coverage requirement;
+controlled execution on Linux/macOS remains unsupported.
