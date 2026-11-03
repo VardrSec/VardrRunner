@@ -48,6 +48,8 @@ def main():
     files = [
         "test_execution_control.py", "test_windows_job_boundary.py", "test_runner.py",
         "test_recovery.py", "test_toolchain.py",
+        "test_journal.py", "test_identity.py", "test_duration_budget.py",
+        "test_expiring_grants.py", "test_expiring_grant_jobs.py",
     ]
     result = subprocess.run(
         [sys.executable, "-m", "pytest", *[f"tests/{name}" for name in files],
@@ -65,6 +67,8 @@ def main():
     (output / "runtime.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
     assert result.returncode == 0, "Test failure remains a failure"
     cases = list(ET.parse(output / "tests.xml").getroot().iter("testcase"))
+    assert len(cases) == 294, "All pinned process, durability and grant cases must be collected"
+    assert all(case.find("skipped") is None for case in cases), "Selected cases must pass without skips"
     native = [case for case in cases if case.get("classname", "").endswith("test_execution_control")
               and case.get("name", "").startswith((
                   "test_lease_expiring_during_native_launch_preparation",
