@@ -5,11 +5,13 @@ from __future__ import annotations
 import re
 import sqlite3
 import uuid
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from vardrrunner import redaction
-from vardrrunner.journal import Journal, utc_now
+from vardrrunner.journal import SCHEMA_VERSION, Journal, utc_now
 
 
 class WorkspaceError(RuntimeError):
@@ -102,13 +104,41 @@ class Workspaces:
                 ).fetchone()
             if row is None:
                 return None
-            if row["workspace_schema_version"] != 1:
-                raise WorkspaceError("Unsupported local workspace metadata")
-            validate_id(row["workspace_id"])
-            validate_name(row["name"])
-            created = datetime.fromisoformat(row["created_at"])
-            if created.utcoffset() != timezone.utc.utcoffset(created):
-                raise WorkspaceError("Invalid local workspace metadata")
-            return Workspace(row["workspace_id"], row["name"], row["created_at"])
+            return self._record(row)
         except (sqlite3.Error, TypeError, ValueError):
             raise WorkspaceError("Cannot read local workspace metadata") from None
+
+    @staticmethod
+    def _record(row: sqlite3.Row) -> Workspace:
+        if row["workspace_schema_version"] != 1:
+            raise WorkspaceError("Unsupported local workspace metadata")
+        validate_id(row["workspace_id"])
+        validate_name(row["name"])
+        created = datetime.fromisoformat(row["created_at"])
+        if created.utcoffset() != timezone.utc.utcoffset(created):
+            raise WorkspaceError("Invalid local workspace metadata")
+        return Workspace(row["workspace_id"], row["name"], row["created_at"])
+
+    @staticmethod
+    def list_existing(path: Path, *, limit: int = 100) -> list[Workspace]:
+        """Read bounded metadata without constructing/migrating a Journal."""
+        if type(limit) is not int or not 1 <= limit <= 1000:
+            raise WorkspaceError("Invalid workspace list limit")
+        try:
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                return []
+            with closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as con:
+                con.row_factory = sqlite3.Row
+                if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+                    raise WorkspaceError("Unsupported local journal schema")
+                if not Workspaces._exists(con):
+                    return []
+                rows = con.execute(
+                    "SELECT * FROM local_workspaces ORDER BY created_at DESC, workspace_id ASC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+                return [Workspaces._record(row) for row in rows]
+        except (OSError, sqlite3.Error, TypeError, ValueError):
+            raise WorkspaceError("Cannot list local workspace metadata") from None

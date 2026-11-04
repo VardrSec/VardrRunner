@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add bounded `workspace list --limit` metadata discovery from the existing local
+  journal without initialization/migration or Map credentials. Existing creation,
+  known-ID lookup, authority and execution behavior remain unchanged.
+
 - Add explicit local `workspace create` and `workspace show` metadata in the
   existing SQLite journal, without Map authentication or execution authority.
   Preserve connected commands, execution records and existing audit/export.

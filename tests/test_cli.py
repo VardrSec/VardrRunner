@@ -19,6 +19,16 @@ from vardrrunner.commands import run as run_cmd
 runner = CliRunner()
 
 
+def test_workspace_list_limit_is_forwarded():
+    with (
+        patch("vardrrunner.commands.workspace.list_workspaces") as listing,
+        patch("vardrrunner.cli.process_runner.cleanup_sensitive_temp_dirs"),
+    ):
+        result = runner.invoke(app, ["workspace", "list", "--limit", "7"])
+    assert result.exit_code == 0, result.output
+    listing.assert_called_once_with(limit=7)
+
+
 def test_jobs_run_expiring_grants_routes_opt_in():
     with patch("vardrrunner.commands.jobs.run_jobs") as run:
         result = runner.invoke(app, ["jobs", "run", "--yes", "--expiring-grants"])

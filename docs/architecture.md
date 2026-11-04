@@ -1,5 +1,11 @@
 # VardrRunner — Architecture
 
+Workspace metadata listing reuses `local_workspaces` and the same row validation
+as known-ID lookup. A bounded SQLite read-only query checks current journal/table
+schemas and orders before limiting; it constructs no Journal and performs no
+initialization/migration. No active selection, new state, authority or execution
+path is introduced. Existing application startup maintenance remains unchanged.
+
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot
 forget expiry, and permission transactions recheck time after writer-lock waits

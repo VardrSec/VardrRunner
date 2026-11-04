@@ -308,6 +308,12 @@ def workspace_show(workspace_id: str = typer.Argument(..., help="Full local work
     workspace_cmd.show(workspace_id)
 
 
+@workspace_app.command("list")
+def workspace_list(limit: int = typer.Option(100, "--limit", min=1, max=1000)):
+    """List saved local workspace metadata as JSON without contacting Map."""
+    workspace_cmd.list_workspaces(limit=limit)
+
+
 audit_app = typer.Typer(
     help="Inspect and export the sanitized local execution journal.", no_args_is_help=True
 )

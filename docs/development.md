@@ -2,6 +2,12 @@
 
 ## Local workspace metadata
 
+Listing cases check bounded/deterministic metadata discovery, missing/corrupt/
+future state without initialization, byte preservation and no Map/provider/process
+use. CLI forwarding checks the limit kwarg. Tests isolate the unchanged global
+startup maintenance hook; database read-only claims are not a claim of zero
+filesystem bookkeeping by SQLite or the application's existing startup code.
+
 `tests/test_workspaces.py` covers fresh and existing journal preservation,
 concurrent creation, collision refusal, invalid/future/corrupt state and CLI
 operation without Map authentication, network or process creation. Tests use
