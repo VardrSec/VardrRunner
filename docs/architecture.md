@@ -1,5 +1,8 @@
 # VardrRunner — Architecture
 
+The reconciled export read also uses the existing observed-file guard before its
+SQLite connection; read-only mode, fresh reads and live WAL visibility remain.
+
 Workspace metadata listing reuses `local_workspaces` and the same row validation
 as known-ID lookup. A bounded SQLite read-only query checks current journal/table
 schemas and orders before limiting; it constructs no Journal and performs no
@@ -13,6 +16,29 @@ Missing journals retain their existing creation/read-only semantics. Inspection
 does not pin a descriptor for SQLite: concurrent leaf/ancestor replacement and
 blocked filesystem metadata I/O remain outside this availability correction.
 This is not an authenticated path boundary or a general bounded-open guarantee.
+
+The partial NM-3 single-run evidence exporter reuses journal/schema-1 audit and
+manifest formats. It reads a current-schema journal in SQLite read-only mode,
+binds source JSON to the recorded digest/size and regular-file descriptor, then
+serializes a centrally redacted derivative. Original provenance stays in audit;
+the portable manifest describes the derivative and links the original hash.
+Fixed filenames are created exclusively through a pinned private POSIX directory
+descriptor. Fresh journal rechecks detect changed records without pinning one
+stale database snapshot. No database, grants, config or executable authority is
+copied. Windows now has an isolated handle-adapter candidate using verified private
+ACLs and no-redirect creation. Native security acceptance remains open. See
+[ADR 0040](adr/0040-portable-run-export.md).
+
+Path conversion can normalize input spellings before validation. The security
+boundary binds the resulting path through actual no-redirect handle operations;
+it does not promise raw CLI-token rejection for every spelling alias.
+
+Audit history and schema-1 metadata export optionally select an exact engagement
+or local workspace ID through the existing journal query. Bound SQL parameters
+apply that filter together with the time bound before ordering and limiting.
+Only `None` means unscoped; explicit blank/whitespace values remain literal
+historical IDs. No workspace lookup, Map transport, authorization, schema change
+or artifact-copy system is involved. Existing callers remain unscoped by default.
 
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot

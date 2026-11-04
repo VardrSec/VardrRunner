@@ -1,5 +1,10 @@
 # VardrRunner — Development
 
+Reconciled journal/export checks extend the existing special-file cases to
+`read_existing`, including ordinary leaf aliases and committed live WAL records.
+These checks do not close the demonstrated concurrent-replacement race or native
+Windows acceptance. Test counts from older candidates are not combined acceptance.
+
 ## Local workspace metadata
 
 Listing cases check bounded/deterministic metadata discovery, missing/corrupt/
@@ -24,6 +29,45 @@ it does not establish scope, grant approval or enable execution. Existing audit
 and connected CLI regressions remain applicable. The normal full suite and 95%
 coverage floor are unchanged; do not lower resource policies to accommodate a
 small test host. Report simulated resource inputs separately from actual capacity.
+
+## Partial portable run export
+
+CLI alias coverage uses real Typer Path conversion. Direct raw-string Windows
+adapter tests cover that lower-level API only; they do not claim raw CLI aliases
+are all rejected before Python normalization. Native path/ACL/race gates remain.
+
+`tests/test_portable_export.py` checks source hash/size and descriptor binding,
+strict bounded JSON, original versus derivative provenance, status preservation,
+exclusive private output, redirected-directory refusal, fresh record reads and
+partial-output retention. Every case uses synthetic local files; no tool or Map
+request is made. New unit cases simulate a finite 2 GiB capacity observation and
+only the filesystem-root UID as 0, preserving all other stat observations. This
+cloud runtime actually has root UID 65534 and insufficient free disk, so those
+unit results are not actual-host permission/capacity acceptance.
+
+`test_real_capacity_export` uses neither simulation. It must run in Workstream C
+on an adequately sized supported POSIX host, along with normal full regression
+and the unchanged 95% floor. Its environment skip here is unproven, not passed.
+Windows uses a candidate 24H2+ handle adapter on local fixed NTFS; native ACL/race
+acceptance remains open. `tests/test_windows_export.py` distinguishes mocked API
+protocol checks from the opt-in actual native check. On Windows, set
+`VARDRRUNNER_WINDOWS_EXPORT_ACCEPTANCE=1` for that synthetic test, using a NEW
+retained basetemp; never reuse a pytest basetemp containing evidence. No Windows
+security acceptance is claimed by mocked cases. Existing execution is unchanged.
+Preserve test files;
+do not lower resource policy, change host ownership/ACLs or repeat unchanged
+native Gate/scanner checks for this file-export increment.
+
+## Scoped local audit history
+
+`tests/test_journal.py` checks exact engagement filtering before limits, combined
+time bounds, case/wildcard behavior and literal blank/SQL-looking historical IDs.
+`tests/test_audit.py` checks local-only redacted metadata export, empty selection
+and preservation of other runs. `tests/test_cli.py` checks both `--engagement`
+and `-e` delegation for list/export and unchanged defaults. Use the normal
+full-suite/95% coverage floor and resource reserve; this feature needs no live
+Map service, credentials, Gate binary or managed worker. Export remains schema 1
+with existing atomic replacement behavior; it is not an artifact/workspace backup.
 
 `tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
 journal connections, preparation/grant/clock failures and conservative recovery.

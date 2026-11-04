@@ -7,6 +7,8 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Reconcile workspace journal and portable-export candidates; apply the existing
+  observed-file guard to read-only export journal reads. Native acceptance remains open.
 - Refuse observed special journal objects before SQLite connections, avoiding
   pre-existing FIFO hangs while preserving regular-file, leaf-alias and WAL
   behavior. Concurrent replacement and filesystem I/O deadlines remain unproven.
@@ -18,6 +20,17 @@ Per-version detail notes live in [`changelog/`](changelog/).
 - Add explicit local `workspace create` and `workspace show` metadata in the
   existing SQLite journal, without Map authentication or execution authority.
   Preserve connected commands, execution records and existing audit/export.
+
+- Clarify portable-export path normalization and test the real CLI conversion;
+  raw adapter rejection cases do not imply rejection of every CLI spelling alias.
+
+- Add local `audit export-run` for a single terminal run's redacted JSON evidence
+  copy, original audit provenance and relative-path manifest. This partial NM-3
+  increment uses POSIX directory-FD controls or a candidate Windows 11 24H2+
+  handle adapter on local fixed NTFS. Native Windows security acceptance remains open.
+
+- Filter local audit history and metadata export by exact engagement/workspace ID
+  with `--engagement` (`-e`), using the existing journal and export schema.
 
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.

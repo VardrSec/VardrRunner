@@ -1,5 +1,8 @@
 # VardrRunner — CLI Reference
 
+The reconciled `audit export-run` journal read refuses observed special files
+before SQLite opens. This remains an observation, not a race-safe open guarantee.
+
 Opt-in NM-2 source builds add `vardrrunner jobs run --controlled [--yes]` with
 matching Map execution-control endpoints, and `vardrrunner jobs stop RUN_ID` to
 request local emergency stop of that journal run. A stop request is not confirmed
@@ -561,9 +564,9 @@ Queue-driven jobs are recorded in `~/.vardrmap/runner-journal.sqlite3`. Audit co
 local and never contact the backend:
 
 ```bash
-vardrrunner audit list [--since <iso-timestamp>] [--limit 100] [--json]
+vardrrunner audit list [--engagement <id>] [--since <iso-timestamp>] [--limit 100] [--json]
 vardrrunner audit show <run-id>
-vardrrunner audit export --output audit.json [--since <iso-timestamp>] [--limit 10000]
+vardrrunner audit export --output audit.json [--engagement <id>] [--since <iso-timestamp>] [--limit 10000]
 ```
 
 `list` shows recent lifecycle outcomes, `show` prints one full sanitized record, and
@@ -572,8 +575,67 @@ retention. Records include target counts, sanitized tool settings, lifecycle tim
 failure categories, policy warnings, and artifact SHA-256/size. They exclude raw targets,
 credentials, request bodies, and headers.
 
+`--engagement <id>` (or `-e`) selects an exact local engagement or workspace ID.
+It requires no Map connection, account or token. The filter combines with `--since`
+before sorting and `--limit`; omitting it preserves the existing all-engagement
+view. IDs are literal and case-sensitive, with no wildcard or whitespace
+normalization. A missing match produces an empty history/export. This scopes the
+existing sanitized metadata export; it does not copy artifact bytes, contracts,
+credential state or a complete workspace backup, and grants no execution authority.
+
 Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
 journal remains the recovery source of truth; manifests are portable run evidence.
+
+### `audit export-run` — redacted evidence copy (partial portability candidate)
+
+```bash
+vardrrunner audit export-run <run-id> --output NEW_EXPORT_DIRECTORY
+```
+
+Select one terminal journal run with no unresolved PID and a recorded artifact
+hash/size. This explicit local command needs no Map connection or credentials.
+Its artifact must be a regular, singly linked direct child of the recorded run
+directory, named with a `.json` suffix and containing one unambiguous JSON object.
+The source and redacted copy each fit the smaller of 8 MiB and the local artifact
+limit; JSON nesting is limited to 12. Binary/JSONL, missing, changed, ambiguous or
+unbound artifacts are refused. Use existing metadata export for other records.
+
+The new directory contains exactly three files:
+
+- `audit.json`: existing schema-1 sanitized source history, including the original
+  artifact hash and historical paths.
+- `artifact.json`: a separately serialized copy passed through central redaction.
+  Original tool output stays untouched; decisions are not reclassified.
+- `manifest.json`: existing schema 1 with relative paths, the exact copy's hash/size
+  and a `redacted_export` warning linking its source hash. Source status is retained,
+  including failed/partial outcomes; export does not complete or validate a run.
+
+The output directory must be new and outside the source run. Supported POSIX
+filesystems must provide directory-FD/no-follow operations and private modes.
+Ancestor directories must be owned by root/current user, without group/other
+write except trusted sticky directories. Writes use the opened new directory,
+never replace files, and reserve the unchanged free-disk floor plus actual output
+bytes. Failure retains partial files; do not infer a successful export from a
+partial directory or a recorded source status alone.
+
+**Windows 11 24H2+ candidate:** local fixed NTFS only, with the documented
+CreateDirectory2W/CreateFile3 APIs. Every ancestor must have an exact trusted owner
+(current user, SYSTEM or Administrators). Reparse paths, unsupported namespaces,
+sharing conflicts and unsupported owners refuse without fallback. New output ACLs
+are protected and verified, and handles remain pinned through manifest publication.
+Native ACL/race acceptance is still open; this does not claim full NM-3 portability.
+Existing Windows execution and metadata commands retain their behavior.
+
+The CLI converts output to a Python `Path` and resolves it for export. Dot and
+repeated-separator spellings can normalize before adapter validation; this is
+accepted normalization, not rejection of every raw argument alias. Security
+checks apply to the resulting absolute path and actual no-redirect handle opens.
+Direct adapter raw-string rejection tests do not prove CLI-token rejection.
+
+The copied JSON formats are readable elsewhere, but no import, authority
+restoration, archive encryption or independent provenance attestation is provided.
+Central redaction is not a proof that all sensitive content was found; review the
+copy before sharing it. Escaped lone Unicode surrogates may remain in JSON.
 
 ---
 

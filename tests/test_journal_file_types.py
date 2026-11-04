@@ -32,6 +32,8 @@ def test_observed_special_object_refuses_all_opens_and_public_list(tmp_path, mon
         "sqlite3.connect", side_effect=AssertionError("Must refuse before SQLite")
     ) as connect:
         with pytest.raises(JournalError):
+            Journal.read_existing(path, "synthetic-run")
+        with pytest.raises(JournalError):
             Journal(path)
         with pytest.raises(WorkspaceError):
             Workspaces.list_existing(path)
@@ -102,6 +104,10 @@ def test_regular_leaf_alias_retains_live_wal_visibility(tmp_path):
     path = tmp_path / "journal.sqlite3"
     journal = Journal(path)
     first = Workspaces(journal).create("First")
+    run = journal.begin(
+        job_id="fixture", backend_url="", engagement_id=first.workspace_id,
+        job_type="fixture", tool="fixture", target_source="explicit", command_profile={},
+    )
     alias = tmp_path / "alias.sqlite3"
     symlink(path, alias)
     with closing(sqlite3.connect(path)) as writer:
@@ -111,9 +117,11 @@ def test_regular_leaf_alias_retains_live_wal_visibility(tmp_path):
             "UPDATE local_workspaces SET name='Committed in WAL' WHERE workspace_id=?",
             (first.workspace_id,),
         )
+        writer.execute("UPDATE runs SET status=? WHERE run_id=?", ("committed-in-wal", run.run_id))
         writer.commit()
         assert path.with_name(path.name + "-wal").stat().st_size > 0
         for source in (path, alias):
+            assert Journal.read_existing(source, run.run_id).status == "committed-in-wal"
             assert journal_path_present(source)
             assert Workspaces.list_existing(source)[0].name == "Committed in WAL"
             assert Workspaces(Journal(source)).get(first.workspace_id).name == "Committed in WAL"
@@ -127,6 +135,8 @@ def test_leaf_alias_to_unsupported_target_refuses_before_sqlite(tmp_path, target
     alias = tmp_path / "alias.sqlite3"
     symlink(target, alias)
     with patch("sqlite3.connect", side_effect=AssertionError("Must not open target")) as connect:
+        with pytest.raises(JournalError):
+            Journal.read_existing(alias, "synthetic-run")
         with pytest.raises(JournalError):
             Journal(alias)
         with pytest.raises(WorkspaceError):
