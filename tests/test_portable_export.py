@@ -13,7 +13,8 @@ from types import SimpleNamespace
 import pytest
 import typer
 
-from vardrrunner import api, config, manifests, resources, runner
+from vardrrunner import api, config, credential_grants, manifests, resources, runner
+from vardrrunner.authorization.ledger import AuthorizationLedger
 from vardrrunner.commands import audit
 from vardrrunner.journal import Journal, JournalError, Phase
 
@@ -117,6 +118,60 @@ def capacity(monkeypatch):
 
 def invoke(f):
     audit.export_run(f.record.run_id, f.output)
+
+
+@pytest.mark.parametrize("revoked", [False, True], ids=["active", "revoked"])
+def test_export_excludes_live_control_stores_and_preserves_safety_state(seeded, capacity, revoked):
+    """Synthetic reference grants only; no credentials, issuance or execution."""
+    f = seeded()
+    reference = (
+        "standalone",
+        "local-workspace",
+        "https://fixture.invalid",
+        "env",
+        "SYNTHETIC_REFERENCE",
+    )
+    store = credential_grants.Store()
+    grant = store.approve(*reference, seconds=600)
+    if revoked:
+        assert store.revoke(*reference)
+    ledger = AuthorizationLedger(f.journal)
+    ledger.set_state("fixture-issuer", "local-workspace", 2 if revoked else 1, revoked, "a" * 64)
+    with closing(sqlite3.connect(config.journal_file())) as connection, connection:
+        connection.execute(
+            "INSERT INTO authorization_fences VALUES (?,?,?)", ("fixture-issuer", "fixture-job", 7)
+        )
+        connection.execute(
+            "INSERT INTO authorization_clock VALUES (?,?)", (1, "2026-11-04T00:00:00+00:00")
+        )
+
+    def control_rows():
+        tables = (
+            "authorization_state",
+            "authorization_fences",
+            "authorization_clock",
+            "credential_grant_state",
+            "credential_grant_events",
+        )
+        with closing(
+            sqlite3.connect(config.journal_file().absolute().as_uri() + "?mode=ro", uri=True)
+        ) as connection:
+            return {name: connection.execute(f"SELECT * FROM {name}").fetchall() for name in tables}
+
+    rows_before = control_rows()
+    config_before = config.CONFIG_FILE.read_bytes()
+    journal_before = config.journal_file().read_bytes()
+    invoke(f)
+    assert control_rows() == rows_before
+    assert config.CONFIG_FILE.read_bytes() == config_before
+    assert config.journal_file().read_bytes() == journal_before
+    assert {p.name for p in f.output.iterdir()} == {"artifact.json", "audit.json", "manifest.json"}
+    exported = b"\n".join(p.read_bytes() for p in sorted(f.output.iterdir()))
+    assert grant["id"].encode() not in exported
+    assert b"SYNTHETIC_REFERENCE" not in exported
+    assert b"credential_grant_state" not in exported
+    assert b"authorization_fences" not in exported
+    assert json.loads((f.output / "manifest.json").read_text())["phase"] == "done"
 
 
 def test_redacted_copy_has_original_provenance_and_its_own_portable_hash(seeded, capacity, capsys):

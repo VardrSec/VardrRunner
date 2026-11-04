@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add synthetic evidence-export regression for active/revoked reference grants
+  and live ledger safety state. Export preserves those stores and excludes their
+  files/state; no production behavior or authority-restoration feature is added.
+
 - Add local `audit export-run` for a single terminal run's redacted JSON evidence
   copy, original audit provenance and relative-path manifest. This partial NM-3
   increment requires POSIX directory-FD controls; Windows creation remains unsupported.
