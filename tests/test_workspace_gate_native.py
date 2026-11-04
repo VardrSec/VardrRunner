@@ -235,7 +235,19 @@ def test_native_standalone_workspace_gate_five_phases_and_no_replay(tmp_path, mo
             "owner": "allowed",
             "peer": "denied",
         }
-        assert target.value == 0  # The actual final reset reached the loopback target.
+        # Gate resets BEFORE each identity, runs deny-expected peer first and
+        # positive-control owner last. It does not perform final target cleanup.
+        assert target.value == 1
+        assert [
+            request
+            for request in target.observed
+            if request[1] == "/reset" or request[0] == "PATCH"
+        ] == [
+            ("POST", "/reset", "owner"),
+            ("PATCH", "/object", "peer"),
+            ("POST", "/reset", "owner"),
+            ("PATCH", "/object", "owner"),
+        ]
         expected_requests = Counter()
         for dispatch in plan["dispatches"]:
             actor = dispatch["identity_id"]
@@ -264,7 +276,10 @@ def test_native_standalone_workspace_gate_five_phases_and_no_replay(tmp_path, mo
                     "phases": verified_phases,
                     "observed_request_multiset_matches_plan": True,
                     "owner_allowed_peer_denied": True,
-                    "final_reset_value_zero": True,
+                    "reset_before_each_identity_observed": True,
+                    "identity_execution_order": ["peer", "owner"],
+                    "final_synthetic_value": 1,
+                    "final_target_cleanup_performed": False,
                     "dispatches": 14,
                     "replay_additional_dispatches": 0,
                     "case_hash_preserved": True,

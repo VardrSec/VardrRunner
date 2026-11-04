@@ -18,6 +18,11 @@ target, public fixture signing seed and synthetic values only; no host setting o
 privileged container is needed. It requires native Windows, five phases/14 requests,
 preserved case binding, no Map, no replay traffic and sanitized local evidence.
 It does not itself test active cancellation; retain separate native fault/stop gates.
+The synthetic reset establishes a baseline before each identity; it is not final
+cleanup. Gate runs the deny-expected peer first, then the allowed owner. The
+fixture checks that reset/write order and expects the owner's final value `1`,
+while preserving the 14-request ceiling. No extra cleanup request is added or
+claimed; the target is disposable loopback state. Replay and audit must still pass.
 Keep the default resource reserve/95% coverage floor and retain skipped/unrun gates.
 
 ## Local workspace metadata
