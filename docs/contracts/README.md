@@ -49,3 +49,13 @@ it. Live managed leases and cancellation remain NM-2, not an advertised capabili
 Approval signatures attest the issuer/operator assertion, not legal permission,
 biological human action or trusted execution. Protect approval keys from agents
 and workers. No general secret resolver, policy service or worker is introduced.
+
+## Dormant finite recon discriminator
+
+`plan-v1.schema.json` is unchanged and describes only `gate-fixed-http/1`
+with schema `vardr.execution-plan/1`. It does not describe finite recon plans.
+The dormant recon projection uses the distinct `vardr.finite-recon-plan/1`
+discriminator and `finite-dns-http/1` profile. Its explicit, compiler-enforced
+contract is documented in [finite-recon-plan-v1.md](finite-recon-plan-v1.md).
+No claim of conformance to the Gate JSON schema or generic plan-v1 interchange
+is made. Existing approval/contract envelopes still bind the entire plan digest.

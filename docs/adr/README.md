@@ -46,3 +46,5 @@ the way it does.
 | [0032](0032-unregistered-managed-native-gate.md) | Unregistered managed Gate/native composition | Local NM-2 increment for review |
 | [0033](0033-managed-preclaim-entry.md) | One-shot managed pre-claim entry | Local NM-2 increment for review |
 | [0038](0038-explicit-managed-json-transport.md) | Explicit bounded managed JSON transport | Local unregistered prerequisite; canonical worker exit open |
+
+- [0041: Dormant finite recon projection](0041-dormant-finite-recon-projection.md)
