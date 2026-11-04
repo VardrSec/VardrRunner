@@ -42,25 +42,36 @@ existing free-disk floor plus all three actual serialized sizes. This is not a
 global filesystem transaction, aggregate disk quota or defense against root or
 the same privileged account modifying its own files.
 
-## Windows boundary and decision still needed
+## Bounded Windows candidate
 
-POSIX-only creation **does not satisfy** the roadmap's Windows-first export exit.
-The new command refuses Windows; existing metadata commands retain their behavior.
-CPython's newer private-directory creation is useful but does not itself bind
-later path-based writes against parent/ancestor replacement. Python's directory-FD
-operations used here have no Windows equivalent in this implementation.
+The owner authorized a narrow same-contract Windows platform adaptation. API
+availability was observed on Papachin Windows 25H2 (build 26200.9711, amd64);
+neither creation API was invoked by that preflight. This is not native acceptance.
 
-A bounded Windows adapter could evaluate documented CreateFileW directory handles,
-reparse-point checks and sharing modes that prevent delete/rename while handles
-are held, with private creation and verified file identity. Microsoft documents
-these APIs; it does not establish that this entire protocol is safe or tested.
-The precise next decision is whether to authorize that narrow adapter and synthetic
-Windows race/ACL tests, or select another existing supported output mechanism
-with equivalent guarantees. No such layer is implemented/adopted here; no host
-ACL changes, privileges, new dependencies or unsafe fallback are authorized.
+Use documented CreateDirectory2W (atomic new directory plus returned handle) and
+CreateFile3 with no-redirect flags at every actual open/create. Both require
+Windows 11 24H2+ / Server 2025+. Pin every ancestor, source, output and file handle
+without write/delete sharing until completion. Check actual object type, identity,
+local fixed NTFS/persistent ACLs and owner. Reject unknown owners and unsupported
+paths/APIs/sharing states, without an older pathname fallback.
 
-References: [Python directory creation](https://docs.python.org/3/library/os.html#os.mkdir),
-[Microsoft CreateFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew).
+Current-user/SYSTEM/Administrators SIDs are the counterpart to current-user/root
+trust. New directory/files require exact current ownership and a verified present,
+protected non-null DACL granting only those principals. No inherited handles. Fixed
+files use CREATE_NEW, exact readback and manifest-last publication. Retain partial
+outputs and close owned handles; never remove evidence or change existing ACLs.
+Shared code retains reserve, original hash, strict parser, redaction, provenance,
+status and fresh journal checks; the adapter adds no authority or storage format.
+
+The Microsoft header and syntax specify the five-argument HANDLE ABI for
+CreateDirectory2W. The documentation's sample has inconsistent argument/return
+examples; do not copy it. Reject null and INVALID_HANDLE_VALUE and validate the
+returned handle. Native ABI, ACL/privacy, reparse/junction and ancestor/destination
+races, exclusive creation and interrupted publication remain required gates.
+
+References: [CreateDirectory2W](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createdirectory2w),
+[CreateFile3](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfile3),
+[Microsoft header](https://raw.githubusercontent.com/microsoft/win32metadata/main/generation/WinSDK/RecompiledIdlHeaders/um/fileapi.h).
 
 ## Gates
 

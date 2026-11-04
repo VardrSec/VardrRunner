@@ -550,7 +550,7 @@ credential state or a complete workspace backup, and grants no execution authori
 Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
 journal remains the recovery source of truth; manifests are portable run evidence.
 
-### `audit export-run` — redacted evidence copy (POSIX)
+### `audit export-run` — redacted evidence copy (partial portability candidate)
 
 ```bash
 vardrrunner audit export-run <run-id> --output NEW_EXPORT_DIRECTORY
@@ -582,12 +582,18 @@ never replace files, and reserve the unchanged free-disk floor plus actual outpu
 bytes. Failure retains partial files; do not infer a successful export from a
 partial directory or a recorded source status alone.
 
-**Windows artifact export is not implemented by this increment.** Existing Windows
-metadata audit commands remain available. The Windows-first NM-3 export/ACL gate
-stays open; this is not full portability acceptance. The copied JSON formats are
-readable elsewhere, but no import, authority restoration, archive encryption or
-independent provenance attestation is provided. Central redaction is not a proof
-that all sensitive content was found; review the copy before sharing it.
+**Windows 11 24H2+ candidate:** local fixed NTFS only, with the documented
+CreateDirectory2W/CreateFile3 APIs. Every ancestor must have an exact trusted owner
+(current user, SYSTEM or Administrators). Reparse paths, unsupported namespaces,
+sharing conflicts and unsupported owners refuse without fallback. New output ACLs
+are protected and verified, and handles remain pinned through manifest publication.
+Native ACL/race acceptance is still open; this does not claim full NM-3 portability.
+Existing Windows execution and metadata commands retain their behavior.
+
+The copied JSON formats are readable elsewhere, but no import, authority
+restoration, archive encryption or independent provenance attestation is provided.
+Central redaction is not a proof that all sensitive content was found; review the
+copy before sharing it. Escaped lone Unicode surrogates may remain in JSON.
 
 ---
 

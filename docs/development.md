@@ -14,8 +14,13 @@ unit results are not actual-host permission/capacity acceptance.
 `test_real_capacity_export` uses neither simulation. It must run in Workstream C
 on an adequately sized supported POSIX host, along with normal full regression
 and the unchanged 95% floor. Its environment skip here is unproven, not passed.
-Windows refuses this new command; no Windows artifact-export/ACL acceptance is
-claimed. Existing Windows metadata commands are unchanged. Preserve test files;
+Windows uses a candidate 24H2+ handle adapter on local fixed NTFS; native ACL/race
+acceptance remains open. `tests/test_windows_export.py` distinguishes mocked API
+protocol checks from the opt-in actual native check. On Windows, set
+`VARDRRUNNER_WINDOWS_EXPORT_ACCEPTANCE=1` for that synthetic test, using a NEW
+retained basetemp; never reuse a pytest basetemp containing evidence. No Windows
+security acceptance is claimed by mocked cases. Existing execution is unchanged.
+Preserve test files;
 do not lower resource policy, change host ownership/ACLs or repeat unchanged
 native Gate/scanner checks for this file-export increment.
 

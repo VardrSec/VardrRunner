@@ -8,8 +8,9 @@ the portable manifest describes the derivative and links the original hash.
 Fixed filenames are created exclusively through a pinned private POSIX directory
 descriptor. Fresh journal rechecks detect changed records without pinning one
 stale database snapshot. No database, grants, config or executable authority is
-copied. Windows needs an equivalent reviewed path-binding capability and remains
-unsupported here. See [ADR 0040](adr/0040-portable-run-export.md).
+copied. Windows now has an isolated handle-adapter candidate using verified private
+ACLs and no-redirect creation. Native security acceptance remains open. See
+[ADR 0040](adr/0040-portable-run-export.md).
 
 Audit history and schema-1 metadata export optionally select an exact engagement
 or local workspace ID through the existing journal query. Bound SQL parameters

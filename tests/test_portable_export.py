@@ -119,6 +119,41 @@ def invoke(f):
     audit.export_run(f.record.run_id, f.output)
 
 
+def test_windows_adapter_reuses_shared_policy(seeded, capacity, monkeypatch):
+    """Mocked platform routing only; not native file security acceptance."""
+    f = seeded()
+    events = []
+
+    class WindowsIO:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            events.append("closed")
+
+        def read_source(self, root, source, maximum):
+            assert root == f.source and source == f.artifact
+            assert maximum == audit.EXPORT_ARTIFACT_LIMIT
+            return source.read_bytes()
+
+        def publish(self, output, payloads, fresh):
+            fresh()
+            assert output == f.output
+            artifact, original_audit, manifest = map(json.loads, payloads)
+            assert "synthetic-never-export" not in str(artifact)
+            assert original_audit["runs"][0]["artifact_sha256"] == f.record.artifact_sha256
+            assert manifest["artifact_path"] == "artifact.json"
+            assert manifest["artifact_sha256"] == hashlib.sha256(payloads[0]).hexdigest()
+            assert manifest["phase"] == "done"
+            events.append("published")
+
+    monkeypatch.setattr(audit, "WindowsExport", WindowsIO)
+    monkeypatch.setattr(audit, "os", SimpleNamespace(name="nt"))
+    audit.export_run(f.record.run_id, f.output)
+    assert events == ["published", "closed"]
+    assert not f.output.exists()
+
+
 def test_redacted_copy_has_original_provenance_and_its_own_portable_hash(seeded, capacity, capsys):
     f = seeded()
     original = f.artifact.read_bytes()
