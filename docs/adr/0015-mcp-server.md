@@ -273,3 +273,20 @@ scope or authorization, because the act that applies a change is still withheld.
 Each propose tool takes a `reason` and a `source` so the operator can judge the proposal
 without leaving the console. Requires the matching VardrMap release with the
 `/engagements/{id}/proposals` endpoints; older backends return 404 and the tools simply fail.
+
+## Correction (unreleased): identifiers cannot select routes
+
+Tool-name withholding alone did not preserve the boundary: an unchecked engagement
+ID could insert a path and query delimiter so a proposal or read-only preview POST
+selected the separate approval endpoint. A full-access configured key could then
+authorize the withheld action. Backend key scope remains necessary, but is not a
+substitute for the MCP adapter's own route boundary.
+
+Validate every interpolated path ID as one literal ASCII unreserved segment and
+refuse empty, dot/dot-dot, delimiter and encoded forms. Keep UUIDs and existing
+opaque IDs; do not impose UUID-only parsing or change generic API/CLI behavior.
+Use one local helper across engagement and nested object routes. Fixed rejection
+text does not echo input. Offline negatives exercise actual MCP/API composition
+and require zero HTTP dispatch, including for tools annotated read-only. This is
+a correction to the existing authority boundary, not a new authorization system
+or permission to approve proposals.

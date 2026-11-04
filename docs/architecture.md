@@ -1,5 +1,13 @@
 # VardrRunner — Architecture
 
+MCP treats every interpolated route identifier as an untrusted single path segment:
+nonempty ASCII unreserved characters, with exact dot/dot-dot segments refused.
+Engagement and nested object IDs pass the same check before HTTP dispatch,
+including IDs passed through client convenience methods. No URL decoding or
+normalization repairs an invalid ID. This preserves withheld write routes even
+when the configured key could authorize them. See ADR 0015; ordinary API/CLI
+transport and backend authorization remain unchanged.
+
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot
 forget expiry, and permission transactions recheck time after writer-lock waits

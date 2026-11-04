@@ -1,5 +1,16 @@
 # VardrRunner — Development
 
+## MCP route identifier regression
+
+Run `pytest tests/test_mcp_path_boundary.py tests/test_mcp_server.py` with the
+optional MCP extra installed. The boundary cases use the real MCP/API composition,
+a synthetic key and intercepted HTTP; socket dispatch is forbidden. Test proposal,
+read-only preview and queue/draft writes against approval-route injection, URL
+delimiters, encoded separators and dot segments, then verify exact routes for
+UUIDs and legacy opaque IDs. Nested read IDs also fail before HTTP dispatch.
+These cases supplement the unchanged full-suite and 95% coverage gates; no live
+approval endpoint or operator credential is needed.
+
 `tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
 journal connections, preparation/grant/clock failures and conservative recovery.
 Map's explicit `tests/test_managed_entry.py` adds real verified loopback TLS and

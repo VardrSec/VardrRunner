@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Reject MCP route identifiers containing URL syntax or traversal segments before
+  HTTP dispatch, preventing allowed tools from reaching withheld approval routes.
+
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.
 

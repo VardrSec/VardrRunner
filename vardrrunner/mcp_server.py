@@ -34,6 +34,7 @@ imports it.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -197,6 +198,16 @@ def _clamp(limit: int) -> int:
     return max(1, min(limit, MAX_LIMIT))
 
 
+def _path_id(value: str) -> str:
+    """Keep an opaque MCP identifier in exactly one literal URL path segment."""
+    if not re.fullmatch(r"[A-Za-z0-9._~-]+", value) or value in {".", ".."}:
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        # Never echo an argument that may contain secrets or planted instructions.
+        raise ToolError("Invalid route identifier; use the identifier returned by a read tool.")
+    return value
+
+
 def _cap(
     items: list[dict], limit: int, total: int | None = None, offset: int = 0
 ) -> dict[str, Any]:
@@ -284,12 +295,12 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
     def get_engagement(engagement_id: str) -> dict[str, Any]:
         """Full detail for one engagement, including its in/out-of-scope rules and stats."""
         client = _get_client()
-        engagement = _call(lambda: client.engagement(engagement_id))
+        engagement = _call(lambda: client.engagement(_path_id(engagement_id)))
         scope = engagement.get("scope", {"in": [], "out": []})
         # Stats are a nice-to-have; a missing/erroring stats endpoint must not sink
         # the whole call, so swallow any failure from this secondary request.
         try:
-            stats = _call(lambda: client.get(f"/engagements/{engagement_id}/stats"))
+            stats = _call(lambda: client.get(f"/engagements/{_path_id(engagement_id)}/stats"))
         except Exception:
             stats = {}
         brief = _engagement_brief(engagement)
@@ -309,7 +320,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
     @mcp.tool(annotations=read)
     def list_scope(engagement_id: str) -> dict[str, Any]:
         """The engagement's in-scope and out-of-scope rules."""
-        return _call(lambda: _get_client().scope(engagement_id))
+        return _call(lambda: _get_client().scope(_path_id(engagement_id)))
 
     @mcp.tool(annotations=read)
     def list_findings(
@@ -321,7 +332,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         """Page through findings, newest first. Severity filters the entire inventory.
         Follow next_offset with the same filter until it is null."""
         return _page(
-            f"/engagements/{engagement_id}/findings",
+            f"/engagements/{_path_id(engagement_id)}/findings",
             "findings",
             limit,
             offset,
@@ -334,14 +345,16 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         engagement_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0
     ) -> dict[str, Any]:
         """Page through discovered assets; follow next_offset until null."""
-        return _page(f"/engagements/{engagement_id}/assets", "assets", limit, offset)
+        return _page(f"/engagements/{_path_id(engagement_id)}/assets", "assets", limit, offset)
 
     @mcp.tool(annotations=read)
     def list_api_endpoints(
         engagement_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0
     ) -> dict[str, Any]:
         """Page through the API operation inventory; follow next_offset until null."""
-        return _page(f"/engagements/{engagement_id}/api/endpoints", "endpoints", limit, offset)
+        return _page(
+            f"/engagements/{_path_id(engagement_id)}/api/endpoints", "endpoints", limit, offset
+        )
 
     @mcp.tool(annotations=read)
     def list_recon(
@@ -351,7 +364,9 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         offset: int = 0,
     ) -> dict[str, Any]:
         """Page through recon. Source (httpx/katana/gau/ffuf) filters before pagination."""
-        return _page(f"/engagements/{engagement_id}/recon", "recon", limit, offset, source=source)
+        return _page(
+            f"/engagements/{_path_id(engagement_id)}/recon", "recon", limit, offset, source=source
+        )
 
     @mcp.tool(annotations=read)
     def list_jobs(
@@ -361,12 +376,14 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         offset: int = 0,
     ) -> dict[str, Any]:
         """Page through jobs, newest first. Status filters pending/running/done/failed."""
-        return _page(f"/engagements/{engagement_id}/jobs", "jobs", limit, offset, status=status)
+        return _page(
+            f"/engagements/{_path_id(engagement_id)}/jobs", "jobs", limit, offset, status=status
+        )
 
     @mcp.tool(annotations=read)
     def get_job_events(job_id: str, limit: int = DEFAULT_LIMIT, offset: int = 0) -> dict[str, Any]:
         """Page through lifecycle events in chronological order; follow next_offset."""
-        return _page(f"/jobs/{job_id}/events", "events", limit, offset)
+        return _page(f"/jobs/{_path_id(job_id)}/events", "events", limit, offset)
 
     @mcp.tool(annotations=read)
     def list_reports(
@@ -375,7 +392,11 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         """Page through finding reports — the per-finding write-ups, not the client
         deliverable (see list_deliverables). Follow next_offset until null."""
         return _page(
-            f"/engagements/{engagement_id}/reports", "reports", limit, offset, max_limit=200
+            f"/engagements/{_path_id(engagement_id)}/reports",
+            "reports",
+            limit,
+            offset,
+            max_limit=200,
         )
 
     @mcp.tool(annotations=read)
@@ -396,7 +417,9 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
 
         if offset < 0:
             raise ToolError("offset must be zero or greater")
-        items = _call(lambda: _get_client().get(f"/engagements/{engagement_id}/authorizations"))
+        items = _call(
+            lambda: _get_client().get(f"/engagements/{_path_id(engagement_id)}/authorizations")
+        )
         if not isinstance(items, list):
             # "Unknown" is not "none". Reporting an unreadable response as an empty
             # inventory invites the agent to tell the operator this engagement has
@@ -419,7 +442,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         reports list_reports returns. Revisions are immutable once written.
         """
         return _page(
-            f"/engagements/{engagement_id}/deliverables",
+            f"/engagements/{_path_id(engagement_id)}/deliverables",
             "deliverables",
             limit,
             offset,
@@ -433,7 +456,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         """One immutable revision of a client deliverable, with its snapshot and markdown."""
         return _call(
             lambda: _get_client().get(
-                f"/engagements/{engagement_id}/deliverables/{deliverable_id}/revisions/{revision}"
+                f"/engagements/{_path_id(engagement_id)}/deliverables/{_path_id(deliverable_id)}/revisions/{revision}"
             )
         )
 
@@ -450,7 +473,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         a finding has already been retested and what was concluded.
         """
         return _page(
-            f"/engagements/{engagement_id}/findings/{finding_id}/activity",
+            f"/engagements/{_path_id(engagement_id)}/findings/{_path_id(finding_id)}/activity",
             "activities",
             limit,
             offset,
@@ -518,7 +541,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         """List original, versioned API engagement guides. Reading grants no access or coverage."""
         from mcp.server.mcpserver.exceptions import ToolError
 
-        data = _call(lambda: _get_client().get(f"/engagements/{engagement_id}/playbooks"))
+        data = _call(lambda: _get_client().get(f"/engagements/{_path_id(engagement_id)}/playbooks"))
         if not isinstance(data, dict) or not isinstance(data.get("playbooks"), list):
             raise ToolError("The backend did not return a playbook catalog.")
         return data
@@ -531,7 +554,9 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         if playbook_id not in {"API-01", "API-02", "API-03"}:
             raise ToolError("Choose API-01, API-02 or API-03 from list_api_playbooks.")
         data = _call(
-            lambda: _get_client().get(f"/engagements/{engagement_id}/playbooks/{playbook_id}")
+            lambda: _get_client().get(
+                f"/engagements/{_path_id(engagement_id)}/playbooks/{_path_id(playbook_id)}"
+            )
         )
         if (
             not isinstance(data, dict)
@@ -553,7 +578,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
     ) -> dict[str, Any]:
         """Read redacted evidence with job/case/identity provenance. Historical links may be unknown."""
         return _page(
-            f"/engagements/{engagement_id}/evidence",
+            f"/engagements/{_path_id(engagement_id)}/evidence",
             "evidence",
             limit,
             offset,
@@ -577,7 +602,9 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         """Dry-run a job: how many targets it would run against, and a sample. Queues nothing."""
         body = {"tool_type": tool_type, "target_source": target_source, "config": config or {}}
         return _call(
-            lambda: _get_client().post(f"/engagements/{engagement_id}/jobs/preview", json=body)
+            lambda: _get_client().post(
+                f"/engagements/{_path_id(engagement_id)}/jobs/preview", json=body
+            )
         )
 
     @mcp.tool(annotations=write)
@@ -599,7 +626,9 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         with no rate set; a rate above the ceiling is refused.
         """
         body = {"tool_type": tool_type, "target_source": target_source, "config": config or {}}
-        return _call(lambda: _get_client().post(f"/engagements/{engagement_id}/jobs", json=body))
+        return _call(
+            lambda: _get_client().post(f"/engagements/{_path_id(engagement_id)}/jobs", json=body)
+        )
 
     @mcp.tool(annotations=write)
     def queue_pipeline(engagement_id: str, stages: list[dict[str, Any]]) -> dict[str, Any]:
@@ -614,7 +643,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         """
         return _call(
             lambda: _get_client().post(
-                f"/engagements/{engagement_id}/pipelines", json={"stages": stages}
+                f"/engagements/{_path_id(engagement_id)}/pipelines", json={"stages": stages}
             )
         )
 
@@ -623,12 +652,16 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
         """Proposed changes awaiting the operator (newest first). status is pending, approved
         or rejected. Use it to see what you have already proposed before proposing again."""
         suffix = f"?status={status}" if status else ""
-        return _call(lambda: _get_client().get(f"/engagements/{engagement_id}/proposals{suffix}"))
+        return _call(
+            lambda: _get_client().get(f"/engagements/{_path_id(engagement_id)}/proposals{suffix}")
+        )
 
     def _propose(engagement_id: str, kind: str, payload: dict, reason: str, source: str) -> dict:
         body = {"kind": kind, "payload": payload, "reason": reason, "source": source}
         return _call(
-            lambda: _get_client().post(f"/engagements/{engagement_id}/proposals", json=body)
+            lambda: _get_client().post(
+                f"/engagements/{_path_id(engagement_id)}/proposals", json=body
+            )
         )
 
     @mcp.tool(annotations=write)
@@ -723,7 +756,7 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
             body["base_url"] = base_url
         return _call(
             lambda: _get_client().post(
-                f"/engagements/{engagement_id}/test-cases/preview", json=body
+                f"/engagements/{_path_id(engagement_id)}/test-cases/preview", json=body
             )
         )
 
@@ -759,7 +792,9 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
             # mark a write-up final or delivered.
             "status": "draft",
         }
-        return _call(lambda: _get_client().post(f"/engagements/{engagement_id}/reports", json=body))
+        return _call(
+            lambda: _get_client().post(f"/engagements/{_path_id(engagement_id)}/reports", json=body)
+        )
 
     @mcp.tool(annotations=write)
     def create_finding(
@@ -779,7 +814,9 @@ def build_server(client_factory: Callable[[], api.VardrMapClient] | None = None)
             "steps": steps,
         }
         return _call(
-            lambda: _get_client().post(f"/engagements/{engagement_id}/findings", json=body)
+            lambda: _get_client().post(
+                f"/engagements/{_path_id(engagement_id)}/findings", json=body
+            )
         )
 
     # ── prompts (slash-command workflows) ───────────────────────────────────

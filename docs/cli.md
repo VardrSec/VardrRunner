@@ -343,6 +343,13 @@ Nothing updates on its own: only typing `vardrrunner update` installs anything.
 
 ## `mcp` — serve the engagement to an AI agent
 
+Route identifiers must be nonempty ASCII letters, digits or `-._~`, excluding
+`.` and `..`. UUIDs and existing opaque IDs remain valid. URL paths, query strings,
+fragments and encoded identifiers are refused before HTTP dispatch; use the literal
+ID returned by a read tool. Rejection never echoes the supplied value. This keeps
+proposal and preview tools on their declared routes, including with a full-access
+configured key; it grants no approval capability.
+
 ```bash
 pip install 'vardrrunner[mcp]'   # one-time: the MCP server is an optional extra
 vardrrunner mcp                  # serve over stdio (clients launch this for you)
