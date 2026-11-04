@@ -867,6 +867,7 @@ def run_dnsx(hosts: list[str], output_path: Path, timeout: int | None = None) ->
         "-o",
         str(output_path),
         "-silent",
+        "-disable-update-check",
     ]
     return _run_tool(cmd, hosts_file, "dnsx", timeout)
 

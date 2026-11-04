@@ -1,5 +1,9 @@
 # VardrRunner — Architecture
 
+The DNSx adapter explicitly disables the pinned tool's automatic version check.
+This removes that auxiliary version request; it is not DNS destination, proxy,
+redirect, scope or aggregate-budget enforcement for a standalone recon profile.
+
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot
 forget expiry, and permission transactions recheck time after writer-lock waits
@@ -405,3 +409,35 @@ Managed transport also preserves a trusted configured API base prefix such as
 Full's `/backend`; it does not strip or rewrite the signed origin/association
 identity. Only simple path segments are accepted. Prefix compatibility supplies
 no new route activation or execution right.
+
+### Dormant finite recon projection (NM-3)
+
+`authorization.recon_plan` is a pure, opt-in contract projection, with no CLI,
+MCP, default capability or recon executor. The initial slice accepts canonical
+finite ASCII hostnames, explicit HTTPS/443 GET-root tuples, IPv4 destination
+CIDRs and numeric IPv4 resolver endpoints. A-only DNSx and the exact reviewed
+Linux release binary hashes are required; Windows and A+AAAA remain unsupported.
+Existing Gate behavior and default capabilities are preserved.
+
+The signed full-plan digest binds both tools, all original candidates, resolvers,
+destination networks, fixed options/environment, a shared deadline and evidence
+byte ceiling. The existing human approval and ledger allocate one whole journey
+ordinal before any future execution. No stage refund, smaller post-DNS reservation
+or additional budget store is introduced. The conditional Linux source model
+reserves `4M` HTTP application requests and `2N + 50M` DNS application questions for
+N original DNS inputs and M original URL inputs. DNS authority is explicit in the
+human-reviewed plan digest; this is neither an independent DNS quota nor a global
+cross-plan token pool. These numbers do not bound packets, connections or bytes.
+Evidence byte limits are declarations for future enforcement, not disk quotas.
+
+Pure DNS handoff can select only original URL tuples; ambiguous, empty or mixed
+out-of-CIDR address sets fail closed. It cannot establish destination enforcement
+at connect time. No tool runs through this module. Even trusted explicit profile
+validation cannot pass the Gate runtime's first-line profile guard. No common
+platform currently has both the Linux tool proof and accepted native cancellation.
+The Docker managed worker remains disabled/unsupported, with its watchdog-hang
+security gate open. No execution adoption or full portability is claimed.
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.

@@ -1,5 +1,9 @@
 # VardrRunner — CLI Reference
 
+DNSx invocations suppress automatic version checks. Existing connected commands
+retain their meaning; this correction does not enable standalone recon or grant
+authority for DNS/HTTP targets or auxiliary services.
+
 Opt-in NM-2 source builds add `vardrrunner jobs run --controlled [--yes]` with
 matching Map execution-control endpoints, and `vardrrunner jobs stop RUN_ID` to
 request local emergency stop of that journal run. A stop request is not confirmed
@@ -1121,3 +1125,14 @@ retain their behavior. See the [canonical exit status](nm2-canonical-exit-status
 
 The library-only managed transport honors the configured API base prefix used by
 the existing Full distribution. This adds no CLI command, worker or enrollment.
+
+### Dormant finite recon projection (NM-3)
+
+No recon command or default capability is added. Existing authorization CLI
+planning and Gate execution remain Gate-only. The offline projection is described
+in [architecture](architecture.md#dormant-finite-recon-projection-nm-3);
+validation of a signed projection does not authorize an executable recon path.
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.

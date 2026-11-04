@@ -1,5 +1,12 @@
 # VardrRunner — Development
 
+`test_run_dnsx_uses_arg_list` checks automatic version checks are disabled in the
+adapter argv. Opt in to `tests/test_smoke_dnsx.py` with `VARDRRUNNER_SMOKE=1` and
+`VARDRRUNNER_SMOKE_MANAGED_DIR` pointing to existing hash-verified pinned tools.
+The smoke uses only version mode and an isolated configuration home: flag parsing,
+not a DNS query, real-target scan, destination boundary or network-isolation proof.
+An absent verified artifact leaves this smoke unrun; never substitute a PATH tool.
+
 `tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
 journal connections, preparation/grant/clock failures and conservative recovery.
 Map's explicit `tests/test_managed_entry.py` adds real verified loopback TLS and
@@ -441,3 +448,16 @@ Only Windows `symlink_to` error 1314 marks that real fixture unavailable/unprove
 no host privilege/settings change or link substitute is permitted. A separately
 labeled synthetic marker test always checks fail-closed rejection and zero RPCs;
 it does not certify an OS boundary. Required real-link evidence remains separate.
+
+### Dormant finite recon projection (NM-3)
+
+`tests/test_recon_projection.py` uses synthetic documents and the existing ledger;
+it performs no DNS, HTTP or tool execution. Run it with the legacy authorization
+contract/runtime tests, then the unchanged full-suite 95% floor and static checks.
+See [ADR 0041](adr/0041-dormant-finite-recon-projection.md) for the conditional Linux
+request model. Native Windows, common-platform cancellation and execution gates
+remain open; these projection tests cannot close them.
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.
