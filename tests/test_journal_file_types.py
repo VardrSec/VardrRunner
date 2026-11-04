@@ -105,8 +105,13 @@ def test_regular_leaf_alias_retains_live_wal_visibility(tmp_path):
     journal = Journal(path)
     first = Workspaces(journal).create("First")
     run = journal.begin(
-        job_id="fixture", backend_url="", engagement_id=first.workspace_id,
-        job_type="fixture", tool="fixture", target_source="explicit", command_profile={},
+        job_id="fixture",
+        backend_url="",
+        engagement_id=first.workspace_id,
+        job_type="fixture",
+        tool="fixture",
+        target_source="explicit",
+        command_profile={},
     )
     alias = tmp_path / "alias.sqlite3"
     symlink(path, alias)

@@ -24,6 +24,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 - Clarify portable-export path normalization and test the real CLI conversion;
   raw adapter rejection cases do not imply rejection of every CLI spelling alias.
 
+
+- Add synthetic evidence-export regression for active/revoked reference grants
+  and live ledger safety state. Export preserves those stores and excludes their
+  files/state; no production behavior or authority-restoration feature is added.
+
 - Add local `audit export-run` for a single terminal run's redacted JSON evidence
   copy, original audit provenance and relative-path manifest. This partial NM-3
   increment uses POSIX directory-FD controls or a candidate Windows 11 24H2+
