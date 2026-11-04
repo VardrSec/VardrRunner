@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add local `audit export-run` for a single terminal run's redacted JSON evidence
+  copy, original audit provenance and relative-path manifest. This partial NM-3
+  increment requires POSIX directory-FD controls; Windows creation remains unsupported.
+
 - Filter local audit history and metadata export by exact engagement/workspace ID
   with `--engagement` (`-e`), using the existing journal and export schema.
 

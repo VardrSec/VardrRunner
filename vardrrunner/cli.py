@@ -326,6 +326,15 @@ def audit_export(
     audit.export_runs(output=output, since=since, limit=limit, engagement_id=engagement_id)
 
 
+@audit_app.command("export-run")
+def audit_export_run(
+    run_id: str = typer.Argument(..., help="One terminal journal run ID"),
+    output: Path = typer.Option(..., "--output", "-o", help="New portable evidence directory"),
+):
+    """Export one run's redacted JSON evidence copy on supported POSIX systems."""
+    audit.export_run(run_id=run_id, output=output)
+
+
 @app.command()
 def whoami():
     """Show the identity tied to the configured API key."""

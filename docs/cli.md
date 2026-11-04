@@ -550,6 +550,45 @@ credential state or a complete workspace backup, and grants no execution authori
 Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
 journal remains the recovery source of truth; manifests are portable run evidence.
 
+### `audit export-run` — redacted evidence copy (POSIX)
+
+```bash
+vardrrunner audit export-run <run-id> --output NEW_EXPORT_DIRECTORY
+```
+
+Select one terminal journal run with no unresolved PID and a recorded artifact
+hash/size. This explicit local command needs no Map connection or credentials.
+Its artifact must be a regular, singly linked direct child of the recorded run
+directory, named with a `.json` suffix and containing one unambiguous JSON object.
+The source and redacted copy each fit the smaller of 8 MiB and the local artifact
+limit; JSON nesting is limited to 12. Binary/JSONL, missing, changed, ambiguous or
+unbound artifacts are refused. Use existing metadata export for other records.
+
+The new directory contains exactly three files:
+
+- `audit.json`: existing schema-1 sanitized source history, including the original
+  artifact hash and historical paths.
+- `artifact.json`: a separately serialized copy passed through central redaction.
+  Original tool output stays untouched; decisions are not reclassified.
+- `manifest.json`: existing schema 1 with relative paths, the exact copy's hash/size
+  and a `redacted_export` warning linking its source hash. Source status is retained,
+  including failed/partial outcomes; export does not complete or validate a run.
+
+The output directory must be new and outside the source run. Supported POSIX
+filesystems must provide directory-FD/no-follow operations and private modes.
+Ancestor directories must be owned by root/current user, without group/other
+write except trusted sticky directories. Writes use the opened new directory,
+never replace files, and reserve the unchanged free-disk floor plus actual output
+bytes. Failure retains partial files; do not infer a successful export from a
+partial directory or a recorded source status alone.
+
+**Windows artifact export is not implemented by this increment.** Existing Windows
+metadata audit commands remain available. The Windows-first NM-3 export/ACL gate
+stays open; this is not full portability acceptance. The copied JSON formats are
+readable elsewhere, but no import, authority restoration, archive encryption or
+independent provenance attestation is provided. Central redaction is not a proof
+that all sensitive content was found; review the copy before sharing it.
+
 ---
 
 ## `tools` — pinned, verified tool installs

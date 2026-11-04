@@ -1,5 +1,24 @@
 # VardrRunner — Development
 
+## Partial portable run export
+
+`tests/test_portable_export.py` checks source hash/size and descriptor binding,
+strict bounded JSON, original versus derivative provenance, status preservation,
+exclusive private output, redirected-directory refusal, fresh record reads and
+partial-output retention. Every case uses synthetic local files; no tool or Map
+request is made. New unit cases simulate a finite 2 GiB capacity observation and
+only the filesystem-root UID as 0, preserving all other stat observations. This
+cloud runtime actually has root UID 65534 and insufficient free disk, so those
+unit results are not actual-host permission/capacity acceptance.
+
+`test_real_capacity_export` uses neither simulation. It must run in Workstream C
+on an adequately sized supported POSIX host, along with normal full regression
+and the unchanged 95% floor. Its environment skip here is unproven, not passed.
+Windows refuses this new command; no Windows artifact-export/ACL acceptance is
+claimed. Existing Windows metadata commands are unchanged. Preserve test files;
+do not lower resource policy, change host ownership/ACLs or repeat unchanged
+native Gate/scanner checks for this file-export increment.
+
 ## Scoped local audit history
 
 `tests/test_journal.py` checks exact engagement filtering before limits, combined

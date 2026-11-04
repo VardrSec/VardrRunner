@@ -326,6 +326,14 @@ class TestUpdateCommands:
 
 
 class TestAuditCommands:
+    @pytest.mark.parametrize("flag", ["--output", "-o"])
+    def test_export_one_run_delegates(self, tmp_path, flag):
+        output = tmp_path / "portable"
+        with patch("vardrrunner.commands.audit.export_run") as mock:
+            result = invoke("audit", "export-run", "run-1", flag, str(output))
+        assert result.exit_code == 0
+        mock.assert_called_once_with(run_id="run-1", output=output)
+
     def test_list_delegates(self):
         with patch("vardrrunner.commands.audit.list_runs") as mock:
             invoke("audit", "list", "--limit", "12", "--json")

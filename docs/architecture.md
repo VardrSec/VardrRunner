@@ -1,5 +1,16 @@
 # VardrRunner — Architecture
 
+The partial NM-3 single-run evidence exporter reuses journal/schema-1 audit and
+manifest formats. It reads a current-schema journal in SQLite read-only mode,
+binds source JSON to the recorded digest/size and regular-file descriptor, then
+serializes a centrally redacted derivative. Original provenance stays in audit;
+the portable manifest describes the derivative and links the original hash.
+Fixed filenames are created exclusively through a pinned private POSIX directory
+descriptor. Fresh journal rechecks detect changed records without pinning one
+stale database snapshot. No database, grants, config or executable authority is
+copied. Windows needs an equivalent reviewed path-binding capability and remains
+unsupported here. See [ADR 0040](adr/0040-portable-run-export.md).
+
 Audit history and schema-1 metadata export optionally select an exact engagement
 or local workspace ID through the existing journal query. Bound SQL parameters
 apply that filter together with the time bound before ordering and limiting.
