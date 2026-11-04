@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Refuse observed special journal objects before SQLite connections, avoiding
+  pre-existing FIFO hangs while preserving regular-file, leaf-alias and WAL
+  behavior. Concurrent replacement and filesystem I/O deadlines remain unproven.
+
 - Add bounded `workspace list --limit` metadata discovery from the existing local
   journal without initialization/migration or Map credentials. Existing creation,
   known-ID lookup, authority and execution behavior remain unchanged.

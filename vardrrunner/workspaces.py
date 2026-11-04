@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from vardrrunner import redaction
-from vardrrunner.journal import SCHEMA_VERSION, Journal, utc_now
+from vardrrunner.journal import SCHEMA_VERSION, Journal, JournalError, journal_path_present, utc_now
 
 
 class WorkspaceError(RuntimeError):
@@ -125,9 +125,7 @@ class Workspaces:
         if type(limit) is not int or not 1 <= limit <= 1000:
             raise WorkspaceError("Invalid workspace list limit")
         try:
-            try:
-                path.lstat()
-            except FileNotFoundError:
+            if not journal_path_present(path):
                 return []
             with closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as con:
                 con.row_factory = sqlite3.Row
@@ -140,5 +138,5 @@ class Workspaces:
                     (limit,),
                 ).fetchall()
                 return [Workspaces._record(row) for row in rows]
-        except (OSError, sqlite3.Error, TypeError, ValueError):
+        except (OSError, sqlite3.Error, JournalError, TypeError, ValueError):
             raise WorkspaceError("Cannot list local workspace metadata") from None

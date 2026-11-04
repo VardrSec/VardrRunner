@@ -31,6 +31,25 @@ class JournalError(RuntimeError):
     """The journal is unavailable, corrupt, or received an invalid transition."""
 
 
+def journal_path_present(path: Path) -> bool:
+    """Observe an ordinary journal target, not a race-safe open or I/O deadline."""
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        raise JournalError("Cannot inspect journal path") from None
+    try:
+        # Preserve leaf symlinks to ordinary files; dangling/special targets refuse.
+        if stat.S_ISLNK(info.st_mode):
+            info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            raise JournalError("Unsupported nonregular or reparse journal target")
+    except OSError:
+        raise JournalError("Cannot inspect journal target") from None
+    return True
+
+
 class Phase(str, Enum):
     DISCOVERED = "discovered"
     VALIDATING = "validating"
@@ -129,6 +148,7 @@ class Journal:
             raise JournalError(f"cannot open execution journal: {exc}") from exc
 
     def _connect(self) -> sqlite3.Connection:
+        journal_path_present(self.path)
         con = sqlite3.connect(self.path, timeout=5.0)
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA foreign_keys = ON")

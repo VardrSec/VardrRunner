@@ -6,6 +6,14 @@ schemas and orders before limiting; it constructs no Journal and performs no
 initialization/migration. No active selection, new state, authority or execution
 path is introduced. Existing application startup maintenance remains unchanged.
 
+Every SQLite connection in this source cohort inspects the journal leaf first.
+Observed nonregular objects and non-symlink Windows reparse targets refuse;
+ordinary symlinks to regular files retain compatibility, including live WAL reads.
+Missing journals retain their existing creation/read-only semantics. Inspection
+does not pin a descriptor for SQLite: concurrent leaf/ancestor replacement and
+blocked filesystem metadata I/O remain outside this availability correction.
+This is not an authenticated path boundary or a general bounded-open guarantee.
+
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot
 forget expiry, and permission transactions recheck time after writer-lock waits

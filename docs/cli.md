@@ -541,6 +541,10 @@ descending and ID ascending for ties. It opens an existing journal read-only;
 an absent journal/table returns an empty array without initialization. Unknown
 schemas or invalid selected rows refuse without migration or partial output.
 Listing does not choose an active workspace, grant permission or contact Map.
+Observed special journal objects (including FIFOs and directories) refuse before
+SQLite opens them; dangling leaf links also refuse. Ordinary leaf links to regular
+journals retain their existing behavior. Inspection is a pathname precheck, not
+protection against concurrent path replacement or a filesystem I/O deadline.
 
 This first NM-3 increment records metadata only. It does not configure scope,
 approve a contract, select an active engagement, run a tool or enable a worker.

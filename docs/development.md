@@ -8,6 +8,14 @@ use. CLI forwarding checks the limit kwarg. Tests isolate the unchanged global
 startup maintenance hook; database read-only claims are not a claim of zero
 filesystem bookkeeping by SQLite or the application's existing startup code.
 
+`tests/test_journal_file_types.py` checks pre-existing FIFOs/directories and
+dangling/special-target links refuse before SQLite, including the grant store's
+separate connection and repeated journal calls. It checks absent reads do not
+initialize state and ordinary leaf aliases see live committed WAL data. Windows
+reparse attributes are simulated; native Windows semantics need platform testing.
+These checks do not prove safety against concurrent replacement between metadata
+inspection and SQLite's pathname open, or bounded I/O on unavailable filesystems.
+
 `tests/test_workspaces.py` covers fresh and existing journal preservation,
 concurrent creation, collision refusal, invalid/future/corrupt state and CLI
 operation without Map authentication, network or process creation. Tests use
