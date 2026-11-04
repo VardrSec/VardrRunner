@@ -1,5 +1,12 @@
 # VardrRunner — Architecture
 
+The additive `workspace gate` consumer reuses the existing standalone contract,
+ledger, fixed-Gate runtime, native Windows control, journal and audit/export. It
+does not issue approval, bootstrap trust or use Map. Unsupported execution platforms
+refuse before consumption; unfinished local records never enter Map recovery.
+See [ADR 0039](adr/0039-standalone-workspace-gate.md). Existing legacy commands,
+queue and MCP remain independent of this explicit consumer.
+
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot
 forget expiry, and permission transactions recheck time after writer-lock waits

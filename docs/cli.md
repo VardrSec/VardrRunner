@@ -534,12 +534,41 @@ or `--local` flag. Each create returns a new full workspace ID, label, creation
 time and metadata schema version as JSON. Repeated labels do not overwrite an
 existing workspace. Labels must be short printable text without credentials.
 
-This first NM-3 increment records metadata only. It does not configure scope,
+These create/show commands record metadata only. They do not configure scope,
 approve a contract, select an active engagement, run a tool or enable a worker.
 Existing connected commands retain their meaning and still require Map as
 documented. Workspace state shares the existing local journal; `audit` continues
 to inspect/export run evidence. Full Mapless execution and portable workspace
 export are not delivered by this metadata increment.
+
+### Explicit native standalone Gate
+
+```bash
+vardrrunner workspace gate <workspace-id> --approval approval.json --contract contract.json \
+  --plan plan.json --case case.json --execution execution.json --trust public-trust.json \
+  --output NEW_PRIVATE_DIRECTORY
+```
+
+This separate consumer requires native Windows, the authorization runtime extra,
+existing operator-selected public standalone trust, a signed human approval and
+single-use contract bound to this workspace and the actual Runner identity. Use
+the existing explicit file-based authorization workflow; this command creates no
+keys, approvals or authority state. Missing/stale local authority fails closed.
+Existing expiring reference grants with issuer `standalone` must cover every
+referenced origin. No private approval key is accepted by this command.
+
+The command requires terminal confirmation of the existing permission, records
+the local run ID, and executes only the fixed HTTP Gate profile. It contacts no
+Map service and needs no Map account/API token. Use `jobs stop <run-id>` for local
+emergency stop; the owning native invocation confirms termination. Inspect and
+export through existing `audit` commands. Output directories must be new; partial
+files, uncertain PIDs and spent consumption remain for explicit reconciliation,
+never automatic replay. Hashes establish recorded integrity, not host attestation.
+
+Linux/Docker execution is refused; no uncontrolled fallback or worker is enabled.
+Other tools, general recon pipelines, issuer enrollment and Full/Mapless installers
+are not delivered by this increment. See [ADR 0039](adr/0039-standalone-workspace-gate.md)
+for reference-trust and verification limits. Existing connected commands are unchanged.
 
 ---
 

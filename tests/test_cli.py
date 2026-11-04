@@ -19,6 +19,22 @@ from vardrrunner.commands import run as run_cmd
 runner = CliRunner()
 
 
+def test_workspace_gate_routes_only_existing_operator_inputs():
+    with patch("vardrrunner.commands.workspace_gate.run") as run:
+        args = ["workspace", "gate", "a" * 32]
+        for name in ("approval", "contract", "plan", "case", "execution", "trust", "output"):
+            args += ["--" + name, name + ".json"]
+        result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    run.assert_called_once_with(
+        "a" * 32,
+        **{
+            name: Path(name + ".json")
+            for name in ("approval", "contract", "plan", "case", "execution", "trust", "output")
+        },
+    )
+
+
 def test_jobs_run_expiring_grants_routes_opt_in():
     with patch("vardrrunner.commands.jobs.run_jobs") as run:
         result = runner.invoke(app, ["jobs", "run", "--yes", "--expiring-grants"])

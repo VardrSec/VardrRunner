@@ -290,7 +290,7 @@ def credentials_revoke(
 
 
 workspace_app = typer.Typer(
-    help="Create and inspect local workspace metadata. Does not authorize execution.",
+    help="Local workspace metadata and explicitly approved native standalone Gate execution.",
     no_args_is_help=True,
 )
 app.add_typer(workspace_app, name="workspace")
@@ -306,6 +306,32 @@ def workspace_create(name: str = typer.Argument(..., help="Short workspace label
 def workspace_show(workspace_id: str = typer.Argument(..., help="Full local workspace ID")):
     """Show workspace metadata as JSON without contacting Map."""
     workspace_cmd.show(workspace_id)
+
+
+@workspace_app.command("gate")
+def workspace_gate(
+    workspace_id: str = typer.Argument(..., help="Local workspace bound by the signed approval"),
+    approval: Path = typer.Option(..., "--approval", help="Existing signed human approval"),
+    contract: Path = typer.Option(..., "--contract", help="Existing single-use execution contract"),
+    plan: Path = typer.Option(..., "--plan", help="Exact reviewed fixed-Gate plan"),
+    case: Path = typer.Option(..., "--case", help="Unresolved reviewed Gate case"),
+    execution: Path = typer.Option(..., "--execution", help="Reviewed Gate execution options"),
+    trust: Path = typer.Option(..., "--trust", help="Operator-selected public standalone trust"),
+    output: Path = typer.Option(..., "--output", help="New exclusive evidence directory"),
+):
+    """Native Windows standalone Gate; existing signed permission and expiring grants required."""
+    from vardrrunner.commands import workspace_gate as gate_cmd
+
+    gate_cmd.run(
+        workspace_id,
+        approval=approval,
+        contract=contract,
+        plan=plan,
+        case=case,
+        execution=execution,
+        trust=trust,
+        output=output,
+    )
 
 
 audit_app = typer.Typer(

@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add an explicit native Windows `workspace gate` consumer for existing signed
+  standalone fixed-Gate permission, reusing the validator, ledger, native control
+  and local evidence/audit. No issuance, enrollment, Map fallback or worker.
+  Keep uncertain consumption/PIDs and refuse unsupported execution platforms.
+
 - Add explicit local `workspace create` and `workspace show` metadata in the
   existing SQLite journal, without Map authentication or execution authority.
   Preserve connected commands, execution records and existing audit/export.

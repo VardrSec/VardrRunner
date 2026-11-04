@@ -1,5 +1,25 @@
 # VardrRunner — Development
 
+## Standalone workspace Gate consumer
+
+`test_workspace_gate.py` tests the explicit file consumer with synthetic signed
+inputs and mocked native dispatch. It covers actual identity/workspace binding,
+Map refusal, grants, spent consumption, callback failure, deadline composition,
+stop/PID and partial-evidence handling; these mocks do not certify Windows runtime.
+`test_authorization_documents.py` covers the shared bounded public-file reader.
+
+The real native gate is separately opt-in: set `NM3_NATIVE_GATE_ACCEPTANCE=1`,
+`NM3_GATE_BINARY` to the independently receipt-verified Windows Gate,
+`NM3_GATE_SHA256` to its independently verified hash, and
+`NM3_DISTRIBUTION_SOURCE` to a trusted VardrSec checkout with the recorded NM-1
+loopback fixture. Run `pytest tests/test_workspace_gate_native.py` in a fresh
+disposable profile with adequate disk and no production bindings. It reuses that
+target, public fixture signing seed and synthetic values only; no host setting or
+privileged container is needed. It requires native Windows, five phases/14 requests,
+preserved case binding, no Map, no replay traffic and sanitized local evidence.
+It does not itself test active cancellation; retain separate native fault/stop gates.
+Keep the default resource reserve/95% coverage floor and retain skipped/unrun gates.
+
 ## Local workspace metadata
 
 `tests/test_workspaces.py` covers fresh and existing journal preservation,

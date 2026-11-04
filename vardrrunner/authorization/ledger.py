@@ -81,7 +81,7 @@ class AuthorizationLedger:
                 (issuer, engagement, revision, int(stopped), authority_sha256),
             )
 
-    def _state(self, con: sqlite3.Connection, context: ValidationContext, issuer: str) -> None:
+    def _authority(self, con: sqlite3.Connection, context: ValidationContext, issuer: str) -> None:
         row = con.execute(
             "SELECT revision, stopped, authority_digest FROM authorization_state WHERE issuer=? AND engagement=?",
             (issuer, context.engagement_id),
@@ -93,10 +93,18 @@ class AuthorizationLedger:
             and not row["stopped"],
             "authority_state_unavailable_or_revoked",
         )
+
+    def _state(self, con: sqlite3.Connection, context: ValidationContext, issuer: str) -> None:
+        self._authority(con, context, issuer)
         now = context.now.astimezone(timezone.utc).isoformat()
         clock = con.execute("SELECT observed FROM authorization_clock WHERE singleton=1").fetchone()
         require(clock is None or context.now >= self._observed(clock["observed"]), "clock_rollback")
         con.execute("INSERT OR REPLACE INTO authorization_clock VALUES (1,?)", (now,))
+
+    def check_state(self, context: ValidationContext, issuer: str) -> None:
+        """Read existing authority without taking the credential launch writer lock."""
+        with self.journal._connection() as con:
+            self._authority(con, context, issuer)
 
     @staticmethod
     def _observed(value: str) -> datetime:
