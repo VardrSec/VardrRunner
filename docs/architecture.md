@@ -12,6 +12,10 @@ copied. Windows now has an isolated handle-adapter candidate using verified priv
 ACLs and no-redirect creation. Native security acceptance remains open. See
 [ADR 0040](adr/0040-portable-run-export.md).
 
+Path conversion can normalize input spellings before validation. The security
+boundary binds the resulting path through actual no-redirect handle operations;
+it does not promise raw CLI-token rejection for every spelling alias.
+
 Audit history and schema-1 metadata export optionally select an exact engagement
 or local workspace ID through the existing journal query. Bound SQL parameters
 apply that filter together with the time bound before ordering and limiting.

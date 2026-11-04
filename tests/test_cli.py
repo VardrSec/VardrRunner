@@ -334,6 +334,15 @@ class TestAuditCommands:
         assert result.exit_code == 0
         mock.assert_called_once_with(run_id="run-1", output=output)
 
+    @pytest.mark.parametrize("suffix", ["/./portable", "//portable"])
+    def test_export_one_run_normalizes_output_spelling(self, tmp_path, suffix):
+        # Real Typer Path conversion, including on native Windows. Raw-string
+        # adapter tests do not establish rejection by the CLI.
+        with patch("vardrrunner.commands.audit.export_run") as mock:
+            result = invoke("audit", "export-run", "run-1", "--output", str(tmp_path) + suffix)
+        assert result.exit_code == 0
+        mock.assert_called_once_with(run_id="run-1", output=tmp_path / "portable")
+
     def test_list_delegates(self):
         with patch("vardrrunner.commands.audit.list_runs") as mock:
             invoke("audit", "list", "--limit", "12", "--json")

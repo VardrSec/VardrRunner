@@ -590,6 +590,12 @@ are protected and verified, and handles remain pinned through manifest publicati
 Native ACL/race acceptance is still open; this does not claim full NM-3 portability.
 Existing Windows execution and metadata commands retain their behavior.
 
+The CLI converts output to a Python `Path` and resolves it for export. Dot and
+repeated-separator spellings can normalize before adapter validation; this is
+accepted normalization, not rejection of every raw argument alias. Security
+checks apply to the resulting absolute path and actual no-redirect handle opens.
+Direct adapter raw-string rejection tests do not prove CLI-token rejection.
+
 The copied JSON formats are readable elsewhere, but no import, authority
 restoration, archive encryption or independent provenance attestation is provided.
 Central redaction is not a proof that all sensitive content was found; review the

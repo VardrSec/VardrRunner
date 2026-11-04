@@ -2,6 +2,10 @@
 
 ## Partial portable run export
 
+CLI alias coverage uses real Typer Path conversion. Direct raw-string Windows
+adapter tests cover that lower-level API only; they do not claim raw CLI aliases
+are all rejected before Python normalization. Native path/ACL/race gates remain.
+
 `tests/test_portable_export.py` checks source hash/size and descriptor binding,
 strict bounded JSON, original versus derivative provenance, status preservation,
 exclusive private output, redirected-directory refusal, fresh record reads and

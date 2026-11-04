@@ -55,6 +55,12 @@ without write/delete sharing until completion. Check actual object type, identit
 local fixed NTFS/persistent ACLs and owner. Reject unknown owners and unsupported
 paths/APIs/sharing states, without an older pathname fallback.
 
+Path spelling is not a raw-token security boundary. Python/CLI Path conversion
+can normalize dot or repeated separators before the adapter receives a value,
+and output is made absolute in the shared command. Such normalization is allowed;
+no-redirect API operations and retained verified handles bind the actual path.
+Raw-string unit rejection cases must not be reported as end-to-end CLI rejection.
+
 Current-user/SYSTEM/Administrators SIDs are the counterpart to current-user/root
 trust. New directory/files require exact current ownership and a verified present,
 protected non-null DACL granting only those principals. No inherited handles. Fixed

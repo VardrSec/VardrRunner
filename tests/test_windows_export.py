@@ -28,7 +28,9 @@ from vardrrunner import windows_export as mod
         r"C:\a?b",
     ],
 )
-def test_unsupported_names(path):
+def test_raw_adapter_input_unsupported_names(path):
+    # Direct raw-string validation only. Path/CLI conversion can normalize aliases
+    # first; these tests do not claim raw CLI-token rejection.
     with pytest.raises(mod.WindowsExportError, match="windows_path_unsupported"):
         mod._path(path)
 
