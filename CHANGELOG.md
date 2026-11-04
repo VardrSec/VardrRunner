@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Filter local audit history and metadata export by exact engagement/workspace ID
+  with `--engagement` (`-e`), using the existing journal and export schema.
+
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.
 

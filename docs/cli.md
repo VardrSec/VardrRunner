@@ -528,9 +528,9 @@ Queue-driven jobs are recorded in `~/.vardrmap/runner-journal.sqlite3`. Audit co
 local and never contact the backend:
 
 ```bash
-vardrrunner audit list [--since <iso-timestamp>] [--limit 100] [--json]
+vardrrunner audit list [--engagement <id>] [--since <iso-timestamp>] [--limit 100] [--json]
 vardrrunner audit show <run-id>
-vardrrunner audit export --output audit.json [--since <iso-timestamp>] [--limit 10000]
+vardrrunner audit export --output audit.json [--engagement <id>] [--since <iso-timestamp>] [--limit 10000]
 ```
 
 `list` shows recent lifecycle outcomes, `show` prints one full sanitized record, and
@@ -538,6 +538,14 @@ vardrrunner audit export --output audit.json [--since <iso-timestamp>] [--limit 
 retention. Records include target counts, sanitized tool settings, lifecycle timestamps,
 failure categories, policy warnings, and artifact SHA-256/size. They exclude raw targets,
 credentials, request bodies, and headers.
+
+`--engagement <id>` (or `-e`) selects an exact local engagement or workspace ID.
+It requires no Map connection, account or token. The filter combines with `--since`
+before sorting and `--limit`; omitting it preserves the existing all-engagement
+view. IDs are literal and case-sensitive, with no wildcard or whitespace
+normalization. A missing match produces an empty history/export. This scopes the
+existing sanitized metadata export; it does not copy artifact bytes, contracts,
+credential state or a complete workspace backup, and grants no execution authority.
 
 Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
 journal remains the recovery source of truth; manifests are portable run evidence.

@@ -1,5 +1,12 @@
 # VardrRunner — Architecture
 
+Audit history and schema-1 metadata export optionally select an exact engagement
+or local workspace ID through the existing journal query. Bound SQL parameters
+apply that filter together with the time bound before ordering and limiting.
+Only `None` means unscoped; explicit blank/whitespace values remain literal
+historical IDs. No workspace lookup, Map transport, authorization, schema change
+or artifact-copy system is involved. Existing callers remain unscoped by default.
+
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot
 forget expiry, and permission transactions recheck time after writer-lock waits

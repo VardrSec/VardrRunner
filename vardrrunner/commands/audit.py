@@ -33,8 +33,13 @@ def _store() -> Journal:
         raise typer.Exit(1) from exc
 
 
-def list_runs(since: str | None = None, limit: int = 100, as_json: bool = False) -> None:
-    records = _store().list(since=since, limit=limit)
+def list_runs(
+    since: str | None = None,
+    limit: int = 100,
+    as_json: bool = False,
+    engagement_id: str | None = None,
+) -> None:
+    records = _store().list(since=since, limit=limit, engagement_id=engagement_id)
     if as_json:
         console.print_json(json.dumps([_payload(record) for record in records]))
         return
@@ -68,8 +73,13 @@ def show_run(run_id: str) -> None:
     console.print_json(json.dumps(_payload(record), indent=2, sort_keys=True))
 
 
-def export_runs(output: Path, since: str | None = None, limit: int = 10_000) -> None:
-    records = _store().list(since=since, limit=limit)
+def export_runs(
+    output: Path,
+    since: str | None = None,
+    limit: int = 10_000,
+    engagement_id: str | None = None,
+) -> None:
+    records = _store().list(since=since, limit=limit, engagement_id=engagement_id)
     document = {
         "audit_schema_version": 1,
         "run_count": len(records),

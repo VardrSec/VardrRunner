@@ -433,12 +433,20 @@ class Journal:
             ).fetchall()
         return [self._record(row) for row in rows]
 
-    def list(self, *, since: str | None = None, limit: int = 100) -> list[RunRecord]:
+    def list(
+        self, *, since: str | None = None, limit: int = 100, engagement_id: str | None = None
+    ) -> list[RunRecord]:
         query = "SELECT * FROM runs"
         params: list[Any] = []
+        conditions = []
         if since:
-            query += " WHERE started_at >= ?"
+            conditions.append("started_at >= ?")
             params.append(since)
+        if engagement_id is not None:
+            conditions.append("engagement_id = ?")
+            params.append(engagement_id)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY started_at DESC LIMIT ?"
         params.append(max(1, min(limit, 10_000)))
         with self._connection() as con:

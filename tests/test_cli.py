@@ -329,7 +329,7 @@ class TestAuditCommands:
     def test_list_delegates(self):
         with patch("vardrrunner.commands.audit.list_runs") as mock:
             invoke("audit", "list", "--limit", "12", "--json")
-        mock.assert_called_once_with(since=None, limit=12, as_json=True)
+        mock.assert_called_once_with(since=None, limit=12, as_json=True, engagement_id=None)
 
     def test_show_delegates(self):
         with patch("vardrrunner.commands.audit.show_run") as mock:
@@ -340,7 +340,26 @@ class TestAuditCommands:
         output = tmp_path / "audit.json"
         with patch("vardrrunner.commands.audit.export_runs") as mock:
             invoke("audit", "export", "--output", str(output), "--limit", "50")
-        mock.assert_called_once_with(output=output, since=None, limit=50)
+        mock.assert_called_once_with(output=output, since=None, limit=50, engagement_id=None)
+
+    @pytest.mark.parametrize("flag", ["--engagement", "-e"])
+    def test_list_scopes_local_history(self, flag):
+        with patch("vardrrunner.commands.audit.list_runs") as mock:
+            result = invoke("audit", "list", flag, "workspace-1", "--json")
+        assert result.exit_code == 0
+        mock.assert_called_once_with(
+            since=None, limit=100, as_json=True, engagement_id="workspace-1"
+        )
+
+    @pytest.mark.parametrize("flag", ["--engagement", "-e"])
+    def test_export_scopes_local_history(self, tmp_path, flag):
+        output = tmp_path / "scoped.json"
+        with patch("vardrrunner.commands.audit.export_runs") as mock:
+            result = invoke("audit", "export", "--output", str(output), flag, "workspace-1")
+        assert result.exit_code == 0
+        mock.assert_called_once_with(
+            output=output, since=None, limit=10_000, engagement_id="workspace-1"
+        )
 
 
 # ---------------------------------------------------------------------------

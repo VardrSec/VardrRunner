@@ -1,5 +1,16 @@
 # VardrRunner — Development
 
+## Scoped local audit history
+
+`tests/test_journal.py` checks exact engagement filtering before limits, combined
+time bounds, case/wildcard behavior and literal blank/SQL-looking historical IDs.
+`tests/test_audit.py` checks local-only redacted metadata export, empty selection
+and preservation of other runs. `tests/test_cli.py` checks both `--engagement`
+and `-e` delegation for list/export and unchanged defaults. Use the normal
+full-suite/95% coverage floor and resource reserve; this feature needs no live
+Map service, credentials, Gate binary or managed worker. Export remains schema 1
+with existing atomic replacement behavior; it is not an artifact/workspace backup.
+
 `tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
 journal connections, preparation/grant/clock failures and conservative recovery.
 Map's explicit `tests/test_managed_entry.py` adds real verified loopback TLS and
