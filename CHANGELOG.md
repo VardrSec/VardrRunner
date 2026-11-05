@@ -1,11 +1,5 @@
 # Changelog
 
-- Canonicalize journal connections so Windows symlink aliases read the original
-  committed WAL. Pin the Windows database and its ancestors against replacement
-  until SQLite closes, including workspace/grant reads; refuse hardlinked Windows
-  databases with ambiguous WAL names. POSIX replacement and non-mutating snapshot
-  safety remain open. See `changelog/unreleased-canonical-journal-pins.md`.
-
 All notable changes to VardrRunner are documented here.
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -13,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Reconcile reference-interface documentation with the existing native standalone
+  Gate command. State the missing operator context and key/trust preparation
+  prerequisites explicitly; no issuer, enrollment or execution behavior changes.
 - Use canonical journal/WAL paths and pin Windows database/ancestor identities
   through SQLite connection close. Share this boundary with workspace reads and
   credential grants; refuse hardlinked Windows journals. POSIX replacement and

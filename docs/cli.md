@@ -603,6 +603,14 @@ Other tools, general recon pipelines, issuer enrollment and Full/Mapless install
 are not delivered by this increment. See [ADR 0039](adr/0039-standalone-workspace-gate.md)
 for reference-trust and verification limits. Existing connected commands are unchanged.
 
+This is not yet a complete fresh-operator workflow. The file interface below
+requires separately provisioned signing keys/public trust, existing authority
+state and hand-prepared approval/issuance contexts. Creating a workspace does not
+prepare those inputs. Context preparation and explicit operator key/trust
+provisioning remain delivery work; never use the synthetic fixture key for them.
+Private issuance stays separate from the consumer. Its input files still contain
+engagement data and are not automatically suitable for sharing.
+
 ---
 
 ## `audit` — local execution evidence
@@ -1176,8 +1184,10 @@ path is explicit; approval requires a terminal and operator review. Validation
 does not run a tool. No approval command is exposed through MCP, and this module
 does not enable a worker or change `vardrrunner` command behavior.
 See the [contract specification](contracts/README.md) before using the prototype.
-Guarded execution is an explicit library acceptance path, not another CLI command.
-It requires the companion unreleased Gate request-guard capability; older Gate
+The native Windows `workspace gate` consumer above calls the shared guarded
+runtime. The file interface itself never executes a tool; other guarded library
+adapters are not general CLI execution paths. Guarded execution requires the
+companion unreleased Gate request-guard capability; older Gate
 binaries fail on the required flag before contacting a target.
 The internal guarded adapter also refuses an expired launch after local preparation
 and caps the process timeout by the signed execution contract's own expiry. No

@@ -422,7 +422,10 @@ managed Map success. See [ADR 0032](adr/0032-unregistered-managed-native-gate.md
 The independent `authorization` package adds signed bounded approvals, single-use
 execution contracts and additive journal state. It reuses the Gate handler with a
 request projection for the explicitly supported `gate-fixed-http/1` profile.
-Legacy CLI, queue and MCP paths do not import or advertise this capability.
+Legacy commands, queue and MCP paths do not advertise this capability. The
+separate native Windows `workspace gate` consumer uses it explicitly with
+existing signed permission; issuer-side key/trust provisioning and context
+preparation are not yet a supported first-run workflow.
 See [ADR 0025](adr/0025-authorization-contract-v1.md) and the
 [conformance specification](contracts/README.md) for trust boundaries and limits.
 
