@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Document a proposed worker-only PID-1 lifecycle owner and protected host
+  stop-report authority for NM-2 review. The bootstrap privilege exception is
+  unapproved; no worker, privilege, protocol or startup behavior is enabled.
 - Add signed future-version/schema rejection proof without consuming the existing
   authorization contract. Reconcile agent guidance and ADR 0016 with the owner's
   explicitly enabled New Moon worker direction; activation and containment remain

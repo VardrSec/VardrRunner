@@ -53,3 +53,4 @@ the way it does.
 
 - [0041: Dormant finite recon projection](0041-dormant-finite-recon-projection.md)
 - [0042: Canonical journal names and Windows replacement pins](0042-canonical-journal-name-pins.md)
+- [0043: Proposed Linux worker lifecycle owner](0043-proposed-linux-worker-lifecycle-owner.md) — proposed, unapproved and inactive.
