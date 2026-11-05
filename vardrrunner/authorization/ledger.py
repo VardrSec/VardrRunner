@@ -166,7 +166,7 @@ class AuthorizationLedger:
             self.observe_time(self._now(context.now, entered))
             raise
 
-    def _final_time(self, con, context, entered, permission, payload):
+    def _final_time(self, con, context, entered, permission, payload, plan):
         current = replace(context, now=self._now(context.now, entered))
         self._state(con, current, payload["issuer"]["id"])
         require(
@@ -176,6 +176,15 @@ class AuthorizationLedger:
             < timestamp(permission["testing_end"]),
             "expired_or_not_yet_valid",
         )
+        # The signed dormant journey may end before the outer approval window.
+        # Recheck elapsed preparation/lock time at the same reservation boundary.
+        from .recon_plan import PROFILE as RECON_PROFILE
+
+        if plan["profile"] == RECON_PROFILE:
+            require(
+                current.now < timestamp(plan["execution"]["deadline"]),
+                "recon_deadline_denied",
+            )
 
     def issue(
         self,
@@ -245,7 +254,7 @@ class AuthorizationLedger:
                 }
                 envelope = sign(payload, private_key, "contract")
                 validate(envelope, approval, plan, case, execution, anchors, context)
-                self._final_time(con, source, entered, permission, payload)
+                self._final_time(con, source, entered, permission, payload, plan)
                 con.execute(
                     "INSERT OR REPLACE INTO authorization_approvals VALUES (?,?,?,?)",
                     (issuer["id"], receipt["approval_id"], receipt_digest, ordinal),
@@ -309,7 +318,7 @@ class AuthorizationLedger:
                     approval_row is None or approval_row["digest"] == approval_digest,
                     "approval_id_reused",
                 )
-                self._final_time(con, source, entered, permission, payload)
+                self._final_time(con, source, entered, permission, payload, plan)
                 con.execute(
                     "INSERT OR REPLACE INTO authorization_approvals VALUES (?,?,?,?)",
                     (

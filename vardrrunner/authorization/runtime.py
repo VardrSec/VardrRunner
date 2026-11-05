@@ -14,6 +14,7 @@ from vardrrunner import configs, credential_grants, handlers, resources, runner
 from .codec import TrustAnchor, digest, require
 from .contracts import ValidationContext, approved, timestamp
 from .ledger import AuthorizationLedger
+from .plan import PROFILE
 
 
 def execute_gate(
@@ -35,6 +36,7 @@ def execute_gate(
     This standalone prototype supplies no Mapless workspace or managed control.
     Operator invocation and a signed approval are both required by the caller.
     """
+    require(isinstance(plan, dict) and plan.get("profile") == PROFILE, "unsupported_enforcement")
     if expiring_grants:
         with credential_grants.required("standalone"):
             return execute_gate(

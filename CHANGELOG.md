@@ -16,6 +16,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
   existing SQLite journal, without Map authentication or execution authority.
   Preserve connected commands, execution records and existing audit/export.
 
+
+- Disable DNSx's automatic version check during adapter execution. This removes
+  that auxiliary request; no standalone recon profile or network authority is added.
+
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.
 
@@ -1547,3 +1551,9 @@ recorded here for continuity; their commits are present in this repo's history.
 ### v0.9.0 — VardrRunner v1
 - subfinder support for wildcard scope; `jobs list` / `jobs run`; missing tool marks job
   failed instead of silently skipping; `status` command
+
+- Unreleased: dormant finite DNS/HTTP recon plan projection and whole-journey approval validation; no execution capability enabled (ADR 0041).
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.

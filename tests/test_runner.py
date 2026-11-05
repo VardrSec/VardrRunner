@@ -255,6 +255,7 @@ def test_run_dnsx_uses_arg_list(tmp_path):
         runner.run_dnsx(["a.example.com"], tmp_path / "out.txt")
         args = mock_spawn.call_args[0][0]
         assert args[0] == "dnsx" and "-l" in args and "-silent" in args
+        assert args.count("-disable-update-check") == 1
 
 
 def test_run_vardrgate_uses_arg_list(tmp_path):
