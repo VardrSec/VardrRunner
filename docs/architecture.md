@@ -229,7 +229,10 @@ the runner's only credential; it is never logged or printed.
 
 Resolved VardrGate identity secrets briefly exist in a private runner-owned temporary
 directory because the external CLI accepts a job file. On POSIX the directory is mode
-`0700` and the exclusively created file is `0600`; normal execution removes the directory.
+`0700` and the exclusively created file is `0600`. Cleanup covers executable resolution,
+preflight inspection, and execution failures as well as success. A setup or execution
+exception remains the primary error if cleanup also fails; that cleanup failure logs a
+fixed message without credential values. Cleanup failure after success fails the run.
 Every CLI startup also removes abandoned, correctly named directories whose owner PID is
 no longer alive, while refusing to traverse symlinks, junctions, or active directories.
 

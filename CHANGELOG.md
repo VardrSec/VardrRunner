@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Clean up private Gate job data when executable resolution or preflight inspection
+  fails before launch. Preserve the original exception and existing cleanup-error
+  handling. See [launch cleanup note](changelog/unreleased-gate-launch-cleanup.md).
+
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.
 
