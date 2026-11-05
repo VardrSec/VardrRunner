@@ -7,6 +7,11 @@ validation and complete read-only retention inventory. A skipped hardlink/symlin
 fixture means its native permission was unavailable, not that the case passed.
 These checks do not establish POSIX race safety or a non-mutating SQLite snapshot.
 
+`tests/test_run_commands.py` includes real-journal preservation and a physical
+run-root substitution regression. Its portable descriptor-protocol fixture checks
+refusal ordering and relative deletion but does not substitute for native POSIX
+confinement. Run the same suite on Linux; unsupported runtimes must preserve data.
+
 `tests/test_workspace_cli_process.py` starts independent CLI processes with fresh
 profiles, no Map credentials and a disabled keychain. A child audit hook refuses
 network connections and tool launches. The tests verify workspace persistence and

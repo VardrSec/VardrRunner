@@ -45,6 +45,13 @@ pins cover database/ancestor replacement, not authority authenticity, database-c
 tampering, sidecar replacement, strict inspection non-mutation or bounded metadata I/O.
 See [ADR 0042](adr/0042-canonical-journal-name-pins.md).
 
+Age cleanup preserves every journal-linked directory, including terminal and
+uncertain runs. Bounded path-only inventory must be complete before deletion.
+On supported runtimes, cleanup verifies and holds the run-root descriptor and
+performs later operations relative to it. Windows, Python 3.10 and runtimes
+without that confinement skip automatic cleanup; direct execution remains usable.
+Journal evidence has no new automatic deletion policy.
+
 The partial NM-3 single-run evidence exporter reuses journal/schema-1 audit and
 manifest formats. It reads a current-schema journal in SQLite read-only mode,
 binds source JSON to the recorded digest/size and regular-file descriptor, then

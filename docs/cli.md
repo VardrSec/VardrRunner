@@ -563,8 +563,9 @@ schemas or invalid selected rows refuse without migration or partial output.
 Listing does not choose an active workspace, grant permission or contact Map.
 Observed special journal objects (including FIFOs and directories) refuse before
 SQLite opens them; dangling leaf links also refuse. Ordinary leaf links to regular
-journals retain their existing behavior. Inspection is a pathname precheck, not
-protection against concurrent path replacement or a filesystem I/O deadline.
+journals use the canonical connection boundary described above. Windows pins
+database and ancestor names; POSIX retains a pathname precheck. Neither provides
+a filesystem I/O deadline or a strictly non-mutating snapshot.
 
 These create/show/list commands record metadata only. They do not configure scope,
 approve a contract, select an active engagement, run a tool or enable a worker.
@@ -686,6 +687,12 @@ copy before sharing it. Escaped lone Unicode surrogates may remain in JSON.
 ---
 
 ## `tools` — pinned, verified tool installs
+
+Automatic cleanup of old direct-run directories preserves every journal-linked
+run, artifact and manifest. Unjournaled directories older than seven days are
+eligible only where descriptor-relative deletion is supported. Windows, Python
+3.10 and unsupported runtimes preserve old data; execution still works. Manage
+retained data explicitly rather than assuming it will be removed automatically.
 
 ```bash
 vardrrunner tools install --all            # install, update or repair every pinned tool; safe to rerun
