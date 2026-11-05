@@ -10,11 +10,12 @@ tool output.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import stat
 import uuid
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -23,20 +24,24 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from vardrrunner import manifests, redaction
+from vardrrunner.windows_journal import WindowsJournalError, WindowsJournalPin
 
 SCHEMA_VERSION = 1
+RETENTION_RECORD_LIMIT = 10_000
+RETENTION_PATH_BYTES = 4096
+RETENTION_TOTAL_BYTES = 8 * 1024 * 1024
 
 
 class JournalError(RuntimeError):
     """The journal is unavailable, corrupt, or received an invalid transition."""
 
 
-def journal_path_present(path: Path) -> bool:
-    """Observe an ordinary journal target, not a race-safe open or I/O deadline."""
+def _journal_path_info(path: Path) -> os.stat_result | None:
+    """Observe the target and retain its identity for the Windows handle check."""
     try:
         info = path.lstat()
     except FileNotFoundError:
-        return False
+        return None
     except OSError:
         raise JournalError("Cannot inspect journal path") from None
     try:
@@ -47,7 +52,40 @@ def journal_path_present(path: Path) -> bool:
             raise JournalError("Unsupported nonregular or reparse journal target")
     except OSError:
         raise JournalError("Cannot inspect journal target") from None
-    return True
+    return info
+
+
+def journal_path_present(path: Path) -> bool:
+    """Observe an ordinary journal target, not a race-safe open or I/O deadline."""
+    return _journal_path_info(path) is not None
+
+
+@contextmanager
+def journal_connection(path: Path, *, readonly: bool = False) -> Iterator[sqlite3.Connection]:
+    """Use one canonical DB/WAL identity; keep Windows names pinned until close.
+
+    POSIX retains the existing observed-file check, not a race-safe open promise.
+    Read-only SQLite connections can still create or change WAL sidecars.
+    """
+    observed = _journal_path_info(path)
+    try:
+        canonical = path.resolve(strict=readonly)
+        guard = (
+            WindowsJournalPin(canonical, create=not readonly, observed=observed)
+            if os.name == "nt"
+            else nullcontext()
+        )
+        with guard:
+            target = canonical.as_uri() + "?mode=ro" if readonly else canonical
+            con = sqlite3.connect(target, uri=readonly, timeout=5.0)
+            try:
+                yield con
+            finally:
+                con.close()
+    except OSError:
+        raise JournalError("Cannot open journal path") from None
+    except WindowsJournalError:
+        raise JournalError("Cannot pin journal path") from None
 
 
 class Phase(str, Enum):
@@ -136,6 +174,13 @@ class RunRecord:
         return data
 
 
+@dataclass(frozen=True)
+class RetainedPaths:
+    run_dir: str | None
+    artifact_path: str | None
+    manifest_path: str | None
+
+
 class Journal:
     """Transaction-safe journal repository; one short-lived connection per call."""
 
@@ -150,10 +195,8 @@ class Journal:
     @classmethod
     def read_existing(cls, path: Path, run_id: str) -> RunRecord | None:
         """Inspect one current-schema record without creating or migrating storage."""
-        journal_path_present(Path(path))
         try:
-            uri = Path(path).absolute().as_uri() + "?mode=ro"
-            with closing(sqlite3.connect(uri, uri=True, timeout=5.0)) as con:
+            with journal_connection(Path(path), readonly=True) as con:
                 con.row_factory = sqlite3.Row
                 if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
                     raise JournalError("unsupported read-only journal schema")
@@ -162,23 +205,67 @@ class Journal:
         except (OSError, sqlite3.Error):
             raise JournalError("cannot inspect existing execution journal") from None
 
-    def _connect(self) -> sqlite3.Connection:
-        journal_path_present(self.path)
-        con = sqlite3.connect(self.path, timeout=5.0)
-        con.row_factory = sqlite3.Row
-        con.execute("PRAGMA foreign_keys = ON")
-        con.execute("PRAGMA busy_timeout = 5000")
-        return con
+    @classmethod
+    def read_existing_paths(cls, path: Path) -> list[RetainedPaths]:
+        """Read complete, bounded path references for conservative retention.
+
+        A destructive cleanup decision must never use a truncated inventory.
+        This is a SQLite read, not a promise of unchanged filesystem sidecars.
+        """
+        try:
+            with journal_connection(Path(path), readonly=True) as con:
+                con.row_factory = sqlite3.Row
+                if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+                    raise JournalError("unsupported read-only journal schema")
+                # Bound database-encoded bytes before Python materializes them.
+                # A bytes sentinel cannot be mistaken for an admissible text path.
+                rows = con.execute(
+                    """SELECT
+                    CASE WHEN run_dir IS NULL THEN NULL
+                         WHEN typeof(run_dir)='text' AND length(CAST(run_dir AS BLOB))<=?
+                         THEN run_dir ELSE x'00' END,
+                    CASE WHEN artifact_path IS NULL THEN NULL
+                         WHEN typeof(artifact_path)='text' AND length(CAST(artifact_path AS BLOB))<=?
+                         THEN artifact_path ELSE x'00' END,
+                    CASE WHEN manifest_path IS NULL THEN NULL
+                         WHEN typeof(manifest_path)='text' AND length(CAST(manifest_path AS BLOB))<=?
+                         THEN manifest_path ELSE x'00' END
+                    FROM runs LIMIT ?""",
+                    (RETENTION_PATH_BYTES,) * 3 + (RETENTION_RECORD_LIMIT + 1,),
+                )
+                records: list[RetainedPaths] = []
+                total = 0
+                for row in rows:
+                    if len(records) >= RETENTION_RECORD_LIMIT:
+                        raise JournalError("journal retention inventory exceeds safe limit")
+                    values = tuple(row)
+                    if any(value is not None and not isinstance(value, str) for value in values):
+                        raise JournalError("unsupported journal retention path")
+                    sizes = [len(value.encode("utf-8")) for value in values if value is not None]
+                    if any(size > RETENTION_PATH_BYTES for size in sizes):
+                        raise JournalError("unsupported journal retention path")
+                    total += sum(sizes)
+                    if total > RETENTION_TOTAL_BYTES:
+                        raise JournalError("journal retention inventory exceeds safe byte limit")
+                    records.append(RetainedPaths(*values))
+                return records
+        except (OSError, sqlite3.Error):
+            raise JournalError("cannot inspect existing execution journal") from None
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        with journal_connection(self.path) as con:
+            con.row_factory = sqlite3.Row
+            con.execute("PRAGMA foreign_keys = ON")
+            con.execute("PRAGMA busy_timeout = 5000")
+            yield con
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         """Commit or roll back the transaction and always close the handle."""
-        con = self._connect()
-        try:
+        with self._connect() as con:
             with con:
                 yield con
-        finally:
-            con.close()
 
     def _migrate(self) -> None:
         with self._connection() as con:
@@ -227,10 +314,13 @@ class Journal:
                     PRAGMA user_version = 1;
                     """
                 )
-        try:
-            self.path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
+            try:
+                # Use SQLite's canonical name while its Windows pins remain held;
+                # an unpinned input alias must not redirect the permission update.
+                database = Path(con.execute("PRAGMA database_list").fetchone()[2])
+                database.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                pass
 
     def begin(
         self,

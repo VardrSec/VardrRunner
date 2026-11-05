@@ -52,3 +52,4 @@ the way it does.
 
 
 - [0041: Dormant finite recon projection](0041-dormant-finite-recon-projection.md)
+- [0042: Canonical journal names and Windows replacement pins](0042-canonical-journal-name-pins.md)

@@ -1,13 +1,24 @@
 # VardrRunner — Development
 
-This local integration combines standalone/recon/cleanup candidate `184da89`
-with existing journal/export candidate `3dd3b4f`, preserving their shared ancestry.
-Workspace inventory commit `c1bfc18` is excluded. Recon remains validation-only,
-rejected before reservation callbacks or execution; managed Docker stays disabled.
-Journal pathname replacement and SQLite snapshot non-mutation remain open safety
-gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
-Earlier test evidence belongs to its original source heads. No complete NM-3
-cohort, installer/no-loss acceptance or equivalence to missing `d0d01d2` is claimed.
+Journal I/O checks include canonical symlink/WAL visibility and native Windows
+replacement attempts immediately before SQLite opens the pinned database.
+`tests/test_journal_io.py` also checks pin lifetime/error cleanup, actual-handle
+validation and complete read-only retention inventory. A skipped hardlink/symlink
+fixture means its native permission was unavailable, not that the case passed.
+These checks do not establish POSIX race safety or a non-mutating SQLite snapshot.
+
+`tests/test_workspace_cli_process.py` starts independent CLI processes with fresh
+profiles, no Map credentials and a disabled keychain. A child audit hook refuses
+network connections and tool launches. The tests verify workspace persistence and
+that missing reads or invalid labels do not initialize state.
+
+Recon remains validation-only, rejected before reservation callbacks or execution;
+managed Docker execution remains gated. Full/Mapless, Docker and cross-platform
+acceptance remain required.
+Windows database/ancestor replacement pins and canonical WAL reads are implemented;
+POSIX pathname replacement and SQLite snapshot non-mutation remain open safety gates.
+Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+Earlier test evidence applies only to its recorded source revision.
 
 ## Standalone workspace Gate consumer
 
@@ -274,7 +285,7 @@ VARDRRUNNER_SMOKE=1 VARDRRUNNER_SMOKE_BIN_DIR=/path/to/bins pytest tests -m smok
   report on an unreachable target.
 
 ### Wiring and guard tests
-`tests/test_cli.py` is the only thing that checks Typer wiring, and
+`tests/test_cli.py` checks Typer option forwarding, and
 `mock.assert_called_once()` is not enough: it passes whether or not an option reaches the
 command module. Two v0.28.0 fixes existed because nothing asserted kwargs — `--max-targets`
 was implemented but never exposed, and `import ffuf` stayed registered after leaving

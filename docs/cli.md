@@ -1,20 +1,24 @@
 # VardrRunner — CLI Reference
 
-This local integration combines standalone/recon/cleanup candidate `184da89`
-with existing journal/export candidate `3dd3b4f`, preserving their shared ancestry.
-Workspace inventory commit `c1bfc18` is excluded. Recon remains validation-only,
-rejected before reservation callbacks or execution; managed Docker stays disabled.
-Journal pathname replacement and SQLite snapshot non-mutation remain open safety
-gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
-Earlier test evidence belongs to its original source heads. No complete NM-3
-cohort, installer/no-loss acceptance or equivalence to missing `d0d01d2` is claimed.
+Standalone workspaces and the explicitly approved native Gate consumer are
+development capabilities. Recon remains validation-only, rejected before
+reservation callbacks or execution; managed Docker execution remains gated.
+Windows database/ancestor replacement pins and canonical WAL reads are implemented;
+POSIX pathname replacement and SQLite snapshot non-mutation remain open safety gates.
+Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+These limits leave the required Full/Mapless, Docker and cross-platform acceptance
+open. Earlier test evidence applies only to its recorded source revision.
 
 DNSx invocations suppress automatic version checks. Existing connected commands
 retain their meaning; this correction does not enable standalone recon or grant
 authority for DNS/HTTP targets or auxiliary services.
 
-The reconciled `audit export-run` journal read refuses observed special files
-before SQLite opens. This remains an observation, not a race-safe open guarantee.
+Journal reads, workspace inventory and credential-grant transactions resolve ordinary
+symlinks to the canonical database/WAL path. Windows retains non-reparse database and
+ancestor handles without delete sharing through each SQLite connection; hardlinked
+databases refuse to avoid separate WAL names. Legitimate SQLite writers remain allowed.
+POSIX retains its observed-file guard. This does not make inspection filesystem
+non-mutating or close the POSIX/sidecar replacement gates.
 
 Opt-in NM-2 source builds add `vardrrunner jobs run --controlled [--yes]` with
 matching Map execution-control endpoints, and `vardrrunner jobs stop RUN_ID` to

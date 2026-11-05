@@ -127,14 +127,6 @@ def test_regular_leaf_alias_retains_live_wal_visibility(tmp_path):
         assert path.with_name(path.name + "-wal").stat().st_size > 0
         for source in (path, alias):
             record = Journal.read_existing(source, run.run_id)
-            if record.status != "committed-in-wal":
-                label = "alias" if source == alias else "original"
-                print(f"::error::journal_wal_visibility_failed_source_{label}")
-                resolved = Journal.read_existing(source.resolve(strict=True), run.run_id)
-                if resolved.status == "committed-in-wal":
-                    print("::notice::resolved_path_reads_committed_wal")
-                else:
-                    print("::error::resolved_path_also_misses_committed_wal")
             assert record.status == "committed-in-wal"
             assert journal_path_present(source)
             assert Workspaces.list_existing(source)[0].name == "Committed in WAL"

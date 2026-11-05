@@ -5,13 +5,19 @@ from __future__ import annotations
 import re
 import sqlite3
 import uuid
-from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from vardrrunner import redaction
-from vardrrunner.journal import SCHEMA_VERSION, Journal, JournalError, journal_path_present, utc_now
+from vardrrunner.journal import (
+    SCHEMA_VERSION,
+    Journal,
+    JournalError,
+    journal_connection,
+    journal_path_present,
+    utc_now,
+)
 
 
 class WorkspaceError(RuntimeError):
@@ -127,7 +133,7 @@ class Workspaces:
         try:
             if not journal_path_present(path):
                 return []
-            with closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as con:
+            with journal_connection(path, readonly=True) as con:
                 con.row_factory = sqlite3.Row
                 if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
                     raise WorkspaceError("Unsupported local journal schema")

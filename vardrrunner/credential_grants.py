@@ -12,13 +12,13 @@ import json
 import sqlite3
 import uuid
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from vardrrunner import config, configs, launch_guard
-from vardrrunner.journal import Journal, JournalError, journal_path_present
+from vardrrunner.journal import Journal, JournalError, journal_connection, journal_path_present
 
 KEY = "gate_credential_grants_v1"
 
@@ -132,7 +132,7 @@ class Store:
             Journal(self.path)
             if not journal_path_present(self.path):
                 raise GrantError("grant_state_unavailable")
-            with closing(sqlite3.connect(self.path, timeout=5)) as con:
+            with journal_connection(self.path) as con:
                 con.execute(
                     "CREATE TABLE IF NOT EXISTS credential_grant_state (store TEXT PRIMARY KEY, snapshot TEXT NOT NULL, observed TEXT NOT NULL)"
                 )

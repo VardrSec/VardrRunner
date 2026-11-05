@@ -1,11 +1,31 @@
 # Changelog
 
+- Canonicalize journal connections so Windows symlink aliases read the original
+  committed WAL. Pin the Windows database and its ancestors against replacement
+  until SQLite closes, including workspace/grant reads; refuse hardlinked Windows
+  databases with ambiguous WAL names. POSIX replacement and non-mutating snapshot
+  safety remain open. See `changelog/unreleased-canonical-journal-pins.md`.
+
 All notable changes to VardrRunner are documented here.
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
+
+- Use canonical journal/WAL paths and pin Windows database/ancestor identities
+  through SQLite connection close. Share this boundary with workspace reads and
+  credential grants; refuse hardlinked Windows journals. POSIX replacement and
+  strict non-mutating snapshot acceptance remain open.
+- Preserve journal-linked evidence during age-based direct-run cleanup, including
+  unfinished work, uncertain uploads and completed records. Unreadable or
+  ambiguous retention state leaves evidence in place. Automatic deletion requires
+  confined descriptor-relative operations; Windows and Python 3.10 defer cleanup.
+- Exercise local workspace creation and inspection across separate CLI processes
+  with Map credentials, real keychain access, network calls and tool launches
+  unavailable. Remove the obsolete branch-only Windows diagnostic workflow while
+  retaining its behavioral regressions in normal CI. Allow explicit dispatch of
+  that existing CI suite on a candidate branch.
 
 - Combine the published standalone Gate/workspace and dormant recon candidates
   on their shared public base. Preserve Gate reservation callbacks and reject

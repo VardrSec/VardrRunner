@@ -1,13 +1,14 @@
 # VardrRunner — Architecture
 
-This local integration combines standalone/recon/cleanup candidate `184da89`
-with existing journal/export candidate `3dd3b4f`, preserving their shared ancestry.
-Workspace inventory commit `c1bfc18` is excluded. Recon remains validation-only,
-rejected before reservation callbacks or execution; managed Docker stays disabled.
-Journal pathname replacement and SQLite snapshot non-mutation remain open safety
-gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
-Earlier test evidence belongs to its original source heads. No complete NM-3
-cohort, installer/no-loss acceptance or equivalence to missing `d0d01d2` is claimed.
+Runner remains the single execution engine, with standalone workspaces and
+optional Map coordination. The native standalone Gate consumer is a development
+capability. Recon remains validation-only, rejected before reservation callbacks
+or execution; managed Docker execution remains gated.
+Canonical journal/WAL identity and Windows database/ancestor replacement pins are
+implemented; POSIX pathname replacement and SQLite snapshot non-mutation remain
+open safety gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+Full/Mapless, Docker and cross-platform acceptance remain required. Earlier test
+evidence applies only to its recorded source revision.
 
 The additive `workspace gate` consumer reuses the existing standalone contract,
 ledger, fixed-Gate runtime, native Windows control, journal and audit/export. It
@@ -30,13 +31,19 @@ schemas and orders before limiting; it constructs no Journal and performs no
 initialization/migration. No active selection, new state, authority or execution
 path is introduced. Existing application startup maintenance remains unchanged.
 
-Every SQLite connection in this source cohort inspects the journal leaf first.
-Observed nonregular objects and non-symlink Windows reparse targets refuse;
-ordinary symlinks to regular files retain compatibility, including live WAL reads.
-Missing journals retain their existing creation/read-only semantics. Inspection
-does not pin a descriptor for SQLite: concurrent leaf/ancestor replacement and
-blocked filesystem metadata I/O remain outside this availability correction.
-This is not an authenticated path boundary or a general bounded-open guarantee.
+Every journal connection uses one canonical database pathname, including grant
+transactions and workspace inventory. Ordinary symlinks resolve to that database,
+so Windows readers see its committed WAL rather than a separate alias WAL name.
+On Windows, each canonical ancestor and the database are opened as non-reparse
+objects and retained without delete sharing until SQLite closes. Ancestor handles
+also deny write sharing; database handles allow legitimate concurrent SQLite writes.
+Hardlinked Windows databases refuse because alternate names can split WAL state.
+The adapter uses existing Windows APIs and adds no minimum Windows version.
+Missing journals retain their existing creation/read-only semantics. POSIX retains
+the observed-file check; its pathname replacement race is not closed. The Windows
+pins cover database/ancestor replacement, not authority authenticity, database-content
+tampering, sidecar replacement, strict inspection non-mutation or bounded metadata I/O.
+See [ADR 0042](adr/0042-canonical-journal-name-pins.md).
 
 The partial NM-3 single-run evidence exporter reuses journal/schema-1 audit and
 manifest formats. It reads a current-schema journal in SQLite read-only mode,
