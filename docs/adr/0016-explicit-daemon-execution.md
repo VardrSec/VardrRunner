@@ -50,3 +50,18 @@ longer checks for a daemon PID file. A one-shot `jobs run` no longer carries the
 60-second stop-work recheck: a halted engagement's remaining jobs are skipped for the rest of
 the run, and the next run asks again. Leftover registrations are removed by hand, as
 documented in `docs/cli.md`.
+
+## Amendment (2026-11-05): explicitly enabled New Moon managed execution
+
+The approved New Moon charter and current owner instruction authorize a separate,
+explicitly enabled managed Compose worker after NM-1/NM-2 safety acceptance.
+This supersedes the blanket worker prohibition only for that bounded path.
+Default installation/startup, `init`, manual commands and the retired native
+service interfaces retain their behavior. No sign-in registration, recurring
+scan or autonomous target selection is authorized.
+
+Worker activation requires shared signed permission, authenticated ownership and
+current control, expiring grants, budgets, verified process containment and
+tested disable/stop/restart behavior. Existing prototype code is not activation
+evidence. Changes to the current container privilege boundary require their own
+review and authorization; they are not implied by this amendment.

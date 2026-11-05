@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add signed future-version/schema rejection proof without consuming the existing
+  authorization contract. Reconcile agent guidance and ADR 0016 with the owner's
+  explicitly enabled New Moon worker direction; activation and containment remain
+  gated and no runtime behavior changes in this increment.
 - Reconcile reference-interface documentation with the existing native standalone
   Gate command. State the missing operator context and key/trust preparation
   prerequisites explicitly; no issuer, enrollment or execution behavior changes.
