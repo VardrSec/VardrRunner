@@ -61,6 +61,10 @@ VardrSec repository.
 - **Containerized Runner** (ADR 0019): UID/GID 10001, no added capabilities, no
   Docker socket, no published ports. Raw-packet modes are unsupported — never "fix"
   that with `--privileged`.
+  Owner-approved ADR 0043 (2026-11-05) permits only its separate worker's temporary
+  UID-0/SETUID/SETGID/SETPCAP bootstrap and trusted-host stop-report development.
+  All five capability sets must be empty before work; acceptance and default-off
+  requirements remain. Ordinary Runner retains the baseline above.
 
 ## Credentials and transport
 - Key sources, in order: `VARDRMAP_API_KEY`, OS keychain, then

@@ -1,9 +1,21 @@
 # ADR 0043 — Proposed Linux worker lifecycle owner
 
-Status: proposed; not approved, implemented, enabled or accepted.
+Status: owner-approved for bounded implementation and testing, 2026-11-05;
+not implemented, enabled or accepted as a supported runtime.
 
-This document is a review candidate for the NM-2 container-containment blocker.
-It does not authorize a change to ADR 0019's container baseline. NM-3 branches,
+## Owner authorization record
+
+After reviewing variant B and the trusted-host false-report/concurrency-release
+risk, the owner explicitly selected: "Approve this bounded design for
+implementation and testing." This authorizes only the combined candidate described
+below. It does not waive platform/security acceptance, enable default startup,
+authorize release or permit the stopped adversarial experiments to resume.
+References below to the proposed or unapproved candidate describe the review
+proposal preceding this decision; this authorization record controls its current
+development status.
+
+This document records the reviewed NM-2 container-containment candidate.
+The owner-approved exception is worker-only; ADR 0019's manual baseline, NM-3 branches,
 evidence, default startup and manual/legacy behavior remain preserved.
 
 ## Problem and scope
