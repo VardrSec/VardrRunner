@@ -686,13 +686,13 @@ copy before sharing it. Escaped lone Unicode surrogates may remain in JSON.
 
 ---
 
-## `tools` — pinned, verified tool installs
-
 Automatic cleanup of old direct-run directories preserves every journal-linked
 run, artifact and manifest. Unjournaled directories older than seven days are
 eligible only where descriptor-relative deletion is supported. Windows, Python
 3.10 and unsupported runtimes preserve old data; execution still works. Manage
 retained data explicitly rather than assuming it will be removed automatically.
+
+## `tools` — pinned, verified tool installs
 
 ```bash
 vardrrunner tools install --all            # install, update or repair every pinned tool; safe to rerun
