@@ -253,6 +253,9 @@ def test_expired_shared_deadline(specimen, projection):
 
 
 def test_gate_runtime_refuses_before_side_effects(projection, tmp_path):
+    def reserved():
+        raise AssertionError("Dormant recon must not enter the standalone journal callback")
+
     class Forbidden:
         def __getattr__(self, name):
             raise AssertionError("runtime side effect")
@@ -268,6 +271,7 @@ def test_gate_runtime_refuses_before_side_effects(projection, tmp_path):
             Forbidden(),
             tmp_path,
             expiring_grants=True,
+            on_reserved=reserved,
         )
 
 

@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Combine the published standalone Gate/workspace and dormant recon candidates
+  on their shared public base. Preserve Gate reservation callbacks and reject
+  recon before those callbacks. This is a new candidate, not recovered historical
+  source; journal/export/inventory additions and cleanup fix 1320e5a remain separate.
+
 - Add an explicit native Windows `workspace gate` consumer for existing signed
   standalone fixed-Gate permission, reusing the validator, ledger, native control
   and local evidence/audit. No issuance, enrollment, Map fallback or worker.

@@ -1,5 +1,13 @@
 # VardrRunner — CLI Reference
 
+The new isolated standalone/recon cohort combines published `2eabab8` and
+`ef21cff` on `2c1f3a4`. Recon remains projection/validation only, rejected by
+the Gate runtime before reservation callbacks or execution. Journal/export/
+inventory candidate `c1bfc18` stays separate; snapshot non-mutation and journal
+replacement-race gates remain unresolved. Cleanup fix `1320e5a` is not included.
+No installer wiring, native combined acceptance or recovered-source equivalence
+to missing `d0d01d2` is claimed.
+
 DNSx invocations suppress automatic version checks. Existing connected commands
 retain their meaning; this correction does not enable standalone recon or grant
 authority for DNS/HTTP targets or auxiliary services.
