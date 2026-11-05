@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from vardrrunner import config, configs, launch_guard
-from vardrrunner.journal import Journal
+from vardrrunner.journal import Journal, JournalError, journal_path_present
 
 KEY = "gate_credential_grants_v1"
 
@@ -130,6 +130,8 @@ class Store:
     def transaction(self, *, create=False):
         try:
             Journal(self.path)
+            if not journal_path_present(self.path):
+                raise GrantError("grant_state_unavailable")
             with closing(sqlite3.connect(self.path, timeout=5)) as con:
                 con.execute(
                     "CREATE TABLE IF NOT EXISTS credential_grant_state (store TEXT PRIMARY KEY, snapshot TEXT NOT NULL, observed TEXT NOT NULL)"
@@ -179,7 +181,7 @@ class Store:
                     raise
         except GrantError:
             raise
-        except (sqlite3.Error, OSError, ValueError, TypeError, KeyError):
+        except (sqlite3.Error, JournalError, OSError, ValueError, TypeError, KeyError):
             raise GrantError("grant_state_unavailable") from None
 
     def publish(self, con, data, catalog, grant_id: str, action: str, clock: datetime):

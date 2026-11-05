@@ -334,6 +334,12 @@ def workspace_gate(
     )
 
 
+@workspace_app.command("list")
+def workspace_list(limit: int = typer.Option(100, "--limit", min=1, max=1000)):
+    """List saved local workspace metadata as JSON without contacting Map."""
+    workspace_cmd.list_workspaces(limit=limit)
+
+
 audit_app = typer.Typer(
     help="Inspect and export the sanitized local execution journal.", no_args_is_help=True
 )
@@ -345,9 +351,12 @@ def audit_list(
     since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
     limit: int = typer.Option(100, "--limit", min=1, max=10_000),
     as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+    engagement_id: str | None = typer.Option(
+        None, "--engagement", "-e", help="Exact local engagement or workspace ID"
+    ),
 ):
     """List recent journaled job runs."""
-    audit.list_runs(since=since, limit=limit, as_json=as_json)
+    audit.list_runs(since=since, limit=limit, as_json=as_json, engagement_id=engagement_id)
 
 
 @audit_app.command("show")
@@ -361,9 +370,21 @@ def audit_export(
     output: Path = typer.Option(..., "--output", "-o", help="Destination JSON file"),
     since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
     limit: int = typer.Option(10_000, "--limit", min=1, max=10_000),
+    engagement_id: str | None = typer.Option(
+        None, "--engagement", "-e", help="Exact local engagement or workspace ID"
+    ),
 ):
     """Atomically export sanitized journal records."""
-    audit.export_runs(output=output, since=since, limit=limit)
+    audit.export_runs(output=output, since=since, limit=limit, engagement_id=engagement_id)
+
+
+@audit_app.command("export-run")
+def audit_export_run(
+    run_id: str = typer.Argument(..., help="One terminal journal run ID"),
+    output: Path = typer.Option(..., "--output", "-o", help="New portable evidence directory"),
+):
+    """Export one run's redacted JSON evidence copy on supported POSIX systems."""
+    audit.export_run(run_id=run_id, output=output)
 
 
 @app.command()

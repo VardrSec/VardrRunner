@@ -515,3 +515,43 @@ def test_launch_setup_failure_cleans_resolved_secret_and_keeps_standalone_reserv
     spawn.assert_not_called()
     output = capsys.readouterr()
     assert secret not in output.out + output.err + caplog.text
+
+
+def test_standalone_run_exports_without_changing_consumption_or_grants(journey, monkeypatch):
+    from tests.test_portable_export import root_owner_observation
+    from vardrrunner import manifests, resources
+
+    if not audit._private_directories_supported():
+        pytest.skip("POSIX descriptor integration; native Windows export remains separate")
+    # Reuse the export fixture's bounded capacity/root-owner observations only.
+    root_owner_observation(monkeypatch, 0)
+    monkeypatch.setattr(resources.shutil, "disk_usage", lambda _: SimpleNamespace(free=2 * 1024**3))
+    f = journey
+    invoke(f)
+    record = f.journal.list(engagement_id=f.workspace.workspace_id)[0]
+    assert record.phase == Phase.DONE and record.pid is None
+    assert Workspaces.list_existing(f.journal.path) == [f.workspace]
+    original = Path(record.artifact_path).read_bytes()
+
+    def control_rows():
+        with f.journal._connection() as con:
+            return {
+                table: [tuple(row) for row in con.execute("SELECT * FROM " + table)]
+                for table in ("authorization_contracts", "credential_grant_state")
+            }
+
+    before = control_rows()
+    exported = f.tmp / "portable-standalone"
+    audit.export_run(record.run_id, exported)
+    assert control_rows() == before and consumed(f) == 2
+    assert Path(record.artifact_path).read_bytes() == original
+    assert {p.name for p in exported.iterdir()} == {"artifact.json", "audit.json", "manifest.json"}
+    provenance = json.loads((exported / "audit.json").read_text())["runs"][0]
+    derivative = json.loads((exported / "manifest.json").read_text())
+    assert provenance["artifact_sha256"] == record.artifact_sha256
+    assert derivative["artifact_sha256"] == manifests.artifact_digest(exported / "artifact.json")[0]
+    assert derivative["artifact_path"] == "artifact.json"
+    assert any(w["code"] == "redacted_export" for w in derivative["warnings"])
+    with pytest.raises(typer.Exit):
+        invoke(f, output=f.tmp / "export-does-not-rearm")
+    assert consumed(f) == 2 and len(f.calls) == 1

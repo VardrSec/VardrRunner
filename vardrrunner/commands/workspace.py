@@ -37,3 +37,12 @@ def show(workspace_id: str) -> None:
         console.print("[red]Cannot read workspace; check its ID and local journal.[/red]")
         raise typer.Exit(1) from None
     console.print_json(json.dumps(asdict(record)))
+
+
+def list_workspaces(*, limit: int = 100) -> None:
+    try:
+        records = Workspaces.list_existing(config.journal_file(), limit=limit)
+    except (OSError, WorkspaceError):
+        console.print("[red]Cannot list workspace metadata; check the local journal.[/red]")
+        raise typer.Exit(1) from None
+    console.print_json(json.dumps([asdict(record) for record in records]))

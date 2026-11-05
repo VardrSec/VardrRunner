@@ -1,14 +1,13 @@
 # VardrRunner — Development
 
-The new isolated standalone/recon cohort combines published `2eabab8` and
-`ef21cff` on `2c1f3a4`. Recon remains projection/validation only, rejected by
-the Gate runtime before reservation callbacks or execution. Journal/export/
-inventory candidate `c1bfc18` stays separate; snapshot non-mutation and journal
-replacement-race gates remain unresolved. The local integration adds reviewed launch-failure cleanup `1320e5a` to
-standalone/recon candidate `2d51d1c`; earlier checks remain attributed to their
-original source heads.
-No installer wiring, native combined acceptance or recovered-source equivalence
-to missing `d0d01d2` is claimed.
+This local integration combines standalone/recon/cleanup candidate `184da89`
+with existing journal/export candidate `3dd3b4f`, preserving their shared ancestry.
+Workspace inventory commit `c1bfc18` is excluded. Recon remains validation-only,
+rejected before reservation callbacks or execution; managed Docker stays disabled.
+Journal pathname replacement and SQLite snapshot non-mutation remain open safety
+gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+Earlier test evidence belongs to its original source heads. No complete NM-3
+cohort, installer/no-loss acceptance or equivalence to missing `d0d01d2` is claimed.
 
 ## Standalone workspace Gate consumer
 
@@ -35,7 +34,26 @@ while preserving the 14-request ceiling. No extra cleanup request is added or
 claimed; the target is disposable loopback state. Replay and audit must still pass.
 Keep the default resource reserve/95% coverage floor and retain skipped/unrun gates.
 
+Reconciled journal/export checks extend the existing special-file cases to
+`read_existing`, including ordinary leaf aliases and committed live WAL records.
+These checks do not close the demonstrated concurrent-replacement race or native
+Windows acceptance. Test counts from older candidates are not combined acceptance.
+
 ## Local workspace metadata
+
+Listing cases check bounded/deterministic metadata discovery, missing/corrupt/
+future state without initialization, byte preservation and no Map/provider/process
+use. CLI forwarding checks the limit kwarg. Tests isolate the unchanged global
+startup maintenance hook; database read-only claims are not a claim of zero
+filesystem bookkeeping by SQLite or the application's existing startup code.
+
+`tests/test_journal_file_types.py` checks pre-existing FIFOs/directories and
+dangling/special-target links refuse before SQLite, including the grant store's
+separate connection and repeated journal calls. It checks absent reads do not
+initialize state and ordinary leaf aliases see live committed WAL data. Windows
+reparse attributes are simulated; native Windows semantics need platform testing.
+These checks do not prove safety against concurrent replacement between metadata
+inspection and SQLite's pathname open, or bounded I/O on unavailable filesystems.
 
 `tests/test_workspaces.py` covers fresh and existing journal preservation,
 concurrent creation, collision refusal, invalid/future/corrupt state and CLI
@@ -53,6 +71,55 @@ adapter argv. Opt in to `tests/test_smoke_dnsx.py` with `VARDRRUNNER_SMOKE=1` an
 The smoke uses only version mode and an isolated configuration home: flag parsing,
 not a DNS query, real-target scan, destination boundary or network-isolation proof.
 An absent verified artifact leaves this smoke unrun; never substitute a PATH tool.
+
+## Partial portable run export
+
+CLI alias coverage uses real Typer Path conversion. Direct raw-string Windows
+adapter tests cover that lower-level API only; they do not claim raw CLI aliases
+are all rejected before Python normalization. Native path/ACL/race gates remain.
+
+
+The control-store exclusion regression seeds real synthetic reference grants,
+their revocation, ledger authority state, a synthetically seeded prior-use fence
+and trusted-clock metadata. The seeded fence is not evidence of a real execution.
+Evidence export must leave those live stores byte-for-byte/row-for-row unchanged
+and copy only the existing three evidence files, before and after revocation.
+No credential is resolved and no approval/contract is issued or executed. This
+does not prove authority restoration, rollback reconciliation or an installed
+Mapless-to-Full transition; correlation metadata is still permitted in evidence.
+
+`tests/test_portable_export.py` checks source hash/size and descriptor binding,
+strict bounded JSON, original versus derivative provenance, status preservation,
+exclusive private output, redirected-directory refusal, fresh record reads and
+partial-output retention. Every case uses synthetic local files; no tool or Map
+request is made. New unit cases simulate a finite 2 GiB capacity observation and
+only the filesystem-root UID as 0, preserving all other stat observations. This
+cloud runtime actually has root UID 65534 and insufficient free disk, so those
+unit results are not actual-host permission/capacity acceptance.
+
+`test_real_capacity_export` uses neither simulation. It must run in Workstream C
+on an adequately sized supported POSIX host, along with normal full regression
+and the unchanged 95% floor. Its environment skip here is unproven, not passed.
+Windows uses a candidate 24H2+ handle adapter on local fixed NTFS; native ACL/race
+acceptance remains open. `tests/test_windows_export.py` distinguishes mocked API
+protocol checks from the opt-in actual native check. On Windows, set
+`VARDRRUNNER_WINDOWS_EXPORT_ACCEPTANCE=1` for that synthetic test, using a NEW
+retained basetemp; never reuse a pytest basetemp containing evidence. No Windows
+security acceptance is claimed by mocked cases. Existing execution is unchanged.
+Preserve test files;
+do not lower resource policy, change host ownership/ACLs or repeat unchanged
+native Gate/scanner checks for this file-export increment.
+
+## Scoped local audit history
+
+`tests/test_journal.py` checks exact engagement filtering before limits, combined
+time bounds, case/wildcard behavior and literal blank/SQL-looking historical IDs.
+`tests/test_audit.py` checks local-only redacted metadata export, empty selection
+and preservation of other runs. `tests/test_cli.py` checks both `--engagement`
+and `-e` delegation for list/export and unchanged defaults. Use the normal
+full-suite/95% coverage floor and resource reserve; this feature needs no live
+Map service, credentials, Gate binary or managed worker. Export remains schema 1
+with existing atomic replacement behavior; it is not an artifact/workspace backup.
 
 `tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
 journal connections, preparation/grant/clock failures and conservative recovery.

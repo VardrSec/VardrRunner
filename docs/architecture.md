@@ -1,14 +1,13 @@
 # VardrRunner — Architecture
 
-The new isolated standalone/recon cohort combines published `2eabab8` and
-`ef21cff` on `2c1f3a4`. Recon remains projection/validation only, rejected by
-the Gate runtime before reservation callbacks or execution. Journal/export/
-inventory candidate `c1bfc18` stays separate; snapshot non-mutation and journal
-replacement-race gates remain unresolved. The local integration adds reviewed launch-failure cleanup `1320e5a` to
-standalone/recon candidate `2d51d1c`; earlier checks remain attributed to their
-original source heads.
-No installer wiring, native combined acceptance or recovered-source equivalence
-to missing `d0d01d2` is claimed.
+This local integration combines standalone/recon/cleanup candidate `184da89`
+with existing journal/export candidate `3dd3b4f`, preserving their shared ancestry.
+Workspace inventory commit `c1bfc18` is excluded. Recon remains validation-only,
+rejected before reservation callbacks or execution; managed Docker stays disabled.
+Journal pathname replacement and SQLite snapshot non-mutation remain open safety
+gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+Earlier test evidence belongs to its original source heads. No complete NM-3
+cohort, installer/no-loss acceptance or equivalence to missing `d0d01d2` is claimed.
 
 The additive `workspace gate` consumer reuses the existing standalone contract,
 ledger, fixed-Gate runtime, native Windows control, journal and audit/export. It
@@ -21,6 +20,46 @@ queue and MCP remain independent of this explicit consumer.
 The DNSx adapter explicitly disables the pinned tool's automatic version check.
 This removes that auxiliary version request; it is not DNS destination, proxy,
 redirect, scope or aggregate-budget enforcement for a standalone recon profile.
+
+The reconciled export read also uses the existing observed-file guard before its
+SQLite connection; read-only mode, fresh reads and live WAL visibility remain.
+
+Workspace metadata listing reuses `local_workspaces` and the same row validation
+as known-ID lookup. A bounded SQLite read-only query checks current journal/table
+schemas and orders before limiting; it constructs no Journal and performs no
+initialization/migration. No active selection, new state, authority or execution
+path is introduced. Existing application startup maintenance remains unchanged.
+
+Every SQLite connection in this source cohort inspects the journal leaf first.
+Observed nonregular objects and non-symlink Windows reparse targets refuse;
+ordinary symlinks to regular files retain compatibility, including live WAL reads.
+Missing journals retain their existing creation/read-only semantics. Inspection
+does not pin a descriptor for SQLite: concurrent leaf/ancestor replacement and
+blocked filesystem metadata I/O remain outside this availability correction.
+This is not an authenticated path boundary or a general bounded-open guarantee.
+
+The partial NM-3 single-run evidence exporter reuses journal/schema-1 audit and
+manifest formats. It reads a current-schema journal in SQLite read-only mode,
+binds source JSON to the recorded digest/size and regular-file descriptor, then
+serializes a centrally redacted derivative. Original provenance stays in audit;
+the portable manifest describes the derivative and links the original hash.
+Fixed filenames are created exclusively through a pinned private POSIX directory
+descriptor. Fresh journal rechecks detect changed records without pinning one
+stale database snapshot. No database, grants, config or executable authority is
+copied. Windows now has an isolated handle-adapter candidate using verified private
+ACLs and no-redirect creation. Native security acceptance remains open. See
+[ADR 0040](adr/0040-portable-run-export.md).
+
+Path conversion can normalize input spellings before validation. The security
+boundary binds the resulting path through actual no-redirect handle operations;
+it does not promise raw CLI-token rejection for every spelling alias.
+
+Audit history and schema-1 metadata export optionally select an exact engagement
+or local workspace ID through the existing journal query. Bound SQL parameters
+apply that filter together with the time bound before ordering and limiting.
+Only `None` means unscoped; explicit blank/whitespace values remain literal
+historical IDs. No workspace lookup, Map transport, authorization, schema change
+or artifact-copy system is involved. Existing callers remain unscoped by default.
 
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot

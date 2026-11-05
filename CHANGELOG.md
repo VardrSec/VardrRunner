@@ -10,13 +10,24 @@ Per-version detail notes live in [`changelog/`](changelog/).
 - Combine the published standalone Gate/workspace and dormant recon candidates
   on their shared public base. Preserve Gate reservation callbacks and reject
   recon before those callbacks. This is a new candidate, not recovered historical
-  source; journal/export/inventory additions remain separate. Integrate the reviewed
+  source; integrate journal/export `3dd3b4f` while inventory `c1bfc18` stays separate.
+  Integrate the reviewed
   launch-failure cleanup from 1320e5a without enabling execution profiles.
 
 - Add an explicit native Windows `workspace gate` consumer for existing signed
   standalone fixed-Gate permission, reusing the validator, ledger, native control
   and local evidence/audit. No issuance, enrollment, Map fallback or worker.
   Keep uncertain consumption/PIDs and refuse unsupported execution platforms.
+
+- Reconcile workspace journal and portable-export candidates; apply the existing
+  observed-file guard to read-only export journal reads. Native acceptance remains open.
+- Refuse observed special journal objects before SQLite connections, avoiding
+  pre-existing FIFO hangs while preserving regular-file, leaf-alias and WAL
+  behavior. Concurrent replacement and filesystem I/O deadlines remain unproven.
+
+- Add bounded `workspace list --limit` metadata discovery from the existing local
+  journal without initialization/migration or Map credentials. Existing creation,
+  known-ID lookup, authority and execution behavior remain unchanged.
 
 - Add explicit local `workspace create` and `workspace show` metadata in the
   existing SQLite journal, without Map authentication or execution authority.
@@ -28,6 +39,22 @@ Per-version detail notes live in [`changelog/`](changelog/).
 - Clean up private Gate job data when executable resolution or preflight inspection
   fails before launch. Preserve the original exception and existing cleanup-error
   handling. See [launch cleanup note](changelog/unreleased-gate-launch-cleanup.md).
+
+- Clarify portable-export path normalization and test the real CLI conversion;
+  raw adapter rejection cases do not imply rejection of every CLI spelling alias.
+
+
+- Add synthetic evidence-export regression for active/revoked reference grants
+  and live ledger safety state. Export preserves those stores and excludes their
+  files/state; no production behavior or authority-restoration feature is added.
+
+- Add local `audit export-run` for a single terminal run's redacted JSON evidence
+  copy, original audit provenance and relative-path manifest. This partial NM-3
+  increment uses POSIX directory-FD controls or a candidate Windows 11 24H2+
+  handle adapter on local fixed NTFS. Native Windows security acceptance remains open.
+
+- Filter local audit history and metadata export by exact engagement/workspace ID
+  with `--engagement` (`-e`), using the existing journal and export schema.
 
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.
