@@ -4,7 +4,9 @@ The new isolated standalone/recon cohort combines published `2eabab8` and
 `ef21cff` on `2c1f3a4`. Recon remains projection/validation only, rejected by
 the Gate runtime before reservation callbacks or execution. Journal/export/
 inventory candidate `c1bfc18` stays separate; snapshot non-mutation and journal
-replacement-race gates remain unresolved. Cleanup fix `1320e5a` is not included.
+replacement-race gates remain unresolved. The local integration adds reviewed launch-failure cleanup `1320e5a` to
+standalone/recon candidate `2d51d1c`; earlier checks remain attributed to their
+original source heads.
 No installer wiring, native combined acceptance or recovered-source equivalence
 to missing `d0d01d2` is claimed.
 

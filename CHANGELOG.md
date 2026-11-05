@@ -10,7 +10,8 @@ Per-version detail notes live in [`changelog/`](changelog/).
 - Combine the published standalone Gate/workspace and dormant recon candidates
   on their shared public base. Preserve Gate reservation callbacks and reject
   recon before those callbacks. This is a new candidate, not recovered historical
-  source; journal/export/inventory additions and cleanup fix 1320e5a remain separate.
+  source; journal/export/inventory additions remain separate. Integrate the reviewed
+  launch-failure cleanup from 1320e5a without enabling execution profiles.
 
 - Add an explicit native Windows `workspace gate` consumer for existing signed
   standalone fixed-Gate permission, reusing the validator, ledger, native control
@@ -24,6 +25,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 - Disable DNSx's automatic version check during adapter execution. This removes
   that auxiliary request; no standalone recon profile or network authority is added.
+- Clean up private Gate job data when executable resolution or preflight inspection
+  fails before launch. Preserve the original exception and existing cleanup-error
+  handling. See [launch cleanup note](changelog/unreleased-gate-launch-cleanup.md).
 
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.

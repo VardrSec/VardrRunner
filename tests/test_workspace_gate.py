@@ -33,6 +33,7 @@ from vardrrunner.recovery import reconcile
 from vardrrunner.workspaces import Workspaces
 
 VECTORS = Path(__file__).parent / "fixtures/authorization"
+REAL_GATE_EXECUTE = runtime.handlers.VardrGateHandler.execute
 SEED = bytes(range(32))  # Public fixture only, never a real enrolled issuer.
 
 
@@ -469,3 +470,48 @@ def test_deadline_is_computed_again_after_reservation_callback(journey, monkeypa
     with pytest.raises(typer.Exit):
         invoke(f)
     assert consumed(f) == 1 and not f.calls
+
+
+def test_launch_setup_failure_cleans_resolved_secret_and_keeps_standalone_reservation(
+    journey, monkeypatch, capsys, caplog
+):
+    f = journey
+    secret = "synthetic-standalone-launch-secret"
+    monkeypatch.setenv("NM1_OWNER", secret)
+    scratch = f.tmp / "private-launch"
+    scratch.mkdir()
+    monkeypatch.setattr(runner.tempfile, "tempdir", str(scratch))
+    monkeypatch.setattr(runtime.handlers.VardrGateHandler, "execute", REAL_GATE_EXECUTE)
+    original_write = runner._write_private_job
+    original_program = runner.program
+    written = []
+
+    def write(payload):
+        path, directory = original_write(payload)
+        assert secret in path.read_text()
+        written.append((path, directory))
+        return path, directory
+
+    def program(name):
+        if written:
+            raise runner.ToolError("synthetic launch preparation refusal")
+        return original_program(name)
+
+    monkeypatch.setattr(runner, "_write_private_job", write)
+    monkeypatch.setattr(runner, "program", program)
+    spawn = MagicMock(side_effect=AssertionError("No process may launch"))
+    monkeypatch.setattr(runner, "_spawn_tool", spawn)
+    with pytest.raises(typer.Exit):
+        invoke(f)
+    assert len(written) == 1 and list(scratch.iterdir()) == []
+    assert consumed(f) == 1 and not f.calls
+    record = f.journal.list()[0]
+    assert record.phase == Phase.FAILED and record.pid is None
+    assert record.artifact_sha256 is None
+    assert not (f.output / "vardrgate_result.json").exists()
+    with pytest.raises(typer.Exit):
+        invoke(f, output=f.tmp / "retry-cleanup")
+    assert consumed(f) == 1 and len(written) == 1
+    spawn.assert_not_called()
+    output = capsys.readouterr()
+    assert secret not in output.out + output.err + caplog.text

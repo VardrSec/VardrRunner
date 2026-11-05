@@ -1041,30 +1041,30 @@ def run_vardrgate(
     """
     job_file, job_dir = _write_private_job(job)
 
-    # --literal-job: the runner resolved every credential itself, so Gate must use
-    # the job as written and never expand ${VAR} from its environment (ADR 0023).
-    # An older Gate rejects the flag before sending any request.
-    cmd = [
-        program("vardrgate_api_test"),
-        "run",
-        "--job",
-        str(job_file),
-        "--literal-job",
-        "--out",
-        str(output_path),
-    ]
-    preflight = any(
-        identity.get("preflight") is not None
-        for identity in configs.gate_identities(job.get("config", {}).get("test_case", {}))
-        if isinstance(identity, dict)
-    )
-    if preflight:
-        # Older binaries reject the flag before making any target request.
-        cmd.append("--require-identity-preflight")
     active_error: BaseException | None = None
     guard_file: Path | None = None
     guard_dir: Path | None = None
     try:
+        # --literal-job: the runner resolved every credential itself, so Gate must use
+        # the job as written and never expand ${VAR} from its environment (ADR 0023).
+        # An older Gate rejects the flag before sending any request.
+        cmd = [
+            program("vardrgate_api_test"),
+            "run",
+            "--job",
+            str(job_file),
+            "--literal-job",
+            "--out",
+            str(output_path),
+        ]
+        preflight = any(
+            identity.get("preflight") is not None
+            for identity in configs.gate_identities(job.get("config", {}).get("test_case", {}))
+            if isinstance(identity, dict)
+        )
+        if preflight:
+            # Older binaries reject the flag before making any target request.
+            cmd.append("--require-identity-preflight")
         if request_guard is not None:
             guard_file, guard_dir = _write_private_job(request_guard)
             cmd.extend(["--request-guard", str(guard_file)])

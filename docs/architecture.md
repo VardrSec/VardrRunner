@@ -4,7 +4,9 @@ The new isolated standalone/recon cohort combines published `2eabab8` and
 `ef21cff` on `2c1f3a4`. Recon remains projection/validation only, rejected by
 the Gate runtime before reservation callbacks or execution. Journal/export/
 inventory candidate `c1bfc18` stays separate; snapshot non-mutation and journal
-replacement-race gates remain unresolved. Cleanup fix `1320e5a` is not included.
+replacement-race gates remain unresolved. The local integration adds reviewed launch-failure cleanup `1320e5a` to
+standalone/recon candidate `2d51d1c`; earlier checks remain attributed to their
+original source heads.
 No installer wiring, native combined acceptance or recovered-source equivalence
 to missing `d0d01d2` is claimed.
 
@@ -250,7 +252,10 @@ the runner's only credential; it is never logged or printed.
 
 Resolved VardrGate identity secrets briefly exist in a private runner-owned temporary
 directory because the external CLI accepts a job file. On POSIX the directory is mode
-`0700` and the exclusively created file is `0600`; normal execution removes the directory.
+`0700` and the exclusively created file is `0600`. Cleanup covers executable resolution,
+preflight inspection, and execution failures as well as success. A setup or execution
+exception remains the primary error if cleanup also fails; that cleanup failure logs a
+fixed message without credential values. Cleanup failure after success fails the run.
 Every CLI startup also removes abandoned, correctly named directories whose owner PID is
 no longer alive, while refusing to traverse symlinks, junctions, or active directories.
 
