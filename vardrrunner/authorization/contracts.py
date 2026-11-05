@@ -196,6 +196,8 @@ class ValidationContext:
     capabilities: frozenset[str] = frozenset({PROFILE})
     # Production managed status/leases are deliberately not implemented in NM-1.
     managed_status_verified: bool = False
+    # Explicit secondary artifact for the dormant finite recon projection only.
+    dnsx_sha256: str | None = None
 
 
 def _matches(rule: dict, request: dict) -> bool:
@@ -294,11 +296,35 @@ def validate(
         payload["plan_sha256"] == permission["plan_sha256"] == digest(encoded(plan)),
         "plan_digest_mismatch",
     )
-    require(
-        encoded(plan)
-        == encoded(compile_gate_plan(case, execution, tool_sha256=context.tool_sha256)),
-        "execution_plan_changed",
-    )
+    from .recon_plan import PROFILE as RECON_PROFILE
+    from .recon_plan import compile_recon_plan
+
+    recon = isinstance(plan, dict) and plan.get("profile") == RECON_PROFILE
+    if recon:
+        require(RECON_PROFILE in context.capabilities, "unsupported_enforcement")
+        require(
+            permission["mode"] == "strict"
+            and permission["control"] == "local_offline"
+            and context.origin == "standalone"
+            and not permission["credential_grants"],
+            "unsupported_recon_authority",
+        )
+        expected = compile_recon_plan(
+            case, execution, tool_sha256=context.tool_sha256, dnsx_sha256=context.dnsx_sha256
+        )
+        require(
+            now
+            < timestamp(expected["execution"]["deadline"])
+            <= min(timestamp(payload["expires_at"]), timestamp(permission["testing_end"])),
+            "recon_deadline_denied",
+        )
+        require(
+            expected["execution"]["max_artifact_bytes"] <= permission["max_artifact_bytes"],
+            "artifact_limit",
+        )
+    else:
+        expected = compile_gate_plan(case, execution, tool_sha256=context.tool_sha256)
+    require(encoded(plan) == encoded(expected), "execution_plan_changed")
     require(plan["profile"] in context.capabilities, "unsupported_enforcement")
     if permission["control"] == "managed_online":
         require(context.managed_status_verified, "managed_control_unsupported")

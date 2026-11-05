@@ -6,36 +6,19 @@ import argparse
 import sys
 from pathlib import Path
 
-from .codec import AuthorizationError, TrustAnchor, decoded, digest, encoded, require, unb64
+from .codec import AuthorizationError, digest, encoded, require
 from .contracts import ValidationContext, approve, timestamp, validate
+from .documents import read_anchors as _anchors
+from .documents import read_bytes as _read_bytes
+from .documents import read_document as _read
 from .ledger import AuthorizationLedger
 from .plan import compile_gate_plan
-
-
-def _read(path: str):
-    return decoded(Path(path).read_bytes())
 
 
 def _write(path: str, value: dict) -> None:
     # Exclusive output; no overwrite of an approval, result or operator file.
     with Path(path).open("xb") as stream:
         stream.write(encoded(value))
-
-
-def _anchors(path: str) -> tuple[TrustAnchor, ...]:
-    data = _read(path)
-    require(isinstance(data, list) and len(data) <= 100, "invalid_trust_store")
-    return tuple(
-        TrustAnchor(
-            a["issuer_id"],
-            a["key_id"],
-            unb64(a["public_key"]),
-            frozenset(a["purposes"]),
-            frozenset(a["origins"]),
-            a["revoked"],
-        )
-        for a in data
-    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -121,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
             receipt, plan, case, execution = (
                 _read(p) for p in (args.approval, args.plan, args.case, args.execution)
             )
-            require(Path(args.plan).read_bytes() == encoded(plan), "plan_bytes_changed")
+            require(_read_bytes(args.plan) == encoded(plan), "plan_bytes_changed")
             anchors = _anchors(args.trust)
             if args.command == "issue":
                 from vardrrunner.journal import Journal

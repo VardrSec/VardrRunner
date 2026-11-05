@@ -24,6 +24,7 @@ from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
 from vardrrunner.commands import test_cases as test_cases_cmd
 from vardrrunner.commands import updates as updates_cmd
+from vardrrunner.commands import workspace as workspace_cmd
 
 # Characters the CLI's output uses that legacy code pages (Windows cp1252 when
 # output is piped or redirected) cannot encode.
@@ -288,6 +289,57 @@ def credentials_revoke(
     )
 
 
+workspace_app = typer.Typer(
+    help="Local workspace metadata and explicitly approved native standalone Gate execution.",
+    no_args_is_help=True,
+)
+app.add_typer(workspace_app, name="workspace")
+
+
+@workspace_app.command("create")
+def workspace_create(name: str = typer.Argument(..., help="Short workspace label, no credentials")):
+    """Create an inert local workspace and print its metadata as JSON."""
+    workspace_cmd.create(name)
+
+
+@workspace_app.command("show")
+def workspace_show(workspace_id: str = typer.Argument(..., help="Full local workspace ID")):
+    """Show workspace metadata as JSON without contacting Map."""
+    workspace_cmd.show(workspace_id)
+
+
+@workspace_app.command("gate")
+def workspace_gate(
+    workspace_id: str = typer.Argument(..., help="Local workspace bound by the signed approval"),
+    approval: Path = typer.Option(..., "--approval", help="Existing signed human approval"),
+    contract: Path = typer.Option(..., "--contract", help="Existing single-use execution contract"),
+    plan: Path = typer.Option(..., "--plan", help="Exact reviewed fixed-Gate plan"),
+    case: Path = typer.Option(..., "--case", help="Unresolved reviewed Gate case"),
+    execution: Path = typer.Option(..., "--execution", help="Reviewed Gate execution options"),
+    trust: Path = typer.Option(..., "--trust", help="Operator-selected public standalone trust"),
+    output: Path = typer.Option(..., "--output", help="New exclusive evidence directory"),
+):
+    """Native Windows standalone Gate; existing signed permission and expiring grants required."""
+    from vardrrunner.commands import workspace_gate as gate_cmd
+
+    gate_cmd.run(
+        workspace_id,
+        approval=approval,
+        contract=contract,
+        plan=plan,
+        case=case,
+        execution=execution,
+        trust=trust,
+        output=output,
+    )
+
+
+@workspace_app.command("list")
+def workspace_list(limit: int = typer.Option(100, "--limit", min=1, max=1000)):
+    """List saved local workspace metadata as JSON without contacting Map."""
+    workspace_cmd.list_workspaces(limit=limit)
+
+
 audit_app = typer.Typer(
     help="Inspect and export the sanitized local execution journal.", no_args_is_help=True
 )
@@ -299,9 +351,12 @@ def audit_list(
     since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
     limit: int = typer.Option(100, "--limit", min=1, max=10_000),
     as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+    engagement_id: str | None = typer.Option(
+        None, "--engagement", "-e", help="Exact local engagement or workspace ID"
+    ),
 ):
     """List recent journaled job runs."""
-    audit.list_runs(since=since, limit=limit, as_json=as_json)
+    audit.list_runs(since=since, limit=limit, as_json=as_json, engagement_id=engagement_id)
 
 
 @audit_app.command("show")
@@ -315,9 +370,21 @@ def audit_export(
     output: Path = typer.Option(..., "--output", "-o", help="Destination JSON file"),
     since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
     limit: int = typer.Option(10_000, "--limit", min=1, max=10_000),
+    engagement_id: str | None = typer.Option(
+        None, "--engagement", "-e", help="Exact local engagement or workspace ID"
+    ),
 ):
     """Atomically export sanitized journal records."""
-    audit.export_runs(output=output, since=since, limit=limit)
+    audit.export_runs(output=output, since=since, limit=limit, engagement_id=engagement_id)
+
+
+@audit_app.command("export-run")
+def audit_export_run(
+    run_id: str = typer.Argument(..., help="One terminal journal run ID"),
+    output: Path = typer.Option(..., "--output", "-o", help="New portable evidence directory"),
+):
+    """Export one run's redacted JSON evidence copy on supported POSIX systems."""
+    audit.export_run(run_id=run_id, output=output)
 
 
 @app.command()

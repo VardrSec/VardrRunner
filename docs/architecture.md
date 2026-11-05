@@ -1,5 +1,66 @@
 # VardrRunner — Architecture
 
+This local integration combines standalone/recon/cleanup candidate `184da89`
+with existing journal/export candidate `3dd3b4f`, preserving their shared ancestry.
+Workspace inventory commit `c1bfc18` is excluded. Recon remains validation-only,
+rejected before reservation callbacks or execution; managed Docker stays disabled.
+Journal pathname replacement and SQLite snapshot non-mutation remain open safety
+gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+Earlier test evidence belongs to its original source heads. No complete NM-3
+cohort, installer/no-loss acceptance or equivalence to missing `d0d01d2` is claimed.
+
+The additive `workspace gate` consumer reuses the existing standalone contract,
+ledger, fixed-Gate runtime, native Windows control, journal and audit/export. It
+does not issue approval, bootstrap trust or use Map. Unsupported execution platforms
+refuse before consumption; unfinished local records never enter Map recovery.
+See [ADR 0039](adr/0039-standalone-workspace-gate.md). Existing legacy commands,
+queue and MCP remain independent of this explicit consumer.
+
+
+The DNSx adapter explicitly disables the pinned tool's automatic version check.
+This removes that auxiliary version request; it is not DNS destination, proxy,
+redirect, scope or aggregate-budget enforcement for a standalone recon profile.
+
+The reconciled export read also uses the existing observed-file guard before its
+SQLite connection; read-only mode, fresh reads and live WAL visibility remain.
+
+Workspace metadata listing reuses `local_workspaces` and the same row validation
+as known-ID lookup. A bounded SQLite read-only query checks current journal/table
+schemas and orders before limiting; it constructs no Journal and performs no
+initialization/migration. No active selection, new state, authority or execution
+path is introduced. Existing application startup maintenance remains unchanged.
+
+Every SQLite connection in this source cohort inspects the journal leaf first.
+Observed nonregular objects and non-symlink Windows reparse targets refuse;
+ordinary symlinks to regular files retain compatibility, including live WAL reads.
+Missing journals retain their existing creation/read-only semantics. Inspection
+does not pin a descriptor for SQLite: concurrent leaf/ancestor replacement and
+blocked filesystem metadata I/O remain outside this availability correction.
+This is not an authenticated path boundary or a general bounded-open guarantee.
+
+The partial NM-3 single-run evidence exporter reuses journal/schema-1 audit and
+manifest formats. It reads a current-schema journal in SQLite read-only mode,
+binds source JSON to the recorded digest/size and regular-file descriptor, then
+serializes a centrally redacted derivative. Original provenance stays in audit;
+the portable manifest describes the derivative and links the original hash.
+Fixed filenames are created exclusively through a pinned private POSIX directory
+descriptor. Fresh journal rechecks detect changed records without pinning one
+stale database snapshot. No database, grants, config or executable authority is
+copied. Windows now has an isolated handle-adapter candidate using verified private
+ACLs and no-redirect creation. Native security acceptance remains open. See
+[ADR 0040](adr/0040-portable-run-export.md).
+
+Path conversion can normalize input spellings before validation. The security
+boundary binds the resulting path through actual no-redirect handle operations;
+it does not promise raw CLI-token rejection for every spelling alias.
+
+Audit history and schema-1 metadata export optionally select an exact engagement
+or local workspace ID through the existing journal query. Bound SQL parameters
+apply that filter together with the time bound before ordering and limiting.
+Only `None` means unscoped; explicit blank/whitespace values remain literal
+historical IDs. No workspace lookup, Map transport, authorization, schema change
+or artifact-copy system is involved. Existing callers remain unscoped by default.
+
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot
 forget expiry, and permission transactions recheck time after writer-lock waits
@@ -129,6 +190,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
+| `vardrrunner/workspaces.py`, `commands/workspace.py` | Explicit `workspace create|show` metadata in an additive table of the existing SQLite journal. No Map client, credential provider, approval, active-context selection or execution path. Existing run identities and journal schema version remain unchanged. This is the first metadata-only NM-3 slice, not complete Mapless operation. |
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
 | `vardrrunner/commands/updates.py` | `update` — install the newest release in the foreground with pipx (`updates.upgrade_argv`/`run_upgrade`), confirm it from an isolated interpreter, or name the installer's command for uv/virtualenv installs; `update check` — report only. Both always ask the registry. Nothing installs unless the operator runs `update`. |
 | `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, tool installation, and doctor into one idempotent guided/provisioning workflow. |
@@ -229,7 +291,10 @@ the runner's only credential; it is never logged or printed.
 
 Resolved VardrGate identity secrets briefly exist in a private runner-owned temporary
 directory because the external CLI accepts a job file. On POSIX the directory is mode
-`0700` and the exclusively created file is `0600`; normal execution removes the directory.
+`0700` and the exclusively created file is `0600`. Cleanup covers executable resolution,
+preflight inspection, and execution failures as well as success. A setup or execution
+exception remains the primary error if cleanup also fails; that cleanup failure logs a
+fixed message without credential values. Cleanup failure after success fails the run.
 Every CLI startup also removes abandoned, correctly named directories whose owner PID is
 no longer alive, while refusing to traverse symlinks, junctions, or active directories.
 
@@ -405,3 +470,35 @@ Managed transport also preserves a trusted configured API base prefix such as
 Full's `/backend`; it does not strip or rewrite the signed origin/association
 identity. Only simple path segments are accepted. Prefix compatibility supplies
 no new route activation or execution right.
+
+### Dormant finite recon projection (NM-3)
+
+`authorization.recon_plan` is a pure, opt-in contract projection, with no CLI,
+MCP, default capability or recon executor. The initial slice accepts canonical
+finite ASCII hostnames, explicit HTTPS/443 GET-root tuples, IPv4 destination
+CIDRs and numeric IPv4 resolver endpoints. A-only DNSx and the exact reviewed
+Linux release binary hashes are required; Windows and A+AAAA remain unsupported.
+Existing Gate behavior and default capabilities are preserved.
+
+The signed full-plan digest binds both tools, all original candidates, resolvers,
+destination networks, fixed options/environment, a shared deadline and evidence
+byte ceiling. The existing human approval and ledger allocate one whole journey
+ordinal before any future execution. No stage refund, smaller post-DNS reservation
+or additional budget store is introduced. The conditional Linux source model
+reserves `4M` HTTP application requests and `2N + 50M` DNS application questions for
+N original DNS inputs and M original URL inputs. DNS authority is explicit in the
+human-reviewed plan digest; this is neither an independent DNS quota nor a global
+cross-plan token pool. These numbers do not bound packets, connections or bytes.
+Evidence byte limits are declarations for future enforcement, not disk quotas.
+
+Pure DNS handoff can select only original URL tuples; ambiguous, empty or mixed
+out-of-CIDR address sets fail closed. It cannot establish destination enforcement
+at connect time. No tool runs through this module. Even trusted explicit profile
+validation cannot pass the Gate runtime's first-line profile guard. No common
+platform currently has both the Linux tool proof and accepted native cancellation.
+The Docker managed worker remains disabled/unsupported, with its watchdog-hang
+security gate open. No execution adoption or full portability is claimed.
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.

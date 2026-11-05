@@ -14,7 +14,7 @@ import sqlite3
 import stat
 import uuid
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -29,6 +29,25 @@ SCHEMA_VERSION = 1
 
 class JournalError(RuntimeError):
     """The journal is unavailable, corrupt, or received an invalid transition."""
+
+
+def journal_path_present(path: Path) -> bool:
+    """Observe an ordinary journal target, not a race-safe open or I/O deadline."""
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        raise JournalError("Cannot inspect journal path") from None
+    try:
+        # Preserve leaf symlinks to ordinary files; dangling/special targets refuse.
+        if stat.S_ISLNK(info.st_mode):
+            info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            raise JournalError("Unsupported nonregular or reparse journal target")
+    except OSError:
+        raise JournalError("Cannot inspect journal target") from None
+    return True
 
 
 class Phase(str, Enum):
@@ -128,7 +147,23 @@ class Journal:
         except (OSError, sqlite3.Error) as exc:
             raise JournalError(f"cannot open execution journal: {exc}") from exc
 
+    @classmethod
+    def read_existing(cls, path: Path, run_id: str) -> RunRecord | None:
+        """Inspect one current-schema record without creating or migrating storage."""
+        journal_path_present(Path(path))
+        try:
+            uri = Path(path).absolute().as_uri() + "?mode=ro"
+            with closing(sqlite3.connect(uri, uri=True, timeout=5.0)) as con:
+                con.row_factory = sqlite3.Row
+                if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+                    raise JournalError("unsupported read-only journal schema")
+                row = con.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            return cls._record(row) if row else None
+        except (OSError, sqlite3.Error):
+            raise JournalError("cannot inspect existing execution journal") from None
+
     def _connect(self) -> sqlite3.Connection:
+        journal_path_present(self.path)
         con = sqlite3.connect(self.path, timeout=5.0)
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA foreign_keys = ON")
@@ -433,12 +468,20 @@ class Journal:
             ).fetchall()
         return [self._record(row) for row in rows]
 
-    def list(self, *, since: str | None = None, limit: int = 100) -> list[RunRecord]:
+    def list(
+        self, *, since: str | None = None, limit: int = 100, engagement_id: str | None = None
+    ) -> list[RunRecord]:
         query = "SELECT * FROM runs"
         params: list[Any] = []
+        conditions = []
         if since:
-            query += " WHERE started_at >= ?"
+            conditions.append("started_at >= ?")
             params.append(since)
+        if engagement_id is not None:
+            conditions.append("engagement_id = ?")
+            params.append(engagement_id)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY started_at DESC LIMIT ?"
         params.append(max(1, min(limit, 10_000)))
         with self._connection() as con:

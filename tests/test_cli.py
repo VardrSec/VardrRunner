@@ -19,6 +19,32 @@ from vardrrunner.commands import run as run_cmd
 runner = CliRunner()
 
 
+def test_workspace_gate_routes_only_existing_operator_inputs():
+    with patch("vardrrunner.commands.workspace_gate.run") as run:
+        args = ["workspace", "gate", "a" * 32]
+        for name in ("approval", "contract", "plan", "case", "execution", "trust", "output"):
+            args += ["--" + name, name + ".json"]
+        result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    run.assert_called_once_with(
+        "a" * 32,
+        **{
+            name: Path(name + ".json")
+            for name in ("approval", "contract", "plan", "case", "execution", "trust", "output")
+        },
+    )
+
+
+def test_workspace_list_limit_is_forwarded():
+    with (
+        patch("vardrrunner.commands.workspace.list_workspaces") as listing,
+        patch("vardrrunner.cli.process_runner.cleanup_sensitive_temp_dirs"),
+    ):
+        result = runner.invoke(app, ["workspace", "list", "--limit", "7"])
+    assert result.exit_code == 0, result.output
+    listing.assert_called_once_with(limit=7)
+
+
 def test_jobs_run_expiring_grants_routes_opt_in():
     with patch("vardrrunner.commands.jobs.run_jobs") as run:
         result = runner.invoke(app, ["jobs", "run", "--yes", "--expiring-grants"])
@@ -326,10 +352,27 @@ class TestUpdateCommands:
 
 
 class TestAuditCommands:
+    @pytest.mark.parametrize("flag", ["--output", "-o"])
+    def test_export_one_run_delegates(self, tmp_path, flag):
+        output = tmp_path / "portable"
+        with patch("vardrrunner.commands.audit.export_run") as mock:
+            result = invoke("audit", "export-run", "run-1", flag, str(output))
+        assert result.exit_code == 0
+        mock.assert_called_once_with(run_id="run-1", output=output)
+
+    @pytest.mark.parametrize("suffix", ["/./portable", "//portable"])
+    def test_export_one_run_normalizes_output_spelling(self, tmp_path, suffix):
+        # Real Typer Path conversion, including on native Windows. Raw-string
+        # adapter tests do not establish rejection by the CLI.
+        with patch("vardrrunner.commands.audit.export_run") as mock:
+            result = invoke("audit", "export-run", "run-1", "--output", str(tmp_path) + suffix)
+        assert result.exit_code == 0
+        mock.assert_called_once_with(run_id="run-1", output=tmp_path / "portable")
+
     def test_list_delegates(self):
         with patch("vardrrunner.commands.audit.list_runs") as mock:
             invoke("audit", "list", "--limit", "12", "--json")
-        mock.assert_called_once_with(since=None, limit=12, as_json=True)
+        mock.assert_called_once_with(since=None, limit=12, as_json=True, engagement_id=None)
 
     def test_show_delegates(self):
         with patch("vardrrunner.commands.audit.show_run") as mock:
@@ -340,7 +383,26 @@ class TestAuditCommands:
         output = tmp_path / "audit.json"
         with patch("vardrrunner.commands.audit.export_runs") as mock:
             invoke("audit", "export", "--output", str(output), "--limit", "50")
-        mock.assert_called_once_with(output=output, since=None, limit=50)
+        mock.assert_called_once_with(output=output, since=None, limit=50, engagement_id=None)
+
+    @pytest.mark.parametrize("flag", ["--engagement", "-e"])
+    def test_list_scopes_local_history(self, flag):
+        with patch("vardrrunner.commands.audit.list_runs") as mock:
+            result = invoke("audit", "list", flag, "workspace-1", "--json")
+        assert result.exit_code == 0
+        mock.assert_called_once_with(
+            since=None, limit=100, as_json=True, engagement_id="workspace-1"
+        )
+
+    @pytest.mark.parametrize("flag", ["--engagement", "-e"])
+    def test_export_scopes_local_history(self, tmp_path, flag):
+        output = tmp_path / "scoped.json"
+        with patch("vardrrunner.commands.audit.export_runs") as mock:
+            result = invoke("audit", "export", "--output", str(output), flag, "workspace-1")
+        assert result.exit_code == 0
+        mock.assert_called_once_with(
+            output=output, since=None, limit=10_000, engagement_id="workspace-1"
+        )
 
 
 # ---------------------------------------------------------------------------

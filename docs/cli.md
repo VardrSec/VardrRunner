@@ -1,5 +1,21 @@
 # VardrRunner — CLI Reference
 
+This local integration combines standalone/recon/cleanup candidate `184da89`
+with existing journal/export candidate `3dd3b4f`, preserving their shared ancestry.
+Workspace inventory commit `c1bfc18` is excluded. Recon remains validation-only,
+rejected before reservation callbacks or execution; managed Docker stays disabled.
+Journal pathname replacement and SQLite snapshot non-mutation remain open safety
+gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+Earlier test evidence belongs to its original source heads. No complete NM-3
+cohort, installer/no-loss acceptance or equivalence to missing `d0d01d2` is claimed.
+
+DNSx invocations suppress automatic version checks. Existing connected commands
+retain their meaning; this correction does not enable standalone recon or grant
+authority for DNS/HTTP targets or auxiliary services.
+
+The reconciled `audit export-run` journal read refuses observed special files
+before SQLite opens. This remains an observation, not a race-safe open guarantee.
+
 Opt-in NM-2 source builds add `vardrrunner jobs run --controlled [--yes]` with
 matching Map execution-control endpoints, and `vardrrunner jobs stop RUN_ID` to
 request local emergency stop of that journal run. A stop request is not confirmed
@@ -522,15 +538,77 @@ you have reviewed them. Nothing is queued: run a saved case from the job compose
 
 ---
 
+## `workspace` — local workspace metadata
+
+```bash
+vardrrunner workspace create "Local assessment"
+vardrrunner workspace show <workspace-id>
+vardrrunner workspace list [--limit 100]
+```
+
+These commands create and inspect inert metadata without a Map account, API key
+or `--local` flag. Each create returns a new full workspace ID, label, creation
+time and metadata schema version as JSON. Repeated labels do not overwrite an
+existing workspace. Labels must be short printable text without credentials.
+
+`list` discovers saved IDs and labels from the existing local workspace table as
+a JSON array. It defaults to 100 records (1–1000), ordered by stored creation time
+descending and ID ascending for ties. It opens an existing journal read-only;
+an absent journal/table returns an empty array without initialization. Unknown
+schemas or invalid selected rows refuse without migration or partial output.
+Listing does not choose an active workspace, grant permission or contact Map.
+Observed special journal objects (including FIFOs and directories) refuse before
+SQLite opens them; dangling leaf links also refuse. Ordinary leaf links to regular
+journals retain their existing behavior. Inspection is a pathname precheck, not
+protection against concurrent path replacement or a filesystem I/O deadline.
+
+These create/show/list commands record metadata only. They do not configure scope,
+approve a contract, select an active engagement, run a tool or enable a worker.
+Existing connected commands retain their meaning and still require Map as
+documented. Workspace state shares the existing local journal; `audit` continues
+to inspect/export run evidence. Full Mapless execution and portable workspace
+export are not delivered by this metadata increment.
+
+### Explicit native standalone Gate
+
+```bash
+vardrrunner workspace gate <workspace-id> --approval approval.json --contract contract.json \
+  --plan plan.json --case case.json --execution execution.json --trust public-trust.json \
+  --output NEW_PRIVATE_DIRECTORY
+```
+
+This separate consumer requires native Windows, the authorization runtime extra,
+existing operator-selected public standalone trust, a signed human approval and
+single-use contract bound to this workspace and the actual Runner identity. Use
+the existing explicit file-based authorization workflow; this command creates no
+keys, approvals or authority state. Missing/stale local authority fails closed.
+Existing expiring reference grants with issuer `standalone` must cover every
+referenced origin. No private approval key is accepted by this command.
+
+The command requires terminal confirmation of the existing permission, records
+the local run ID, and executes only the fixed HTTP Gate profile. It contacts no
+Map service and needs no Map account/API token. Use `jobs stop <run-id>` for local
+emergency stop; the owning native invocation confirms termination. Inspect and
+export through existing `audit` commands. Output directories must be new; partial
+files, uncertain PIDs and spent consumption remain for explicit reconciliation,
+never automatic replay. Hashes establish recorded integrity, not host attestation.
+
+Linux/Docker execution is refused; no uncontrolled fallback or worker is enabled.
+Other tools, general recon pipelines, issuer enrollment and Full/Mapless installers
+are not delivered by this increment. See [ADR 0039](adr/0039-standalone-workspace-gate.md)
+for reference-trust and verification limits. Existing connected commands are unchanged.
+
+---
+
 ## `audit` — local execution evidence
 
 Queue-driven jobs are recorded in `~/.vardrmap/runner-journal.sqlite3`. Audit commands are
 local and never contact the backend:
 
 ```bash
-vardrrunner audit list [--since <iso-timestamp>] [--limit 100] [--json]
+vardrrunner audit list [--engagement <id>] [--since <iso-timestamp>] [--limit 100] [--json]
 vardrrunner audit show <run-id>
-vardrrunner audit export --output audit.json [--since <iso-timestamp>] [--limit 10000]
+vardrrunner audit export --output audit.json [--engagement <id>] [--since <iso-timestamp>] [--limit 10000]
 ```
 
 `list` shows recent lifecycle outcomes, `show` prints one full sanitized record, and
@@ -539,8 +617,67 @@ retention. Records include target counts, sanitized tool settings, lifecycle tim
 failure categories, policy warnings, and artifact SHA-256/size. They exclude raw targets,
 credentials, request bodies, and headers.
 
+`--engagement <id>` (or `-e`) selects an exact local engagement or workspace ID.
+It requires no Map connection, account or token. The filter combines with `--since`
+before sorting and `--limit`; omitting it preserves the existing all-engagement
+view. IDs are literal and case-sensitive, with no wildcard or whitespace
+normalization. A missing match produces an empty history/export. This scopes the
+existing sanitized metadata export; it does not copy artifact bytes, contracts,
+credential state or a complete workspace backup, and grants no execution authority.
+
 Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
 journal remains the recovery source of truth; manifests are portable run evidence.
+
+### `audit export-run` — redacted evidence copy (partial portability candidate)
+
+```bash
+vardrrunner audit export-run <run-id> --output NEW_EXPORT_DIRECTORY
+```
+
+Select one terminal journal run with no unresolved PID and a recorded artifact
+hash/size. This explicit local command needs no Map connection or credentials.
+Its artifact must be a regular, singly linked direct child of the recorded run
+directory, named with a `.json` suffix and containing one unambiguous JSON object.
+The source and redacted copy each fit the smaller of 8 MiB and the local artifact
+limit; JSON nesting is limited to 12. Binary/JSONL, missing, changed, ambiguous or
+unbound artifacts are refused. Use existing metadata export for other records.
+
+The new directory contains exactly three files:
+
+- `audit.json`: existing schema-1 sanitized source history, including the original
+  artifact hash and historical paths.
+- `artifact.json`: a separately serialized copy passed through central redaction.
+  Original tool output stays untouched; decisions are not reclassified.
+- `manifest.json`: existing schema 1 with relative paths, the exact copy's hash/size
+  and a `redacted_export` warning linking its source hash. Source status is retained,
+  including failed/partial outcomes; export does not complete or validate a run.
+
+The output directory must be new and outside the source run. Supported POSIX
+filesystems must provide directory-FD/no-follow operations and private modes.
+Ancestor directories must be owned by root/current user, without group/other
+write except trusted sticky directories. Writes use the opened new directory,
+never replace files, and reserve the unchanged free-disk floor plus actual output
+bytes. Failure retains partial files; do not infer a successful export from a
+partial directory or a recorded source status alone.
+
+**Windows 11 24H2+ candidate:** local fixed NTFS only, with the documented
+CreateDirectory2W/CreateFile3 APIs. Every ancestor must have an exact trusted owner
+(current user, SYSTEM or Administrators). Reparse paths, unsupported namespaces,
+sharing conflicts and unsupported owners refuse without fallback. New output ACLs
+are protected and verified, and handles remain pinned through manifest publication.
+Native ACL/race acceptance is still open; this does not claim full NM-3 portability.
+Existing Windows execution and metadata commands retain their behavior.
+
+The CLI converts output to a Python `Path` and resolves it for export. Dot and
+repeated-separator spellings can normalize before adapter validation; this is
+accepted normalization, not rejection of every raw argument alias. Security
+checks apply to the resulting absolute path and actual no-redirect handle opens.
+Direct adapter raw-string rejection tests do not prove CLI-token rejection.
+
+The copied JSON formats are readable elsewhere, but no import, authority
+restoration, archive encryption or independent provenance attestation is provided.
+Central redaction is not a proof that all sensitive content was found; review the
+copy before sharing it. Escaped lone Unicode surrogates may remain in JSON.
 
 ---
 
@@ -1121,3 +1258,14 @@ retain their behavior. See the [canonical exit status](nm2-canonical-exit-status
 
 The library-only managed transport honors the configured API base prefix used by
 the existing Full distribution. This adds no CLI command, worker or enrollment.
+
+### Dormant finite recon projection (NM-3)
+
+No recon command or default capability is added. Existing authorization CLI
+planning and Gate execution remain Gate-only. The offline projection is described
+in [architecture](architecture.md#dormant-finite-recon-projection-nm-3);
+validation of a signed projection does not authorize an executable recon path.
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.

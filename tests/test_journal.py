@@ -126,6 +126,32 @@ def test_query_limits_since_and_invalid_inputs(tmp_path):
         store.finish(second.run_id, Phase.EXECUTING, status="active")
 
 
+def test_engagement_filter_is_exact_parameterized_and_precedes_limit(tmp_path):
+    store = Journal(tmp_path / "journal.sqlite3")
+    records = []
+    engagements = ["workspace-a", "other", "workspace-a", "", " work ", "x' OR 1=1 --", "%"]
+    for index, engagement in enumerate(engagements):
+        with patch("vardrrunner.journal.utc_now", return_value=f"2026-01-01T00:00:0{index}+00:00"):
+            records.append(
+                store.begin(
+                    job_id=f"synthetic-{index}",
+                    backend_url="",
+                    engagement_id=engagement,
+                    job_type="httpx",
+                    tool="httpx",
+                    target_source="explicit",
+                )
+            )
+    assert store.list(engagement_id="workspace-a", limit=1) == [records[2]]
+    assert store.list(engagement_id="workspace-a", since=records[2].started_at) == [records[2]]
+    assert store.list(engagement_id="workspace-a", since=records[3].started_at) == []
+    assert len(store.list()) == len(records)
+    for index in range(3, len(records)):
+        assert store.list(engagement_id=engagements[index]) == [records[index]]
+    for missing in ("workspace", "WORKSPACE-A", "workspace-%", "missing"):
+        assert store.list(engagement_id=missing) == []
+
+
 def test_invalid_json_in_record_is_rejected(tmp_path):
     path = tmp_path / "journal.sqlite3"
     store = Journal(path)
