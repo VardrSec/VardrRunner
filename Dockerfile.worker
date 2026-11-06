@@ -2,8 +2,12 @@
 ARG RUNNER_BASE_IMAGE
 FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS owner-build
 COPY container/worker_owner.c /src/worker_owner.c
+COPY container/tests/worker_owner_eof_test.c /src/tests/worker_owner_eof_test.c
 RUN gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
-    -D_FORTIFY_SOURCE=2 -o /vardr-worker-owner /src/worker_owner.c
+    -D_FORTIFY_SOURCE=2 -o /vardr-worker-owner /src/worker_owner.c \
+    && gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
+    -D_FORTIFY_SOURCE=2 -o /worker-owner-eof-test /src/tests/worker_owner_eof_test.c \
+    && timeout 5s /worker-owner-eof-test
 
 FROM ${RUNNER_BASE_IMAGE}
 USER 0:0

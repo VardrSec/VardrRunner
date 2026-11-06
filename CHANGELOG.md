@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Handle clean worker-channel EOF after DONE while waiting for the exact Runner
+  child to become waitable. Preserve packet validation, active-attempt refusal and
+  all deadlines; only the tracked child's normal exit zero establishes success.
+  Add bounded benign socket/close regressions to the existing compiler stage.
+
 - Link worker runtime/enrollment fingerprints in the original claim-send journal
   transaction. Recognize exact authenticated v2 unbound-retirement receipts for
   untouched local intents, and failed completion of the original retained result.

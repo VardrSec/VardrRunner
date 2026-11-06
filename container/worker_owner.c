@@ -173,20 +173,23 @@ static void close_inherited(void) {
     if (errno || closedir(directory)) fail();
     for (size_t i = 0; i < count; i++) if (close(fds[i])) fail();
 }
-static struct packet receive(int fd, pid_t pid, uid_t uid) {
-    struct packet p;
+static int receive(int fd, pid_t pid, uid_t uid, int eof_allowed, struct packet *p) {
     char ancillary[CMSG_SPACE(sizeof(struct ucred))];
-    struct iovec iov = { &p, sizeof(p) };
+    struct iovec iov = { p, sizeof(*p) };
     struct msghdr msg = { .msg_iov = &iov, .msg_iovlen = 1,
         .msg_control = ancillary, .msg_controllen = sizeof(ancillary) };
     ssize_t n = recvmsg(fd, &msg, MSG_DONTWAIT | MSG_CMSG_CLOEXEC);
-    if (n != (ssize_t)sizeof(p) || msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC) || p.magic != MAGIC) fail();
+    if (n == 0 && msg.msg_flags == 0 && msg.msg_controllen == 0) {
+        if (!eof_allowed) fail();
+        return 0;
+    }
+    if (n != (ssize_t)sizeof(*p) || msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC) || p->magic != MAGIC) fail();
     struct cmsghdr *c = CMSG_FIRSTHDR(&msg);
     if (!c || c->cmsg_level != SOL_SOCKET || c->cmsg_type != SCM_CREDENTIALS ||
         c->cmsg_len != CMSG_LEN(sizeof(struct ucred)) || CMSG_NXTHDR(&msg, c)) fail();
     struct ucred cred; memcpy(&cred, CMSG_DATA(c), sizeof(cred));
     if (cred.pid != pid || cred.uid != uid || cred.gid != uid) fail();
-    return p;
+    return 1;
 }
 static void publish(const unsigned char nonce[32]) {
     int dir = open("/run/vardr-worker-ready", O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
@@ -286,15 +289,15 @@ int main(int argc, char **argv) {
         int n = poll(&poller, 1, 20);
         if (n < 0) { if (errno == EINTR) continue; fail(); }
         if (!n) continue;
-        if (!(poller.revents & POLLIN)) {
-            /* EOF may precede waitable child status by one scheduler turn. */
-            if ((poller.revents & POLLHUP) && (!armed || done)) {
-                struct timespec pause = { .tv_nsec = 20000000 };
-                nanosleep(&pause, NULL); continue;
-            }
-            fail();
+        if (!(poller.revents & (POLLIN | POLLHUP))) fail();
+        struct packet p;
+        int terminal_eof = (poller.revents & POLLHUP) && (!armed || done);
+        if (!receive(pair[0], child, RUNNER, terminal_eof, &p)) {
+            /* POLLIN may accompany EOF before the exact child is waitable.
+             * Only waitpid above can establish success; deadlines stay armed. */
+            struct timespec pause = { .tv_nsec = 20000000 };
+            nanosleep(&pause, NULL); continue;
         }
-        struct packet p = receive(pair[0], child, RUNNER);
         if (now_ns() >= lease || now_ns() >= hard) fail();
         if (!booted) {
             unsigned char zero[32] = {0};

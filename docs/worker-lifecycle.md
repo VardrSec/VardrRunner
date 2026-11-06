@@ -97,6 +97,14 @@ Control.grace and remaining owner lease/hard ceiling. Failure stays unconfirmed;
 closing the channel or expiration makes PID1 exit and the private namespace is
 terminated. A stop marker or an elapsed deadline is never a terminal receipt.
 
+After DONE, clean channel EOF may arrive with both POLLIN and POLLHUP before the
+tracked Runner child becomes waitable. The owner still validates queued packets,
+then waits under the unchanged deadlines for that exact child to exit normally
+with zero. EOF alone cannot establish success; an active-attempt EOF still refuses.
+The compiler stage exercises ordinary own-socket close and queued-packet cases
+under a five-second limit. These checks are separate from platform containment
+acceptance.
+
 The candidate requires little-endian Linux, Python 3.10+ and kernel support for
 the checked primitives. Host/VM suspend behavior, deadline responsiveness under
 resource pressure, hostile process-control boundaries and full failure-path
