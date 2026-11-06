@@ -14,11 +14,12 @@ The first one-attempt Desktop slice passed separately; actual v2 Linux/Docker an
 Windows Docker Desktop acceptance remains open.
 
 The owner's clarified normal behavior is persistent availability until explicit
-operator stop. An **inactive v3 candidate** now implements that behavior beside
+operator stop. A **default-off v3 candidate** now implements that behavior beside
 the finite modes. It uses a separate `Dockerfile.worker.persistent` image and
 `vardr.worker-admission/3`, with `mode:"persistent"`. Default startup remains off.
-Its proposed STOP-only reporting lifetime requires a concrete owner disposition
-before live admission; implementation and component tests do not activate it.
+The owner approved its STOP-only reporting lifetime until revocation or physical
+retirement for isolated testing on 2026-11-06. The trusted-host false-exit risk and
+independent acceptance gates remain; see [ADR0043](adr/0043-proposed-linux-worker-lifecycle-owner.md).
 
 ## Entry and authority
 

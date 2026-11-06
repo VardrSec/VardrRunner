@@ -18,6 +18,17 @@ References below to the proposed or unapproved candidate describe the review
 proposal preceding this decision; this authorization record controls its current
 development status.
 
+On 2026-11-06, after reviewing the persistent-v3 departure from the finite
+reporting lifetime below, the owner explicitly selected: "Approve persistent
+STOP reporting for isolated testing." For that protocol only, its purpose-limited
+secret remains valid until explicit revocation or physical retirement of the
+exact incarnation. It cannot claim jobs, consume authorization, renew execution,
+publish success or refund allowances. The owner was explicitly informed that a
+compromised host or secret holder could forge exit and release concurrency early.
+This approves isolated implementation/testing, not deployment or release, and
+waives no independent review, containment or platform acceptance. Finite v1/v2
+reporting lifetimes retain their existing meaning; ordinary startup stays inert.
+
 This document records the reviewed NM-2 container-containment candidate.
 The owner-approved exception is worker-only; ADR 0019's manual baseline, NM-3 branches,
 evidence, default startup and manual/legacy behavior remain preserved.

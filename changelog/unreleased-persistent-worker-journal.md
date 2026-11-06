@@ -8,5 +8,6 @@ later-job physical retirement never substitutes another job's completion.
 Recovery retains unknown sends, original acknowledgments, artifacts and spent
 allowances. It creates no execution handle and retries no mutation. Finite v1/v2
 storage and wire formats remain supported. Matching unreleased Map v3 endpoints
-are required. The reporting-lifetime decision, complete 95% suite and independent
-Linux/Desktop platform/security acceptance remain open.
+are required. The owner approved persistent STOP reporting for isolated testing;
+the complete 95% suite and independent Linux/Desktop platform/security acceptance
+remain open.
