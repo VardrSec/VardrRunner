@@ -54,6 +54,8 @@ def prepare_unknown(p, *, fault="claim"):
         p.configure().run()
     with p.t.f.journal._connection() as con:
         row = con.execute("SELECT * FROM managed_persistent_attempts").fetchone()
+        if row is None:
+            row = con.execute("SELECT * FROM managed_persistent_selections").fetchone()
         link = claim_association(con, row["run_id"])
     return dict(row), link
 

@@ -52,16 +52,25 @@ def test_exact_original_observation_retires_only_local_metadata_and_preserves_ac
             key: value for key, value in current.items() if key != "state"
         }
         assert claim_association(con, row["run_id"]) == link
-        after = dict(con.execute("SELECT * FROM managed_persistent_attempts").fetchone())
+        issued = con.execute("SELECT * FROM managed_persistent_attempts").fetchone()
+        after = (
+            dict(issued)
+            if issued is not None
+            else dict(con.execute("SELECT * FROM managed_persistent_selections").fetchone())
+        )
         retained = set(row) - {"state", "retired_from_state", "retirement"}
         assert {key: row[key] for key in retained} == {key: after[key] for key in retained}
         assert (
             after["state"] == "physical_retirement_observed"
             and after["retired_from_state"] == row["state"]
         )
-        assert after["release_ack"] is None
+        assert issued is None or after["release_ack"] is None
         parent = con.execute("SELECT * FROM managed_persistent_incarnations").fetchone()
         assert parent["state"] == "retired" and parent["active_sequence"] is None
+        if row["state"] == "selected":
+            assert (
+                issued is None and parent["last_sequence"] == 0 and parent["history_head"] is None
+            )
     assert reconcile_managed(journal, row["run_id"], link["runner_id"], lambda _: reply) == status
 
 

@@ -43,30 +43,36 @@ ATTEMPT_STATES = {
     "released",
     "physical_retirement_observed",
 }
-_PENDING = {
-    "runs": "phase NOT IN ('done','failed','interrupted','stop_work','skipped')",
-    "managed_claim_intents": "state NOT IN ('persistent_released','preclaim_retired','runtime_unbound_retired','host_exit_observed','failed_completion_observed','consume_acknowledged')",
-    "managed_result_intents": "state NOT IN ('terminal','server_retired','host_retired')",
-    "managed_stop_intents": "state NOT IN ('terminal','server_retired','host_retired')",
-    "authorization_contracts": "consumed NOT IN (0,2)",
+SELECTION_STATES = {"selected", "promoted", "preclaim_retired", "physical_retirement_observed"}
+_TABLES = {
+    "managed_persistent_incarnations",
+    "managed_persistent_attempts",
+    "managed_persistent_selections",
+}
+_PENDING_INDEX_SQL = {
+    "runs": "CREATE INDEX IF NOT EXISTS persistent_pending_runs ON runs(run_id) WHERE phase NOT IN ('done','failed','interrupted','stop_work','skipped')",
+    "managed_claim_intents": "CREATE INDEX IF NOT EXISTS persistent_pending_managed_claim_intents ON managed_claim_intents(run_id) WHERE state NOT IN ('persistent_released','preclaim_retired','runtime_unbound_retired','host_exit_observed','failed_completion_observed','consume_acknowledged')",
+    "managed_result_intents": "CREATE INDEX IF NOT EXISTS persistent_pending_managed_result_intents ON managed_result_intents(run_id) WHERE state NOT IN ('terminal','server_retired','host_retired')",
+    "managed_stop_intents": "CREATE INDEX IF NOT EXISTS persistent_pending_managed_stop_intents ON managed_stop_intents(run_id) WHERE state NOT IN ('terminal','server_retired','host_retired')",
+    "authorization_contracts": "CREATE INDEX IF NOT EXISTS persistent_pending_contracts ON authorization_contracts(issuer,contract) WHERE consumed NOT IN (0,2)",
+}
+_PENDING_COUNT_SQL = {
+    "runs": "SELECT count(*) FROM runs WHERE phase NOT IN ('done','failed','interrupted','stop_work','skipped')",
+    "managed_claim_intents": "SELECT count(*) FROM managed_claim_intents WHERE state NOT IN ('persistent_released','preclaim_retired','runtime_unbound_retired','host_exit_observed','failed_completion_observed','consume_acknowledged')",
+    "managed_result_intents": "SELECT count(*) FROM managed_result_intents WHERE state NOT IN ('terminal','server_retired','host_retired')",
+    "managed_stop_intents": "SELECT count(*) FROM managed_stop_intents WHERE state NOT IN ('terminal','server_retired','host_retired')",
+    "authorization_contracts": "SELECT count(*) FROM authorization_contracts WHERE consumed NOT IN (0,2)",
 }
 
 
 def _indexes(con: sqlite3.Connection) -> None:
     # Names/predicates are fixed source constants, never caller SQL. Partial
     # indexes contain unresolved rows rather than the healthy job history.
-    for table, predicate in _PENDING.items():
+    for table, query in _PENDING_INDEX_SQL.items():
         if con.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
         ).fetchone():
-            if table == "authorization_contracts":
-                con.execute(
-                    f"CREATE INDEX IF NOT EXISTS persistent_pending_contracts ON {table}(issuer,contract) WHERE {predicate}"
-                )
-            else:
-                con.execute(
-                    f"CREATE INDEX IF NOT EXISTS persistent_pending_{table} ON {table}(run_id) WHERE {predicate}"
-                )
+            con.execute(query)
 
 
 def _document(raw: str, maximum: int = 8192) -> dict:
@@ -157,23 +163,27 @@ def parent(con: sqlite3.Connection, runtime_id: str) -> sqlite3.Row:
     return row
 
 
-def association(con: sqlite3.Connection, run_id: str) -> dict | None:
-    """Read one original v3 link without creating or migrating any storage."""
-    if not con.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_persistent_attempts'"
-    ).fetchone():
-        return None
-    row = con.execute(
-        "SELECT * FROM managed_persistent_attempts WHERE run_id=?", (run_id,)
-    ).fetchone()
-    if row is None:
-        return None
-    for table in ("managed_runtime_bindings", "managed_worker_attempts"):
+def _schema(con: sqlite3.Connection) -> bool:
+    present = {
+        row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    } & _TABLES
+    require(not present or present == _TABLES, "worker_persistent_schema_incomplete")
+    return bool(present)
+
+
+def _source_link(
+    con: sqlite3.Connection, row: sqlite3.Row
+) -> tuple[dict, sqlite3.Row, sqlite3.Row, sqlite3.Row]:
+    run_id = row["run_id"]
+    for table, query in (
+        ("managed_runtime_bindings", "SELECT 1 FROM managed_runtime_bindings WHERE run_id=?"),
+        ("managed_worker_attempts", "SELECT 1 FROM managed_worker_attempts WHERE run_id=?"),
+    ):
         if con.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
         ).fetchone():
             require(
-                not con.execute(f"SELECT 1 FROM {table} WHERE run_id=?", (run_id,)).fetchone(),
+                not con.execute(query, (run_id,)).fetchone(),
                 "worker_claim_association_changed",
             )
     runtime = parent(con, row["runtime_id"])
@@ -183,7 +193,6 @@ def association(con: sqlite3.Connection, run_id: str) -> dict | None:
     require(
         link["schema"] == "vardr.worker-claim-association/3"
         and sequence64(link["runtime_sequence"], minimum=1) == row["runtime_sequence"]
-        and row["state"] in ATTEMPT_STATES
         and all(
             link[key] == row[key] == runtime[key]
             for key in ("runtime_id", "runtime_sha256", "admission_sha256")
@@ -213,6 +222,39 @@ def association(con: sqlite3.Connection, run_id: str) -> dict | None:
         ),
         "worker_claim_association_changed",
     )
+    return link, runtime, claim, run
+
+
+def association(con: sqlite3.Connection, run_id: str) -> dict | None:
+    """Read the original proposal/issued link without backfilling lost metadata."""
+    if not _schema(con):
+        return None
+    selection = con.execute(
+        "SELECT * FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+    ).fetchone()
+    row = con.execute(
+        "SELECT * FROM managed_persistent_attempts WHERE run_id=?", (run_id,)
+    ).fetchone()
+    if selection is None and row is None:
+        return None
+    require(
+        selection is not None and selection["state"] in SELECTION_STATES, "worker_selection_missing"
+    )
+    assert selection is not None
+    link, _, claim, _ = _source_link(con, selection)
+    promoted = selection["state"] == "promoted" or (
+        selection["state"] == "physical_retirement_observed"
+        and selection["retired_from_state"] == "promoted"
+    )
+    require((row is not None) == promoted, "worker_selection_issued_changed")
+    if row is None:
+        return link
+    require(
+        row["state"] in ATTEMPT_STATES and row["claim_link"] == selection["claim_link"],
+        "worker_claim_association_changed",
+    )
+    issued, _, _, _ = _source_link(con, row)
+    require(encoded(issued) == encoded(link), "worker_claim_association_changed")
     if row["binding"] is None:
         require(
             row["state"] == "claim_prepared"
@@ -245,6 +287,69 @@ def association(con: sqlite3.Connection, run_id: str) -> dict | None:
     return link
 
 
+def _unissued_source(
+    con: sqlite3.Connection, selection: sqlite3.Row
+) -> tuple[sqlite3.Row, sqlite3.Row]:
+    """Retained local metadata is separate from a physical/native epoch proof."""
+    link, _, claim, run = _source_link(con, selection)
+    require(
+        all(
+            claim[key] is None
+            for key in (
+                "issuer",
+                "contract",
+                "attempt",
+                "fence",
+                "approval_sha256",
+                "authority_sha256",
+            )
+        )
+        and claim["consumption_sent"] == claim["consumption_acknowledged"] == 0
+        and run["pid"] is None
+        and all(run[key] is None for key in ("artifact_path", "artifact_sha256", "artifact_size"))
+        and run["upload_state"] == "not_started"
+        and not con.execute(
+            "SELECT 1 FROM managed_persistent_attempts WHERE run_id=?", (run["run_id"],)
+        ).fetchone(),
+        "worker_selection_no_send_not_proven",
+    )
+    for table, query in (
+        ("managed_result_intents", "SELECT 1 FROM managed_result_intents WHERE run_id=?"),
+        ("managed_stop_intents", "SELECT 1 FROM managed_stop_intents WHERE run_id=?"),
+    ):
+        if con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone():
+            require(
+                not con.execute(query, (run["run_id"],)).fetchone(),
+                "worker_selection_no_send_not_proven",
+            )
+    if con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='authorization_contracts'"
+    ).fetchone():
+        require(
+            not con.execute(
+                "SELECT 1 FROM authorization_contracts WHERE job=?", (link["job_id"],)
+            ).fetchone(),
+            "worker_selection_no_send_not_proven",
+        )
+    return claim, run
+
+
+def _preclaim_selection(con: sqlite3.Connection, selection: sqlite3.Row) -> None:
+    """Revalidate the retained generic no-send tombstone; no native claim is made."""
+    claim, run = _unissued_source(con, selection)
+    require(
+        selection["state"] in {"selected", "preclaim_retired"}
+        and claim["state"] == "preclaim_retired"
+        and run["phase"] == Phase.FAILED.value
+        and run["status"] == "not_claimed"
+        and run["failure_reason"] == "local_preclaim_denied_before_rpc"
+        and run["last_event"] == "managed_preclaim_retired",
+        "worker_selection_no_send_not_proven",
+    )
+
+
 class PersistentStore:
     """Selected-row, append-only v3 journal; finite v1/v2 tables stay intact."""
 
@@ -252,6 +357,7 @@ class PersistentStore:
         self.journal = journal
         with journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
+            _schema(con)  # A missing retained table is never silently recreated.
             con.execute("""CREATE TABLE IF NOT EXISTS managed_persistent_incarnations (
                 runtime_id TEXT PRIMARY KEY, runtime_sha256 TEXT NOT NULL,
                 admission_sha256 TEXT NOT NULL, admission_snapshot TEXT NOT NULL,
@@ -279,6 +385,18 @@ class PersistentStore:
                 FOREIGN KEY(runtime_id) REFERENCES managed_persistent_incarnations(runtime_id),
                 FOREIGN KEY(run_id) REFERENCES runs(run_id),
                 FOREIGN KEY(runtime_id,previous_sequence) REFERENCES managed_persistent_attempts(runtime_id,runtime_sequence))""")
+            con.execute("""CREATE TABLE IF NOT EXISTS managed_persistent_selections (
+                run_id TEXT PRIMARY KEY, runtime_id TEXT NOT NULL, runtime_sequence INTEGER NOT NULL,
+                runtime_sha256 TEXT NOT NULL, admission_sha256 TEXT NOT NULL, claim_link TEXT NOT NULL,
+                state TEXT NOT NULL, retirement TEXT, retired_from_state TEXT,
+                CHECK(typeof(runtime_sequence)='integer' AND runtime_sequence BETWEEN 1 AND 9223372036854775807),
+                CHECK(state IN ('selected','promoted','preclaim_retired','physical_retirement_observed')),
+                CHECK((state='physical_retirement_observed' AND retirement IS NOT NULL AND retired_from_state IN ('selected','promoted')) OR (state!='physical_retirement_observed' AND retirement IS NULL AND retired_from_state IS NULL)),
+                FOREIGN KEY(run_id) REFERENCES runs(run_id),
+                FOREIGN KEY(runtime_id) REFERENCES managed_persistent_incarnations(runtime_id))""")
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS managed_persistent_pending_selections ON managed_persistent_selections(runtime_id,run_id) WHERE state='selected'"
+            )
             con.execute(
                 "CREATE INDEX IF NOT EXISTS managed_persistent_state ON managed_persistent_attempts(state,runtime_id,runtime_sequence)"
             )
@@ -313,7 +431,7 @@ class PersistentStore:
         except sqlite3.IntegrityError:
             raise AuthorizationError("worker_runtime_already_invoked") from None
 
-    def prepare_claim(
+    def _prepare_link(
         self,
         con: sqlite3.Connection,
         run_id: str,
@@ -324,7 +442,7 @@ class PersistentStore:
         runner_id: str,
         enrollment_id: str,
         admission_sha256: str,
-    ) -> None:
+    ) -> dict:
         require(con.in_transaction, "worker_claim_transaction_required")
         _indexes(con)
         sequence = integer(runtime_sequence, 1, MAX_SEQUENCE)
@@ -348,6 +466,13 @@ class PersistentStore:
             ).fetchone()
             require(previous is not None, "worker_persistent_history_changed")
             _validate_attempt(con, previous)
+        require(
+            not con.execute(
+                "SELECT 1 FROM managed_persistent_selections WHERE runtime_id=? AND state='selected' AND run_id!=? LIMIT 1",
+                (runtime_id, run_id),
+            ).fetchone(),
+            "worker_selection_pending",
+        )
         claim = con.execute(
             "SELECT * FROM managed_claim_intents WHERE run_id=?", (run_id,)
         ).fetchone()
@@ -376,6 +501,167 @@ class PersistentStore:
             "job_id": claim["job"],
             **{key: claim[key] for key in ("plan_sha256", "case_sha256", "association_sha256")},
         }
+        return link
+
+    @staticmethod
+    def _insert_selection(con: sqlite3.Connection, run_id: str, link: dict, state: str) -> None:
+        con.execute(
+            "INSERT INTO managed_persistent_selections(run_id,runtime_id,runtime_sequence,runtime_sha256,admission_sha256,claim_link,state) VALUES(?,?,?,?,?,?,?)",
+            (
+                run_id,
+                link["runtime_id"],
+                sequence64(link["runtime_sequence"], minimum=1),
+                link["runtime_sha256"],
+                link["admission_sha256"],
+                encoded(link).decode(),
+                state,
+            ),
+        )
+
+    def prepare_selection(
+        self,
+        con: sqlite3.Connection,
+        run_id: str,
+        *,
+        runtime_id: str,
+        runtime_sha256: str,
+        runtime_sequence: int,
+        runner_id: str,
+        enrollment_id: str,
+        admission_sha256: str,
+    ) -> None:
+        """Retain a proposed sequence without entering the issued/native history."""
+        link = self._prepare_link(
+            con,
+            run_id,
+            runtime_id=runtime_id,
+            runtime_sha256=runtime_sha256,
+            runtime_sequence=runtime_sequence,
+            runner_id=runner_id,
+            enrollment_id=enrollment_id,
+            admission_sha256=admission_sha256,
+        )
+        self._insert_selection(con, run_id, link, "selected")
+        require(association(con, run_id) == link, "worker_selection_changed")
+
+    def promote_selection(self, run_id: str) -> None:
+        """After a claim reply, promote before generic binding; no authority is inferred."""
+        with self.journal._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            selection = con.execute(
+                "SELECT * FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+            ).fetchone()
+            require(
+                selection is not None and selection["state"] == "selected",
+                "worker_selection_not_pending",
+            )
+            link = association(con, run_id)
+            require(link is not None, "worker_selection_changed")
+            assert link is not None
+            changed = con.execute(
+                "UPDATE managed_persistent_selections SET state='promoted' WHERE run_id=? AND state='selected'",
+                (run_id,),
+            ).rowcount
+            require(changed == 1, "worker_selection_changed")
+            self.prepare_claim(
+                con,
+                run_id,
+                runtime_id=link["runtime_id"],
+                runtime_sha256=link["runtime_sha256"],
+                runtime_sequence=sequence64(link["runtime_sequence"], minimum=1),
+                runner_id=link["runner_id"],
+                enrollment_id=link["enrollment_id"],
+                admission_sha256=link["admission_sha256"],
+            )
+
+    def retire_selection(self, run_id: str) -> None:
+        """Metadata proof only; caller separately proves epoch begin never entered."""
+        with self.journal._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            selection = con.execute(
+                "SELECT * FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+            ).fetchone()
+            require(
+                selection is not None and selection["state"] in {"selected", "preclaim_retired"},
+                "worker_selection_not_retirable",
+            )
+            assert selection is not None
+            _preclaim_selection(con, selection)
+            if selection["state"] == "selected":
+                link, runtime, _, _ = _source_link(con, selection)
+                require(
+                    runtime["state"] == "idle"
+                    and runtime["last_sequence"]
+                    == sequence64(link["runtime_sequence"], minimum=1) - 1
+                    and runtime["active_sequence"] is None,
+                    "worker_selection_head_changed",
+                )
+                con.execute(
+                    "UPDATE managed_persistent_selections SET state='preclaim_retired' WHERE run_id=? AND state='selected'",
+                    (run_id,),
+                )
+
+    def denied_selection(self, origin: str, job_id: str) -> bool:
+        """Read/revalidate one original no-send tombstone; never adopt a new run."""
+        with self.journal._connection() as con:
+            _schema(con)
+            if not con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_claim_intents'"
+            ).fetchone():
+                return False
+            claim = con.execute(
+                "SELECT run_id FROM managed_claim_intents WHERE backend=? AND job=?",
+                (origin, job_id),
+            ).fetchone()
+            if claim is None:
+                return False
+            selection = con.execute(
+                "SELECT * FROM managed_persistent_selections WHERE run_id=?", (claim["run_id"],)
+            ).fetchone()
+            if selection is None:
+                return False
+            association(con, selection["run_id"])
+            if selection["state"] != "preclaim_retired":
+                return False
+            _preclaim_selection(con, selection)
+            return True
+
+    def prepare_claim(
+        self,
+        con: sqlite3.Connection,
+        run_id: str,
+        *,
+        runtime_id: str,
+        runtime_sha256: str,
+        runtime_sequence: int,
+        runner_id: str,
+        enrollment_id: str,
+        admission_sha256: str,
+    ) -> None:
+        link = self._prepare_link(
+            con,
+            run_id,
+            runtime_id=runtime_id,
+            runtime_sha256=runtime_sha256,
+            runtime_sequence=runtime_sequence,
+            runner_id=runner_id,
+            enrollment_id=enrollment_id,
+            admission_sha256=admission_sha256,
+        )
+        sequence = sequence64(link["runtime_sequence"], minimum=1)
+        selection = con.execute(
+            "SELECT * FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+        ).fetchone()
+        if selection is None:
+            # Existing direct pre-send callers still record the exact source in
+            # this transaction; reads never invent/backfill old selections.
+            self._insert_selection(con, run_id, link, "promoted")
+        else:
+            require(
+                selection["state"] == "promoted"
+                and selection["claim_link"] == encoded(link).decode(),
+                "worker_selection_not_promoted",
+            )
         con.execute(
             "INSERT INTO managed_persistent_attempts(runtime_id,runtime_sequence,previous_sequence,runtime_sha256,admission_sha256,run_id,claim_link,state) VALUES(?,?,?,?,?,?,?,'claim_prepared')",
             (
@@ -693,7 +979,25 @@ def retire_incarnation_observation(
     row = con.execute(
         "SELECT * FROM managed_persistent_attempts WHERE run_id=?", (run_id,)
     ).fetchone()
-    require(claim is not None and row is not None, "worker_retirement_binding")
+    selection = con.execute(
+        "SELECT * FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+    ).fetchone()
+    require(claim is not None and selection is not None, "worker_retirement_binding")
+    assert selection is not None
+    if row is None:
+        _unissued_source(con, selection)
+        require(
+            (
+                selection["state"] == "selected"
+                or (
+                    selection["state"] == "physical_retirement_observed"
+                    and selection["retired_from_state"] == "selected"
+                )
+            )
+            and all(claim[key] is None for key in ("issuer", "contract", "attempt", "fence"))
+            and claim["consumption_sent"] == claim["consumption_acknowledged"] == 0,
+            "worker_selection_issued_changed",
+        )
     snapshot = retirement_snapshot(con, run_id, link, receipt)
     selected_claim = snapshot["claim"]
     if selected_claim is None:
@@ -716,7 +1020,7 @@ def retire_incarnation_observation(
                 == (claim["contract"], claim["attempt"], claim["fence"]),
                 "worker_retirement_binding",
             )
-        if row["binding"] is not None:
+        if row is not None and row["binding"] is not None:
             stored = _document(row["binding"])
             check_binding(stored)
             require(
@@ -728,11 +1032,17 @@ def retire_incarnation_observation(
     # claim, result or stop receipt, nor authorizes another claim.
     canonical = encoded(receipt).decode()
     require(
-        row["retirement"] is None or row["retirement"] == canonical,
+        (row is None or row["retirement"] is None or row["retirement"] == canonical)
+        and (selection["retirement"] is None or selection["retirement"] == canonical),
         "worker_retirement_changed",
     )
+    if row is not None:
+        con.execute(
+            "UPDATE managed_persistent_attempts SET retired_from_state=CASE WHEN retirement IS NULL THEN state ELSE retired_from_state END,state='physical_retirement_observed',retirement=? WHERE run_id=?",
+            (canonical, run_id),
+        )
     con.execute(
-        "UPDATE managed_persistent_attempts SET retired_from_state=CASE WHEN retirement IS NULL THEN state ELSE retired_from_state END,state='physical_retirement_observed',retirement=? WHERE run_id=?",
+        "UPDATE managed_persistent_selections SET retired_from_state=CASE WHEN retirement IS NULL THEN state ELSE retired_from_state END,state='physical_retirement_observed',retirement=? WHERE run_id=?",
         (canonical, run_id),
     )
     changed = con.execute(
@@ -818,6 +1128,52 @@ def _validate_attempt(con: sqlite3.Connection, row: sqlite3.Row) -> None:
         retirement_snapshot(con, row["run_id"], link, _document(row["retirement"]))
 
 
+def _validate_selection(con: sqlite3.Connection, row: sqlite3.Row) -> None:
+    link = association(con, row["run_id"])
+    require(link is not None, "worker_selection_missing")
+    assert link is not None
+    if row["state"] == "preclaim_retired":
+        _preclaim_selection(con, row)
+    elif row["state"] == "selected":
+        runtime = parent(con, row["runtime_id"])
+        require(
+            runtime["last_sequence"] == row["runtime_sequence"] - 1
+            and runtime["active_sequence"] is None,
+            "worker_selection_head_changed",
+        )
+    elif row["state"] == "promoted":
+        issued = con.execute(
+            "SELECT * FROM managed_persistent_attempts WHERE run_id=?", (row["run_id"],)
+        ).fetchone()
+        require(issued is not None, "worker_selection_issued_changed")
+        _validate_attempt(con, issued)
+    else:
+        require(
+            row["state"] == "physical_retirement_observed"
+            and row["retired_from_state"] in {"selected", "promoted"},
+            "worker_selection_changed",
+        )
+        runtime = parent(con, row["runtime_id"])
+        require(
+            row["retirement"] == runtime["retirement"] and row["retirement"] is not None,
+            "worker_retirement_missing",
+        )
+        retirement_snapshot(con, row["run_id"], link, _document(row["retirement"]))
+        if row["retired_from_state"] == "selected":
+            _unissued_source(con, row)
+        if row["retired_from_state"] == "promoted":
+            issued = con.execute(
+                "SELECT * FROM managed_persistent_attempts WHERE run_id=?", (row["run_id"],)
+            ).fetchone()
+            require(
+                issued is not None
+                and issued["state"] == "physical_retirement_observed"
+                and issued["retirement"] == row["retirement"],
+                "worker_selection_issued_changed",
+            )
+            _validate_attempt(con, issued)
+
+
 def persistent_holds(con: sqlite3.Connection, *, full: bool = False) -> int:
     """Pure audit: full at startup/explicit inspection, selected unresolved rows thereafter.
 
@@ -827,14 +1183,15 @@ def persistent_holds(con: sqlite3.Connection, *, full: bool = False) -> int:
     represent more than one fence for the same job; it grants no recovery right.
     """
     tables = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    required = {"managed_persistent_incarnations", "managed_persistent_attempts"}
+    required = _TABLES
     if not required.intersection(tables):
         return 0
     require(required <= tables, "worker_persistent_schema_incomplete")
     held: set[tuple] = set()
     parents = con.execute(
         "SELECT runtime_id FROM managed_persistent_incarnations"
-        + ("" if full else " WHERE state!='retired'")
+        if full
+        else "SELECT runtime_id FROM managed_persistent_incarnations WHERE state!='retired'"
     )
     for selected in parents:
         runtime = parent(con, selected["runtime_id"])
@@ -849,15 +1206,25 @@ def persistent_holds(con: sqlite3.Connection, *, full: bool = False) -> int:
             held.add((runtime["runtime_id"], runtime["active_sequence"]))
     rows = con.execute(
         "SELECT * FROM managed_persistent_attempts"
-        + ("" if full else " WHERE state NOT IN ('released','physical_retirement_observed')")
+        if full
+        else "SELECT * FROM managed_persistent_attempts WHERE state NOT IN ('released','physical_retirement_observed')"
     )
     for row in rows:
         _validate_attempt(con, row)
         if row["state"] not in {"released", "physical_retirement_observed"}:
             held.add((row["runtime_id"], row["runtime_sequence"]))
+    selections = con.execute(
+        "SELECT * FROM managed_persistent_selections"
+        if full
+        else "SELECT * FROM managed_persistent_selections WHERE state='selected'"
+    )
+    for selection in selections:
+        _validate_selection(con, selection)
+        if selection["state"] == "selected":
+            held.add(("selection", selection["run_id"]))
     generic = 0
-    for table, predicate in _PENDING.items():
+    for table, query in _PENDING_COUNT_SQL.items():
         if table in tables:
             # All identifiers and predicates are fixed source constants.
-            generic += con.execute(f"SELECT count(*) FROM {table} WHERE {predicate}").fetchone()[0]
+            generic += con.execute(query).fetchone()[0]
     return len(held) + generic

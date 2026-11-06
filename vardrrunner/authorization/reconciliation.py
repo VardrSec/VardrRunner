@@ -491,7 +491,50 @@ def reconcile_managed(
     root, source = observations.original(journal, run_id, runner_id)
     before = journal.get(run_id)
     if source["state"] in {"denied_before_rpc", "preclaim_retired"}:
-        return retire_preclaim(journal, run_id)
+        status = retire_preclaim(journal, run_id)
+        with journal._connection() as con:
+            association = claim_association(con, run_id)
+            selection = (
+                con.execute(
+                    "SELECT * FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+                ).fetchone()
+                if association is not None
+                and association["schema"] == "vardr.worker-claim-association/3"
+                else None
+            )
+        if selection is None or selection["state"] == "preclaim_retired":
+            return status
+        require(
+            selection["state"] == "selected"
+            or (
+                selection["state"] == "physical_retirement_observed"
+                and selection["retired_from_state"] == "selected"
+            ),
+            "worker_selection_preclaim_conflict",
+        )
+        # A restart cannot recover the caller's lost "epoch never entered"
+        # knowledge. Only a new original-key physical observation closes it.
+        root, source = observations.original(journal, run_id, runner_id)
+        before = journal.get(run_id)
+        reply = observations.observe(journal, run_id, runner_id, inspect)
+        if reply["runtime_retirement"] is None:
+            return "held_no_retirement_receipt"
+        with journal._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            claim = _row(con, "managed_claim_intents", run_id)
+            run = _row(con, "runs", run_id)
+            observed = _row(con, "managed_claim_observations", run_id)
+            require(
+                claim is not None
+                and run is not None
+                and dict(claim) == source
+                and journal._record(run) == before
+                and observed is not None
+                and observed["snapshot"] == encoded(reply).decode(),
+                "worker_selection_source_changed",
+            )
+            _sequence_retirement_metadata(con, run_id, reply)
+        return "terminal_runtime_preclaim_retired"
     reply = observations.observe(journal, run_id, runner_id, inspect)
     if _unbound_runtime(reply):
         return _retire_unbound_runtime(journal, run_id, root, source, before, reply)

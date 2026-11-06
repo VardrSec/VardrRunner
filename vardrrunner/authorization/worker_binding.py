@@ -58,22 +58,35 @@ def claim_association(con: sqlite3.Connection, run_id: str) -> dict | None:
                 "SELECT * FROM managed_worker_attempts WHERE run_id=?", (run_id,)
             ).fetchall()
         )
+    persistent = False
     if con.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_persistent_attempts'"
     ).fetchone():
-        rows.extend(
+        persistent = (
             con.execute(
-                "SELECT * FROM managed_persistent_attempts WHERE run_id=?", (run_id,)
-            ).fetchall()
+                "SELECT 1 FROM managed_persistent_attempts WHERE run_id=?", (run_id,)
+            ).fetchone()
+            is not None
         )
+    if con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_persistent_selections'"
+    ).fetchone():
+        persistent = (
+            persistent
+            or con.execute(
+                "SELECT 1 FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+            ).fetchone()
+            is not None
+        )
+    if persistent:
+        require(not rows, "worker_claim_association_changed")
+        from .worker_persistent import association
+
+        return association(con, run_id)
     if not rows:
         return None
     require(len(rows) == 1, "worker_claim_association_changed")
     row = rows[0]
-    if "admission_sha256" in row.keys():
-        from .worker_persistent import association
-
-        return association(con, run_id)
     sequenced = "runtime_sequence" in row.keys()
     if row["claim_link"] is None:
         require(row["state"] != "claim_prepared", "worker_claim_association_missing")
