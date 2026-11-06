@@ -69,6 +69,8 @@ class Owner(Protocol):
 
     def require_ready(self, admission: Admission) -> None: ...
 
+    def require_allocation(self, seconds: int) -> None: ...
+
     def verified_lease(self, binding: dict, lease_end: float, hard_end: float) -> None: ...
 
     def finished(self) -> None: ...
@@ -233,6 +235,22 @@ class Worker:
             self.store.acknowledge_binding(handle.run_id, binding, acknowledgement)
             return reply
 
+        def preclaim_check() -> None:
+            self._ready()
+            # The independent owner checks its immutable suspend-aware ceiling
+            # immediately before the only claim RPC. A file/boolean cannot arm it.
+            self.owner.require_allocation(self.allocated_seconds)
+
+        def claim(body: dict) -> dict:
+            return post(
+                "claim",
+                {
+                    **body,
+                    "runtime_id": self.admission.runtime_id,
+                    "runtime_sha256": self.admission.runtime_sha256,
+                },
+            )
+
         entry = ManagedEntry(
             self.journal,
             map_origin=self.admission.origin,
@@ -244,17 +262,19 @@ class Worker:
             execution=plan["execution"],
             allocated_seconds=self.allocated_seconds,
             anchors=self.anchors,
-            claim=lambda body: post(
-                "claim",
-                {
-                    **body,
-                    "runtime_id": self.admission.runtime_id,
-                    "runtime_sha256": self.admission.runtime_sha256,
-                },
-            ),
+            claim=claim,
             current=lambda body: post("refresh", body),
             consume=consume,
             verified_lease=self.owner.verified_lease,
+            preclaim_check=preclaim_check,
+            before_claim_send=lambda con, run_id: self.store.prepare_claim(
+                con,
+                run_id,
+                runtime_id=self.admission.runtime_id,
+                runtime_sha256=self.admission.runtime_sha256,
+                runner_id=self.runner_id,
+                enrollment_id=self.admission.enrollment_id,
+            ),
             clock=self.clock,
             monotonic=self.monotonic,
         )

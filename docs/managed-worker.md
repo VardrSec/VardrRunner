@@ -80,7 +80,7 @@ An invocation or uncertain send cannot be reconstructed as permission to retry.
 | Native owner/control loss | The independent lifecycle owner enforces the reviewed termination boundary. Host reconciliation requires direct proof of the exact stopped incarnation. |
 | Physical exit before consumption | The host protocol may retire that exact issued attempt as failed while preserving `consumed=false`; observation creates no consumption acknowledgement or native execution handle. |
 | Lost terminal reply | Observe the exact immutable receipt. Absence is a hold, never permission to replay execution or publication. |
-| Result accepted but completion absent | Preserve the result and retain the hold. The initial host stop producer does not overwrite a started result protocol or manufacture a second stop receipt. |
+| Result accepted but completion absent | Preserve the result and retain the hold until exact authenticated terminal observation. The host producer may fail the existing result only after direct stopped-incarnation proof; it creates no second stop receipt. |
 
 Partial artifacts and conservative spent allowances remain retained. Unknown work
 is not refunded or replayed. Automatic restart stays disabled until the stopped
@@ -100,14 +100,37 @@ Runner state, identity and enrolled API key. The distribution may invoke the
 same command in a separate ordinary Runner helper after verifying the worker
 container stopped. It must not insert an exec/health process into a live worker.
 
-The command sends only the existing original plan/case/association fingerprints
-to the authenticated observation endpoint. Existing native terminal result/stop
+The command sends the original plan/case/association fingerprints to the
+authenticated observation endpoint. A runtime pair is added only from the
+immutable pre-send association described below. Existing native terminal result/stop
 intents use their existing reconciliation functions. An exact `observed_exit`
 failure can instead close local metadata atomically, retire its existing ledger
 reservation and preserve the old PID as audit metadata. It neither signals that
 PID nor rebuilds a native handle, control token or consumption acknowledgement.
 Lost-claim retirement preserves `consumed=false` and the original unset claim
 fields. Artifacts, counters, fences and one-use tombstones remain retained.
+
+An authenticated failed completion for the exact original retained artifact can
+also retire local metadata with `observed_failed_completion`. The original
+intended outcome, finish-send and consumption flags, artifact and receipt hashes
+stay unchanged. This records the server's failed terminal state; it creates no
+native termination proof or successful completion. An absent, conflicting or
+different-artifact receipt remains held. Protocol tests do not establish coupled
+Docker Desktop or native Linux physical acceptance.
+
+Before claim HTTP, the worker links its runtime ID/hash, enrollment, original
+Runner/job/origin and fingerprints in the same SQLite transaction as the claim-send
+marker. After physical exit, Map can irreversibly retire an unbound runtime under
+the same row lock used by claim association. That barrier prevents a late claim
+for the incarnation; a null binding without the retirement receipt proves nothing.
+
+Only the durable link selects authenticated observation schema v2. The exact
+`vardr.worker-unbound-retirement/1` receipt may close an unknown local intent as
+`not_claimed_by_retired_runtime` when no local contract, consumption, PID, artifact,
+result/stop intent or job ledger record exists. It preserves all original send/ACK
+fields and job/runtime tombstones, and creates no retry, refund or execution right.
+Older unlinked intents keep strict v1 observation and remain held. A revoked/lost
+original enrolled key cannot be replaced through this read-only recovery path.
 
 A known `denied_before_rpc` marker has a separate local retirement rule: only a
 run without a contract, consumption, artifact or active ledger reservation can

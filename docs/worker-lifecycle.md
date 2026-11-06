@@ -62,6 +62,24 @@ samples can shorten or refuse permission and cannot extend it. IPC latency does
 not extend deadlines.
 Renewal cannot change the binding, widen the hard ceiling or revive expiration.
 
+The connection also anchors the public admission's UTC expiry using BOOTTIME
+first, MONOTONIC second and UTC last. Private HELLO carries an immutable grant
+ceiling and an earlier work ceiling, reserving a fixed 150 seconds for host
+reconciliation/reporting. The native owner stores both once and caps every lease
+and hard deadline before the work ceiling. The existing 120-second startup bound
+is also shortened by that ceiling. A requested allocation must fit in full just
+before the claim RPC; a short admission refuses before claim. This adds no expiry
+renewal, permission or sequential queue loop. Helper and Python source must match;
+the earlier zero-deadline HELLO refuses with the new native owner.
+
+The current literal host operation timeouts can total 110 seconds (physical
+observation, custody/volume revalidation, binding lookup, final direct inspection,
+report). The extra margin is a reporting opportunity under a responsive host and
+Map, not a promise that capacity will be released. Missing hosts, disconnected
+services, grant revocation and expiry retain their holds. UTC trust/clock skew,
+filesystem responsiveness and actual Windows/WSL/VM suspend behavior remain
+acceptance limits; clock-order tests do not certify those environments.
+
 The adapter enables Linux `execution_control` only inside this verified context.
 It reuses `runner._spawn_tool`, including the existing launch guard, empty stdin
 and tool environment allowlist. A process-wide Python audit barrier refuses

@@ -4,6 +4,7 @@ import ctypes
 import errno
 import signal
 import socket
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -12,19 +13,26 @@ import pytest
 from vardrrunner import execution_control
 from vardrrunner import worker_lifecycle as life
 
+_UTC = datetime(2026, 11, 5, tzinfo=timezone.utc)
+
 
 @pytest.fixture
-def admission():
-    return SimpleNamespace(identity={"owner_nonce": "ab" * 32})
+def admission(monkeypatch):
+    monkeypatch.setattr(life, "_utcnow", lambda: _UTC)
+    return SimpleNamespace(
+        identity={"owner_nonce": "ab" * 32}, expires_at=_UTC + timedelta(seconds=900)
+    )
 
 
 @pytest.fixture
 def owner(monkeypatch, admission):
     monkeypatch.setattr(life, "_process_readback", lambda: None)
     monkeypatch.setattr(life.os, "WNOHANG", 1, raising=False)
+    monkeypatch.setattr(life.time, "CLOCK_BOOTTIME", 7, raising=False)
+    monkeypatch.setattr(life.time, "clock_gettime_ns", lambda clock: 1_000_000_000, raising=False)
     channel = Mock()
     channel.get_inheritable.return_value = False
-    result = life.WorkerOwner(channel, admission, (1_000_000_000, 100.0))
+    result = life.WorkerOwner(channel, admission, (1_000_000_000, 100.0), 901_000_000_000)
     result._ready = True
     return result
 
@@ -349,7 +357,73 @@ def test_clock_conversion_samples_boottime_before_monotonic(monkeypatch, owner):
     monkeypatch.setattr(life.time, "monotonic", lambda: calls.append("mono") or 100.0)
     monkeypatch.setattr(owner, "_exchange", Mock())
     owner.verified_lease({}, 105.0, 120.0)
-    assert calls == ["boot", "mono"]
+    assert calls == ["boot", "boot", "mono"]
+
+
+def test_incarnation_clock_anchors_boot_then_mono_then_utc(monkeypatch, admission):
+    calls = []
+    monkeypatch.setattr(life.time, "CLOCK_BOOTTIME", 7, raising=False)
+    monkeypatch.setattr(
+        life.time,
+        "clock_gettime_ns",
+        lambda clock: calls.append("boot") or 1_000_000_000,
+        raising=False,
+    )
+    monkeypatch.setattr(life.time, "monotonic", lambda: calls.append("mono") or 100.0)
+    monkeypatch.setattr(life, "_utcnow", lambda: calls.append("utc") or _UTC)
+    anchor, grant = life._incarnation_clock(admission)
+    assert calls == ["boot", "mono", "utc"]
+    assert anchor == (1_000_000_000, 100.0) and grant == 901_000_000_000
+
+
+def test_pause_before_utc_sample_only_shortens_incarnation(monkeypatch, admission):
+    monkeypatch.setattr(life.time, "CLOCK_BOOTTIME", 7, raising=False)
+    monkeypatch.setattr(life.time, "clock_gettime_ns", lambda clock: 1_000_000_000, raising=False)
+    monkeypatch.setattr(life.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(life, "_utcnow", lambda: _UTC + timedelta(seconds=200))
+    _, grant = life._incarnation_clock(admission)
+    assert grant == 701_000_000_000
+
+
+@pytest.mark.parametrize("remaining", [60, 149, 150, 0, -1, 604801])
+def test_short_expired_or_unbounded_admission_never_enables_context(
+    monkeypatch, admission, remaining
+):
+    monkeypatch.setattr(life.time, "CLOCK_BOOTTIME", 7, raising=False)
+    monkeypatch.setattr(life.time, "clock_gettime_ns", lambda clock: 1_000_000_000, raising=False)
+    admission.expires_at = _UTC + timedelta(seconds=remaining)
+    with pytest.raises(life.LifecycleUnavailable):
+        life._incarnation_clock(admission)
+    assert life.current() is None
+
+
+def test_allocation_must_fit_before_claim_and_expiry_is_closed(monkeypatch, owner):
+    owner._work_end = 31_000_000_000
+    owner.require_allocation(30)
+    monkeypatch.setattr(life.time, "clock_gettime_ns", lambda clock: 1_000_000_001)
+    with pytest.raises(life.LifecycleUnavailable):
+        owner.require_allocation(30)
+    monkeypatch.setattr(life.time, "clock_gettime_ns", lambda clock: 1_000_000_000)
+    for seconds in (31, True, 0, 86401):
+        with pytest.raises(life.LifecycleUnavailable):
+            owner.require_allocation(seconds)
+    monkeypatch.setattr(life.time, "clock_gettime_ns", lambda clock: 31_000_000_000)
+    with pytest.raises(life.LifecycleUnavailable):
+        owner.require_ready(owner._admission)
+
+
+def test_every_lease_and_hard_ceiling_is_capped_before_reporting_runway(monkeypatch, owner):
+    monkeypatch.setattr(life.time, "monotonic", lambda: 100.0)
+    owner._work_end = 3_000_000_000
+    exchange = Mock()
+    monkeypatch.setattr(owner, "_exchange", exchange)
+    owner.verified_lease({}, 105.0, 120.0)
+    assert exchange.call_args.args[1:3] == (3_000_000_000, 3_000_000_000)
+    assert owner._work_end == 3_000_000_000
+    monkeypatch.setattr(life.time, "clock_gettime_ns", lambda clock: 3_000_000_000)
+    with pytest.raises(life.LifecycleUnavailable):
+        owner.verified_lease({}, 108.0, 130.0)
+    exchange.assert_called_once()
 
 
 @pytest.mark.parametrize("pause", ["before_first", "later_refresh", "between_samples"])

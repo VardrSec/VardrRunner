@@ -7,6 +7,17 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Link worker runtime/enrollment fingerprints in the original claim-send journal
+  transaction. Recognize exact authenticated v2 unbound-retirement receipts for
+  untouched local intents, and failed completion of the original retained result.
+  Preserve send/ACK history, artifacts, spent allowances and all tombstones;
+  legacy unlinked records and unresolved credentials remain held.
+
+- Bind each managed-worker incarnation to an immutable admission-expiry ceiling
+  with a fixed 150-second host-reporting opportunity. Refuse claims whose full
+  allocation cannot fit, and cap every native lease/hard deadline before that
+  runway. Pauses cannot move the ceiling forward; reporting availability and VM
+  suspend acceptance remain separate gates.
 - Seed an empty UID/GID-10000 readiness directory at worker-image build time for
   a fresh per-incarnation local metadata volume. Docker's copy API cannot read
   the earlier tmpfs path; preserve both refused trials. Add no runtime capability

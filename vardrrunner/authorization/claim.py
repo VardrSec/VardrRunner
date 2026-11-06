@@ -127,7 +127,14 @@ class ClaimStore:
             raise ClaimError("managed_claim_already_reserved") from None
         return owner
 
-    def prepare_send(self, run_id: str, owner: str, utc: datetime, mono: float) -> None:
+    def prepare_send(
+        self,
+        run_id: str,
+        owner: str,
+        utc: datetime,
+        mono: float,
+        before_claim_send: Callable[[sqlite3.Connection, str], None] | None = None,
+    ) -> None:
         require(
             utc.tzinfo is not None and type(mono) in {int, float} and math.isfinite(mono),
             "invalid_claim_clock",
@@ -150,6 +157,10 @@ class ClaimStore:
                 ),
             ).rowcount
             require(changed == 1, "managed_claim_phase")
+            if before_claim_send is not None:
+                # Trusted metadata-only hook on this exact transaction. No
+                # transport/second connection may intervene before its commit.
+                before_claim_send(con, run_id)
 
     def hold(self, run_id: str, owner: str, state: str) -> None:
         with self.journal._connection() as con:
@@ -334,6 +345,8 @@ class ManagedEntry:
         current: Callable[[dict], dict],
         consume: Callable[[dict], dict] | None = None,
         verified_lease: Callable[[dict, float, float], None] | None = None,
+        preclaim_check: Callable[[], None] | None = None,
+        before_claim_send: Callable[[sqlite3.Connection, str], None] | None = None,
         clock: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ):
@@ -347,6 +360,8 @@ class ManagedEntry:
         self._claim, self._current = claim, current
         self._consume = consume
         self._verified_lease = verified_lease
+        self._preclaim_check = preclaim_check
+        self._before_claim_send = before_claim_send
         self.clock, self.monotonic = clock or (lambda: datetime.now(timezone.utc)), monotonic
         self._used = False
         self._artifact_limit: int | None = None
@@ -455,12 +470,16 @@ class ManagedEntry:
                 self.journal.transition(record.run_id, Phase.TARGETS_RESOLVED)
                 mono, utc = self.monotonic(), self.clock()
                 require(utc.tzinfo is not None, "invalid_claim_clock")
-                self.store.prepare_send(record.run_id, owner, utc, mono)
+                self.store.prepare_send(record.run_id, owner, utc, mono, self._before_claim_send)
                 self._check(directory, plan)  # No journal writer held while checking grants.
                 require(not self.journal.stop_requested(record.run_id), "local_stop_before_claim")
                 handlers.check_gate_case(
                     self.case, self.engagement_id
                 )  # Last blocking check after all preparation/journal waits.
+                if self._preclaim_check is not None:
+                    # Trusted local-only check, inside the known pre-RPC guard.
+                    # Opaque claim callback failures below remain unknown sends.
+                    self._preclaim_check()
             except Exception:
                 try:
                     self.store.hold(record.run_id, owner, "denied_before_rpc")

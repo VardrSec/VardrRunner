@@ -19,6 +19,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from vardrrunner import launch_guard
@@ -33,6 +34,8 @@ _CREDENTIALS = struct.Struct("=iii")
 _MAGIC = 0x31574456
 _READY, _HELLO, _LEASE, _DONE, _ACK = 1, 2, 3, 4, 5
 _WALL = 0x40000000
+REPORT_RUNWAY_SECONDS = 150
+_SECOND = 1_000_000_000
 _ACTIVE: WorkerOwner | None = None
 _GLOBAL = threading.Lock()
 _HOOK_INSTALLED = False
@@ -46,6 +49,24 @@ class LifecycleUnavailable(RuntimeError):
 def _require(value: object) -> None:
     if not value:
         raise LifecycleUnavailable("worker_lifecycle_unavailable")
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _incarnation_clock(admission: Admission) -> tuple[tuple[int, float], int]:
+    # UTC last is conservative across pauses between the elapsed-clock samples
+    # and timestamp validation. Later conversions never resample this offset.
+    boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+    mono = time.monotonic()
+    now = _utcnow()
+    expiry = admission.expires_at
+    _require(isinstance(expiry, datetime) and expiry.tzinfo is not None)
+    remaining = (expiry - now).total_seconds()
+    _require(REPORT_RUNWAY_SECONDS < remaining <= 604800)
+    grant_end = boot + int(remaining * _SECOND)
+    return (boot, mono), grant_end
 
 
 def _prctl(option: int, value: object = 0) -> int:
@@ -93,12 +114,18 @@ class WorkerOwner:
     """One exact native owner, one immutable attempt binding, one tool lineage."""
 
     def __init__(
-        self, channel: socket.socket, admission: Admission, clock_anchor: tuple[int, float]
+        self,
+        channel: socket.socket,
+        admission: Admission,
+        clock_anchor: tuple[int, float],
+        grant_end: int,
     ):
         self._channel = channel
         self._admission = admission
         self._pid = os.getpid()
         self._clock_boot, self._clock_monotonic = clock_anchor
+        self._grant_end = grant_end
+        self._work_end = grant_end - REPORT_RUNWAY_SECONDS * _SECOND
         self._lock = threading.Lock()
         self._ready = False
         self._closed = False
@@ -135,6 +162,14 @@ class WorkerOwner:
         _require(admission == self._admission and not self._finished)
         _process_readback()
         _require(not self._channel.get_inheritable())
+        _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < self._work_end)  # type: ignore[attr-defined]
+
+    def require_allocation(self, seconds: int) -> None:
+        """Refuse before claim RPC unless the entire requested allocation fits."""
+        self.require_ready(self._admission)
+        _require(type(seconds) is int and 1 <= seconds <= 86400)
+        boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+        _require(boot + seconds * _SECOND <= self._work_end)
 
     def verified_lease(
         self, binding: dict, lease_end_monotonic: float, hard_end_monotonic: float
@@ -156,10 +191,12 @@ class WorkerOwner:
             hard = self._clock_boot + int(
                 (hard_end_monotonic - self._clock_monotonic) * 1_000_000_000
             )
+            hard = min(hard, self._work_end)
             hashed = hashlib.sha256(encoded(binding)).digest()
             if self._binding is not None:
                 _require(hashed == self._binding)
                 hard = min(hard, self._hard)
+            lease = min(lease, hard)
             _require(boot < lease <= hard)
             self._exchange(_LEASE, lease, hard, hashed)
             self._binding, self._hard, self._lease = hashed, hard, lease
@@ -252,10 +289,7 @@ def connect(admission: Admission) -> Iterator[WorkerOwner]:
     _require(sys.platform == "linux" and hasattr(time, "CLOCK_BOOTTIME"))
     # Reuse this conservative offset for the complete connection. A later
     # suspend must shorten/refuse permission, never shift first arm or renewal.
-    clock_anchor = (
-        time.clock_gettime_ns(time.CLOCK_BOOTTIME),  # type: ignore[attr-defined]
-        time.monotonic(),
-    )
+    clock_anchor, grant_end = _incarnation_clock(admission)
     with _GLOBAL:
         _require(_ACTIVE is None and threading.active_count() == 1)
         _prctl(4, 0)  # PR_SET_DUMPABLE in the actual Python process after exec.
@@ -267,11 +301,12 @@ def connect(admission: Admission) -> Iterator[WorkerOwner]:
             channel.settimeout(1.0)
             _require(channel.family == socket.AF_UNIX and channel.type == socket.SOCK_SEQPACKET)  # type: ignore[attr-defined]
             _require(channel.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED) == 1)  # type: ignore[attr-defined]
-            owner = WorkerOwner(channel, admission, clock_anchor)
+            owner = WorkerOwner(channel, admission, clock_anchor, grant_end)
             ready = owner._receive()
             nonce = bytes.fromhex(admission.identity["owner_nonce"])
             _require(ready == (_READY, 0, 0, nonce))
-            owner._exchange(_HELLO, 0, 0, nonce)
+            _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < owner._work_end)  # type: ignore[attr-defined]
+            owner._exchange(_HELLO, owner._work_end, owner._grant_end, nonce)
             if not _HOOK_INSTALLED:
                 sys.addaudithook(_audit)
                 _HOOK_INSTALLED = True

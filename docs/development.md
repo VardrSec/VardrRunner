@@ -7,6 +7,13 @@ process/clock readbacks and conservative unknown-state holds. Run the repository
 normal Ruff/format, mypy and complete 95%-coverage suite for the combined change.
 Python mocks do not certify native containment.
 
+`test_runtime_retirement_observation` additionally checks exact v2 receipt binding,
+legacy v1 behavior, monotonic receipt retention, source changes during RPC and
+refusal when execution/artifact/ledger metadata conflicts. `test_worker_binding`
+checks that the runtime link and send marker commit or roll back together.
+These local protocol tests do not establish Map's PostgreSQL lock interleavings
+or direct physical exit; run those separate companion/platform gates too.
+
 `Dockerfile.worker` adds the small static lifecycle owner to an explicitly selected
 toolkit base. Keep build/source/image receipts and exercise the approved profile
 on actual Docker Desktop and Linux before accepting it. The ordinary Dockerfile

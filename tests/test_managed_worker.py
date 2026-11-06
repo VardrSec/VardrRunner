@@ -106,6 +106,7 @@ def worker_fixture(entry_fixture, admission_document, monkeypatch, tmp_path):
         }
 
     owner = Mock()
+    owner.require_allocation.return_value = None
     owner.finished.side_effect = lambda: calls.append("owner_finished")
 
     def inert(self, targets, directory, cfg, **kwargs):
@@ -188,6 +189,41 @@ def test_one_attempt_uses_existing_consume_bind_native_and_receipt_order(worker_
     with pytest.raises(AuthorizationError, match="worker_runtime_already_invoked"):
         t.make().run()
     assert t.calls == before
+
+
+def test_owner_checks_full_allocation_immediately_before_claim_rpc(worker_fixture):
+    t = worker_fixture
+    events = []
+    t.owner.require_ready.side_effect = lambda admission: events.append("ready")
+    t.owner.require_allocation.side_effect = lambda seconds: events.append(("allocation", seconds))
+    original_post = t.client.managed_post
+
+    def post(path, body):
+        if path.endswith("/claim"):
+            events.append("claim_post")
+        return original_post(path, body)
+
+    t.client.managed_post = post
+    assert t.make().run().phase == Phase.DONE
+    position = events.index("claim_post")
+    assert events[position - 2 : position] == ["ready", ("allocation", 30)]
+    t.owner.require_allocation.assert_called_once_with(30)
+
+
+def test_short_owner_ceiling_holds_without_any_claim_rpc_or_launch(worker_fixture):
+    t = worker_fixture
+    t.owner.require_allocation.side_effect = RuntimeError("worker_lifecycle_unavailable")
+    with pytest.raises(AuthorizationError, match="local_claim_denied_before_rpc"):
+        t.make().run()
+    assert t.calls == ["pending"]
+    t.owner.require_allocation.assert_called_once_with(30)
+    t.owner.verified_lease.assert_not_called()
+    t.owner.finished.assert_not_called()
+    with t.f.journal._connection() as con:
+        claim = con.execute("SELECT * FROM managed_claim_intents").fetchone()
+    assert claim["state"] == "preclaim_retired" and claim["contract"] is None
+    assert claim["consumption_sent"] == claim["consumption_acknowledged"] == 0
+    assert not t.f.journal.unfinished()
 
 
 @pytest.mark.parametrize("stage", ["claim", "consume", "runtime-bind", "binding_ack_write"])

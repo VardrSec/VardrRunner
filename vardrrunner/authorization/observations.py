@@ -9,7 +9,8 @@ from collections.abc import Callable
 from vardrrunner.journal import Journal, utc_now
 
 from . import results, stops
-from .codec import AuthorizationError, encoded, fields, identifier, integer, require
+from .codec import AuthorizationError, digest, encoded, fields, identifier, integer, require
+from .worker_binding import claim_association
 
 ROOT = {"origin", "job_id", "runner_id", "plan_sha256", "case_sha256", "association_sha256"}
 CLAIM = {
@@ -22,6 +23,18 @@ CLAIM = {
     "authority_sha256",
 }
 STATES = {"active", "cancel_requested", "uncertain", "completed", "failed", "cancelled"}
+RUNTIME_RETIREMENT = {
+    "schema",
+    "runtime_id",
+    "runtime_sha256",
+    "origin",
+    "runner_id",
+    "enrollment_id",
+    "report_sha256",
+    "bound",
+    "retired",
+    "receipt_sha256",
+}
 
 
 def hash_value(value) -> str:
@@ -68,7 +81,35 @@ def binding(reply: dict) -> dict:
     }
 
 
-def validate(reply: dict, root: dict, original_claim: dict) -> None:
+def _runtime_retirement(reply: dict, root: dict, association: dict) -> None:
+    require(
+        all(association[k] == value for k, value in root.items()),
+        "runtime_observation_association",
+    )
+    receipt = reply["runtime_retirement"]
+    if receipt is None:
+        return
+    fields(receipt, RUNTIME_RETIREMENT)
+    for key in ("report_sha256", "runtime_sha256", "receipt_sha256"):
+        hash_value(receipt[key])
+    require(
+        receipt["schema"] == "vardr.worker-unbound-retirement/1"
+        and all(
+            receipt[k] == association[k]
+            for k in ("runtime_id", "runtime_sha256", "origin", "runner_id", "enrollment_id")
+        )
+        and receipt["bound"] is False
+        and receipt["retired"] is True
+        and receipt["receipt_sha256"]
+        == digest(encoded({k: v for k, v in receipt.items() if k != "receipt_sha256"}))
+        and reply["claim"] is None,
+        "runtime_retirement_receipt_binding",
+    )
+
+
+def validate(
+    reply: dict, root: dict, original_claim: dict, runtime_association: dict | None = None
+) -> None:
     fields(
         reply,
         ROOT
@@ -80,14 +121,22 @@ def validate(reply: dict, root: dict, original_claim: dict) -> None:
             "result",
             "completion",
             "stop",
-        },
+        }
+        | ({"runtime_retirement"} if runtime_association is not None else set()),
     )
     require(
-        reply["schema"] == "vardr.managed-claim-observation/1"
+        reply["schema"]
+        == (
+            "vardr.managed-claim-observation/2"
+            if runtime_association is not None
+            else "vardr.managed-claim-observation/1"
+        )
         and all(reply[k] == v for k, v in root.items())
         and type(reply["capacity_reserved"]) is bool,
         "claim_observation_binding",
     )
+    if runtime_association is not None:
+        _runtime_retirement(reply, root, runtime_association)
     claim = reply["claim"]
     if claim is None:
         require(
@@ -209,7 +258,9 @@ class ObservationStore:
             con.execute("""CREATE TABLE IF NOT EXISTS managed_claim_observations (
                 run_id TEXT PRIMARY KEY, snapshot TEXT NOT NULL, observed_at TEXT NOT NULL)""")
 
-    def record(self, run_id: str, root: dict, reply: dict) -> None:
+    def record(
+        self, run_id: str, root: dict, reply: dict, runtime_association: dict | None = None
+    ) -> None:
         with self.journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
             claim = con.execute(
@@ -227,6 +278,11 @@ class ObservationStore:
                 ),
                 "observation_source_changed",
             )
+            require(
+                claim_association(con, run_id) == runtime_association,
+                "runtime_observation_source_changed",
+            )
+            validate(reply, root, dict(claim), runtime_association)
             if claim["contract"] is not None:
                 require(
                     reply["claim"] is not None
@@ -260,6 +316,11 @@ class ObservationStore:
                     require(
                         old[key] is None or old[key] == reply[key], "observed_receipt_regressed"
                     )
+                require(
+                    old.get("runtime_retirement") is None
+                    or old["runtime_retirement"] == reply.get("runtime_retirement"),
+                    "observed_runtime_retirement_regressed",
+                )
             con.execute(
                 "INSERT INTO managed_claim_observations (run_id,snapshot,observed_at) VALUES (?,?,?) ON CONFLICT(run_id) DO UPDATE SET snapshot=excluded.snapshot,observed_at=excluded.observed_at",
                 (run_id, encoded(reply).decode(), utc_now()),
@@ -269,12 +330,17 @@ class ObservationStore:
 def observe(journal: Journal, run_id: str, runner_id: str, inspect: Callable[[dict], dict]) -> dict:
     """Explicit observation only; absence or unconsumed state never permits a retry."""
     root, claim = original(journal, run_id, runner_id)
+    with journal._connection() as con:
+        association = claim_association(con, run_id)
+    request = {k: v for k, v in root.items() if k != "job_id"}
+    if association is not None:
+        request.update({k: association[k] for k in ("runtime_id", "runtime_sha256")})
     try:
-        reply = inspect({k: v for k, v in root.items() if k != "job_id"})
+        reply = inspect(request)
     except Exception:
         raise AuthorizationError("claim_observation_unavailable") from None
-    validate(reply, root, claim)
-    ObservationStore(journal).record(run_id, root, reply)
+    validate(reply, root, claim, association)
+    ObservationStore(journal).record(run_id, root, reply, association)
     return reply
 
 

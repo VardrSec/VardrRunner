@@ -9,6 +9,23 @@ from vardrrunner.journal import TERMINAL_PHASES, Journal, Phase, utc_now
 
 from . import observations, results, stops
 from .codec import AuthorizationError, encoded, require
+from .worker_binding import claim_association
+
+_ROW_SQL = {
+    "runs": "SELECT * FROM runs WHERE run_id=?",
+    "managed_claim_intents": "SELECT * FROM managed_claim_intents WHERE run_id=?",
+    "managed_result_intents": "SELECT * FROM managed_result_intents WHERE run_id=?",
+    "managed_stop_intents": "SELECT * FROM managed_stop_intents WHERE run_id=?",
+    "managed_claim_observations": "SELECT * FROM managed_claim_observations WHERE run_id=?",
+}
+_INTENT_ROWS_SQL = {
+    "managed_result_intents": "SELECT * FROM managed_result_intents",
+    "managed_stop_intents": "SELECT * FROM managed_stop_intents",
+}
+_RETIRE_SQL = {
+    "managed_result_intents": "UPDATE managed_result_intents SET state=? WHERE run_id=?",
+    "managed_stop_intents": "UPDATE managed_stop_intents SET state=? WHERE run_id=?",
+}
 
 
 def _table(con, name: str) -> bool:
@@ -21,7 +38,7 @@ def _table(con, name: str) -> bool:
 def _row(con, table: str, run_id: str):
     if not _table(con, table):
         return None
-    return con.execute(f"SELECT * FROM {table} WHERE run_id=?", (run_id,)).fetchone()
+    return con.execute(_ROW_SQL[table], (run_id,)).fetchone()
 
 
 def retire_preclaim(journal: Journal, run_id: str) -> str:
@@ -130,6 +147,142 @@ def _host_exit(reply: dict) -> bool:
     )
 
 
+def _failed_completion(reply: dict) -> bool:
+    return (
+        type(reply["completion"]) is dict
+        and reply["completion"].get("outcome") == "failed"
+        and type(reply["result"]) is dict
+        and reply["stop"] is None
+        and reply["claim"]["consumed"] is True
+        and reply["execution_state"] == "failed"
+        and reply["capacity_reserved"] is False
+    )
+
+
+def _unbound_runtime(reply: dict) -> bool:
+    return type(reply.get("runtime_retirement")) is dict and reply["claim"] is None
+
+
+def _unbound_source(con, run, claim, reply):
+    """A retired exact incarnation fences late claims; absence alone never does."""
+    association = claim_association(con, run["run_id"])
+    require(
+        association is not None
+        and _unbound_runtime(reply)
+        and claim["state"]
+        in {
+            "claim_in_flight",
+            "claim_unknown",
+            "reply_or_binding_unknown",
+            "runtime_unbound_retired",
+        }
+        and all(
+            claim[key] is None
+            for key in (
+                "issuer",
+                "contract",
+                "attempt",
+                "fence",
+                "approval_sha256",
+                "authority_sha256",
+            )
+        )
+        and claim["consumption_sent"] == claim["consumption_acknowledged"] == 0
+        and run["pid"] is None
+        and all(run[key] is None for key in ("artifact_path", "artifact_sha256", "artifact_size"))
+        and run["upload_state"] == "not_started"
+        and _row(con, "managed_result_intents", run["run_id"]) is None
+        and _row(con, "managed_stop_intents", run["run_id"]) is None,
+        "unbound_retirement_source_changed",
+    )
+    if _table(con, "authorization_contracts"):
+        require(
+            con.execute(
+                "SELECT 1 FROM authorization_contracts WHERE job=?", (claim["job"],)
+            ).fetchone()
+            is None,
+            "unbound_retirement_ledger_conflict",
+        )
+    return association
+
+
+def _retire_unbound_runtime(journal, run_id, root, source, before, reply):
+    with journal._connection() as con:
+        con.execute("BEGIN IMMEDIATE")
+        claim = _row(con, "managed_claim_intents", run_id)
+        run = _row(con, "runs", run_id)
+        observed = _row(con, "managed_claim_observations", run_id)
+        require(
+            claim is not None
+            and run is not None
+            and dict(claim) == source
+            and journal._record(run) == before
+            and observed is not None
+            and observed["snapshot"] == encoded(reply).decode(),
+            "unbound_retirement_source_changed",
+        )
+        association = _unbound_source(con, run, claim, reply)
+        observations.validate(reply, root, dict(claim), association)
+        closed = claim["state"] == "runtime_unbound_retired"
+        require(
+            (
+                closed
+                and run["phase"] == Phase.FAILED.value
+                and run["status"] == "not_claimed"
+                and run["failure_reason"] == "not_claimed_by_retired_runtime"
+                and run["last_event"] == "managed_runtime_unbound_receipt"
+            )
+            or (not closed and Phase(run["phase"]) not in TERMINAL_PHASES),
+            "unbound_retirement_foreign_terminal",
+        )
+        warning = {
+            "code": "runtime_unbound_retirement",
+            "runtime_id": association["runtime_id"],
+            "receipt_sha256": reply["runtime_retirement"]["receipt_sha256"],
+        }
+        warnings = json.loads(run["warnings_json"])
+        require(type(warnings) is list, "unbound_retirement_audit_state")
+        if closed:
+            require(warning in warnings, "unbound_retirement_audit_state")
+        else:
+            warnings.append(warning)
+        con.execute(
+            "UPDATE managed_claim_intents SET state='runtime_unbound_retired' WHERE run_id=?",
+            (run_id,),
+        )
+        instant = utc_now()
+        con.execute(
+            "UPDATE runs SET phase=?,status='not_claimed',failure_reason='not_claimed_by_retired_runtime',completed_at=?,last_event='managed_runtime_unbound_receipt',warnings_json=?,updated_at=? WHERE run_id=?",
+            (
+                Phase.FAILED.value,
+                run["completed_at"] or instant,
+                encoded(warnings).decode(),
+                instant,
+                run_id,
+            ),
+        )
+    return "terminal_runtime_unbound_retired"
+
+
+def _original_result(con, run, claim, reply) -> None:
+    """A different server outcome never rewrites the original upload intent."""
+    intent = _row(con, "managed_result_intents", run["run_id"])
+    require(
+        intent is not None
+        and intent["outcome"] == "completed"
+        and json.loads(intent["binding"]) == observations.binding(reply)
+        and intent["case_sha256"] == claim["case_sha256"]
+        and (run["artifact_sha256"], run["artifact_size"])
+        == (intent["artifact_sha256"], intent["artifact_size"])
+        and type(intent["artifact_size"]) is int
+        and intent["artifact_size"] > 0
+        and claim["consumption_sent"] == 1,
+        "failed_completion_original_artifact_required",
+    )
+    results.check_result(reply["result"], dict(intent))
+    results.check_completion(reply["completion"], {**dict(intent), "outcome": "failed"})
+
+
 def _native_closed(table, intent, claim, run, contracts) -> bool:
     binding = json.loads(intent["binding"])
     require(set(binding) == results.BINDING, "local_terminal_binding")
@@ -179,8 +332,14 @@ def _native_closed(table, intent, claim, run, contracts) -> bool:
     )
 
 
-def _retire_host_exit(journal, run_id, root, source, before, reply):
-    require(_host_exit(reply), "host_retirement_receipt_required")
+def _retire_observed_terminal(journal, run_id, root, source, before, reply):
+    failed_result = _failed_completion(reply)
+    require(_host_exit(reply) or failed_result, "host_retirement_receipt_required")
+    state = "failed_completion_observed" if failed_result else "host_exit_observed"
+    reason = "observed_failed_completion" if failed_result else "observed_exit"
+    event = "managed_failed_completion_receipt" if failed_result else "managed_host_exit_receipt"
+    warning = "server_failed_completion" if failed_result else "host_observed_exit"
+    retired = "server_retired" if failed_result else "host_retired"
     with journal._connection() as con:
         con.execute("BEGIN IMMEDIATE")
         claim = _row(con, "managed_claim_intents", run_id)
@@ -195,7 +354,9 @@ def _retire_host_exit(journal, run_id, root, source, before, reply):
             and observed["snapshot"] == encoded(reply).decode(),
             "host_retirement_source_changed",
         )
-        observations.validate(reply, root, dict(claim))
+        observations.validate(reply, root, dict(claim), claim_association(con, run_id))
+        if failed_result:
+            _original_result(con, run, claim, reply)
         require(
             claim["consumption_sent"] in (0, 1)
             and claim["consumption_acknowledged"] in (0, 1)
@@ -208,9 +369,9 @@ def _retire_host_exit(journal, run_id, root, source, before, reply):
         )
         if Phase(run["phase"]) in TERMINAL_PHASES:
             require(
-                claim["state"] == "host_exit_observed"
+                claim["state"] == state
                 and run["phase"] == Phase.FAILED.value
-                and run["failure_reason"] == "observed_exit"
+                and run["failure_reason"] == reason
                 and run["pid"] is None,
                 "host_retirement_foreign_terminal",
             )
@@ -218,7 +379,7 @@ def _retire_host_exit(journal, run_id, root, source, before, reply):
             intent = _row(con, table, run_id)
             if intent is not None:
                 require(intent["state"] != "terminal", "host_retirement_native_conflict")
-                con.execute(f"UPDATE {table} SET state='host_retired' WHERE run_id=?", (run_id,))
+                con.execute(_RETIRE_SQL[table], (retired, run_id))
         ledger = None
         if claim["contract"] is not None and _table(con, "authorization_contracts"):
             ledger = con.execute(
@@ -242,11 +403,11 @@ def _retire_host_exit(journal, run_id, root, source, before, reply):
         )
         warnings = json.loads(run["warnings_json"])
         require(type(warnings) is list, "host_retirement_audit_state")
-        receipt = reply["stop"]["receipt_sha256"]
-        if claim["state"] != "host_exit_observed":
+        receipt = reply["result" if failed_result else "stop"]["receipt_sha256"]
+        if claim["state"] != state:
             warnings.append(
                 {
-                    "code": "host_observed_exit",
+                    "code": warning,
                     "receipt_sha256": receipt,
                     "previous_pid": run["pid"],
                 }
@@ -255,27 +416,27 @@ def _retire_host_exit(journal, run_id, root, source, before, reply):
             require(
                 any(
                     type(row) is dict
-                    and row.get("code") == "host_observed_exit"
+                    and row.get("code") == warning
                     and row.get("receipt_sha256") == receipt
                     for row in warnings
                 ),
                 "host_retirement_audit_state",
             )
-        con.execute(
-            "UPDATE managed_claim_intents SET state='host_exit_observed' WHERE run_id=?", (run_id,)
-        )
+        con.execute("UPDATE managed_claim_intents SET state=? WHERE run_id=?", (state, run_id))
         instant = utc_now()
         con.execute(
-            "UPDATE runs SET phase=?,pid=NULL,status='failed',failure_reason='observed_exit',completed_at=?,last_event='managed_host_exit_receipt',warnings_json=?,updated_at=? WHERE run_id=?",
+            "UPDATE runs SET phase=?,pid=NULL,status='failed',failure_reason=?,completed_at=?,last_event=?,warnings_json=?,updated_at=? WHERE run_id=?",
             (
                 Phase.FAILED.value,
+                reason,
                 run["completed_at"] or instant,
+                event,
                 encoded(warnings).decode(),
                 instant,
                 run_id,
             ),
         )
-    return "terminal_host_exit_observed"
+    return "terminal_" + state
 
 
 def reconcile_managed(
@@ -286,11 +447,18 @@ def reconcile_managed(
     if source["state"] in {"denied_before_rpc", "preclaim_retired"}:
         return retire_preclaim(journal, run_id)
     reply = observations.observe(journal, run_id, runner_id, inspect)
+    if _unbound_runtime(reply):
+        return _retire_unbound_runtime(journal, run_id, root, source, before, reply)
     if _host_exit(reply):
-        return _retire_host_exit(journal, run_id, root, source, before, reply)
+        return _retire_observed_terminal(journal, run_id, root, source, before, reply)
     if reply["stop"] is not None:
         return observations.reconcile_stop(journal, run_id, runner_id, lambda _: reply)
     if reply["result"] is not None:
+        if (
+            _failed_completion(reply)
+            and results.ResultStore(journal).get(run_id)["outcome"] == "completed"
+        ):
+            return _retire_observed_terminal(journal, run_id, root, source, before, reply)
         return observations.reconcile_result(journal, run_id, runner_id, lambda _: reply)
     return "held_no_terminal_receipt"
 
@@ -329,12 +497,50 @@ def local_holds(journal: Journal) -> int:
                     )
                     and claim["consumption_sent"] == claim["consumption_acknowledged"] == 0
                 )
-            elif state == "host_exit_observed":
+            elif state == "runtime_unbound_retired":
+                observed = _row(con, "managed_claim_observations", claim["run_id"])
+                valid = observed is not None
+                if valid:
+                    snapshot = json.loads(observed["snapshot"])
+                    root = {
+                        "origin": claim["backend"],
+                        "job_id": claim["job"],
+                        "runner_id": snapshot["runner_id"],
+                        **{
+                            key: claim[key]
+                            for key in ("plan_sha256", "case_sha256", "association_sha256")
+                        },
+                    }
+                    try:
+                        association = _unbound_source(con, run, claim, snapshot)
+                        observations.validate(snapshot, root, dict(claim), association)
+                        valid = (
+                            run["phase"] == Phase.FAILED.value
+                            and run["status"] == "not_claimed"
+                            and run["failure_reason"] == "not_claimed_by_retired_runtime"
+                            and run["last_event"] == "managed_runtime_unbound_receipt"
+                            and {
+                                "code": "runtime_unbound_retirement",
+                                "runtime_id": association["runtime_id"],
+                                "receipt_sha256": snapshot["runtime_retirement"]["receipt_sha256"],
+                            }
+                            in json.loads(run["warnings_json"])
+                        )
+                    except AuthorizationError:
+                        valid = False
+            elif state in {"host_exit_observed", "failed_completion_observed"}:
+                failed_result = state == "failed_completion_observed"
+                reason = "observed_failed_completion" if failed_result else "observed_exit"
+                event = (
+                    "managed_failed_completion_receipt"
+                    if failed_result
+                    else "managed_host_exit_receipt"
+                )
+                warning = "server_failed_completion" if failed_result else "host_observed_exit"
+                retired = "server_retired" if failed_result else "host_retired"
                 observed = _row(con, "managed_claim_observations", claim["run_id"])
                 valid = (
-                    observed is not None
-                    and run["failure_reason"] == "observed_exit"
-                    and run["pid"] is None
+                    observed is not None and run["failure_reason"] == reason and run["pid"] is None
                 )
                 if valid:
                     snapshot = json.loads(observed["snapshot"])
@@ -348,22 +554,31 @@ def local_holds(journal: Journal) -> int:
                         },
                     }
                     try:
-                        observations.validate(snapshot, root, dict(claim))
+                        observations.validate(
+                            snapshot, root, dict(claim), claim_association(con, claim["run_id"])
+                        )
+                        if failed_result:
+                            _original_result(con, run, claim, snapshot)
                         valid = (
-                            _host_exit(snapshot)
+                            (
+                                _failed_completion(snapshot)
+                                if failed_result
+                                else _host_exit(snapshot)
+                            )
                             and (run["backend_url"], run["job_id"])
                             == (claim["backend"], claim["job"])
                             and run["phase"] == Phase.FAILED.value
-                            and run["last_event"] == "managed_host_exit_receipt"
+                            and run["last_event"] == event
                             and any(
                                 type(row) is dict
-                                and row.get("code") == "host_observed_exit"
-                                and row.get("receipt_sha256") == snapshot["stop"]["receipt_sha256"]
+                                and row.get("code") == warning
+                                and row.get("receipt_sha256")
+                                == snapshot["result" if failed_result else "stop"]["receipt_sha256"]
                                 for row in json.loads(run["warnings_json"])
                             )
                             and all(
                                 (intent := _row(con, table, claim["run_id"])) is None
-                                or intent["state"] == "host_retired"
+                                or intent["state"] == retired
                                 for table in ("managed_result_intents", "managed_stop_intents")
                             )
                             and (
@@ -390,7 +605,7 @@ def local_holds(journal: Journal) -> int:
                 holds.add(("run", claim["run_id"]))
         for table in ("managed_result_intents", "managed_stop_intents"):
             if _table(con, table):
-                for intent in con.execute(f"SELECT * FROM {table}"):
+                for intent in con.execute(_INTENT_ROWS_SQL[table]):
                     if not any(row["run_id"] == intent["run_id"] for row in claims):
                         holds.add(("intent", intent["run_id"]))
         fences = (

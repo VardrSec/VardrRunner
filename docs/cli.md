@@ -1206,6 +1206,12 @@ uploads, PID action or execution-token recovery. Unknown state stays held and a
 nonzero exit reports remaining local holds. Normal `recover` keeps its existing
 managed-run deferral. See [managed worker and recovery](managed-worker.md).
 
+For a worker durably linked before claim-send, the command also recognizes the
+exact server receipt for an irreversibly retired, unbound incarnation. This can
+close only an untouched local claim intent as `not_claimed_by_retired_runtime`;
+it grants no retry and never fabricates a contract or consumption acknowledgement.
+Old unlinked intents and missing original credentials remain held.
+
 The managed worker is a separately enabled distribution capability; ordinary
 Runner startup, `jobs run` and direct/Mapless commands do not start it. Initial
 worker/profile limitations and platform proof are in [lifecycle](worker-lifecycle.md).

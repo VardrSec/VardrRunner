@@ -32,6 +32,7 @@
 #define RUNNER 10001
 #define MAGIC 0x31574456u
 #define NS 1000000000ULL
+#define REPORT_RUNWAY (150ULL * NS)
 #define BOOT 0u
 #define READY 1u
 #define HELLO 2u
@@ -270,9 +271,10 @@ int main(int argc, char **argv) {
         sigaction(SIGHUP, &action, NULL)) fail();
     int booted = 0, hello = 0, armed = 0, done = 0;
     uint64_t lease = startup, hard = startup;
+    uint64_t work_end = UINT64_MAX, grant_end = UINT64_MAX;
     unsigned char binding[32] = {0};
     while (1) {
-        if (stopping || now_ns() >= lease || now_ns() >= hard) fail();
+        if (stopping || now_ns() >= lease || now_ns() >= hard || now_ns() >= grant_end) fail();
         int status;
         pid_t waited = waitpid(child, &status, WNOHANG);
         if (waited == child) {
@@ -305,12 +307,18 @@ int main(int argc, char **argv) {
             continue;
         }
         if (!hello) {
-            if (p.type != HELLO || p.lease || p.hard || memcmp(p.binding, nonce, 32)) fail();
+            uint64_t now = now_ns();
+            if (p.type != HELLO || p.lease <= now || p.hard <= p.lease ||
+                p.hard - p.lease != REPORT_RUNWAY || p.hard > now + 604800 * NS ||
+                memcmp(p.binding, nonce, 32)) fail();
+            work_end = p.lease; grant_end = p.hard;
+            if (work_end < lease) lease = work_end;
+            if (work_end < hard) hard = work_end;
             hello = 1;
         } else if (p.type == LEASE && !done) {
             uint64_t now = now_ns();
             if (p.lease <= now || p.lease > now + 10 * NS || p.hard < p.lease ||
-                p.hard > now + 86400 * NS) fail();
+                p.hard > now + 86400 * NS || p.hard > work_end) fail();
             if (armed) {
                 if (memcmp(binding, p.binding, 32) || p.hard > hard) fail();
             } else memcpy(binding, p.binding, 32);

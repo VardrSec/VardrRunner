@@ -14,7 +14,7 @@ from tests.test_managed_observations import result_fixture as result_fixture
 from tests.test_managed_observations import specimen as specimen
 from tests.test_managed_observations import stopped as stopped
 from vardrrunner import api, config, identity
-from vardrrunner.authorization import observations, reconciliation, stops
+from vardrrunner.authorization import observations, reconciliation, results, stops
 from vardrrunner.authorization.claim import ClaimError, ClaimStore
 from vardrrunner.authorization.codec import AuthorizationError
 from vardrrunner.authorization.reconciliation import local_holds, reconcile_managed, retire_preclaim
@@ -159,6 +159,162 @@ def test_existing_native_terminal_receipts_use_original_reconciliation(result_fi
     )
     assert t.f.journal.get(t.handle.run_id).phase == Phase.DONE
     assert local_holds(t.f.journal) == 0
+
+
+def failed_completion_reply(t):
+    reply = public_reply(t.f, t.handle.run_id, t.handle.gate)
+    reply["claim"]["consumed"] = True
+    reply.update(
+        execution_state="failed",
+        capacity_reserved=False,
+        result=t.state["result"],
+        completion={
+            "schema": "vardr.managed-completion/1",
+            **observations.binding(reply),
+            "receipt_sha256": t.state["result"]["receipt_sha256"],
+            "outcome": "failed",
+            "capacity_reserved": False,
+        },
+    )
+    return reply
+
+
+@pytest.mark.parametrize("window", ["result_ack_lost", "finish_not_received"])
+def test_server_failed_completion_preserves_original_intent_and_uncertain_flags(
+    result_fixture, window
+):
+    t = result_fixture
+    output = t.handle.execute(t.f.directory)
+    original_artifact = output.read_bytes()
+
+    def lost_result(body):
+        t.submit(body)
+        raise OSError("synthetic result acknowledgement lost")
+
+    def lost_finish(body):
+        raise OSError("synthetic finish not received")
+
+    with pytest.raises(AuthorizationError):
+        t.handle.finalize(lost_result if window == "result_ack_lost" else t.submit, lost_finish)
+    before = t.f.journal.get(t.handle.run_id)
+    with t.f.journal._connection() as con:
+        intent_before = dict(con.execute("SELECT * FROM managed_result_intents").fetchone())
+        claim_before = dict(con.execute("SELECT * FROM managed_claim_intents").fetchone())
+    assert intent_before["outcome"] == "completed"
+    assert intent_before["finish_sent"] == (window == "finish_not_received")
+    reply = failed_completion_reply(t)
+    for _ in range(2):
+        assert (
+            reconcile_managed(
+                t.f.journal, t.handle.run_id, t.f.s.context.runner_id, lambda _: reply
+            )
+            == "terminal_failed_completion_observed"
+        )
+        assert local_holds(t.f.journal) == 0 and not t.f.journal.unfinished()
+    after = t.f.journal.get(t.handle.run_id)
+    assert after.phase == Phase.FAILED and after.failure_reason == "observed_failed_completion"
+    assert (
+        after.artifact_sha256 == before.artifact_sha256 and output.read_bytes() == original_artifact
+    )
+    assert after.upload_state == before.upload_state
+    assert len(after.warnings) == len(before.warnings) + 1
+    assert after.warnings[-1]["code"] == "server_failed_completion"
+    with t.f.journal._connection() as con:
+        intent = dict(con.execute("SELECT * FROM managed_result_intents").fetchone())
+        claim = dict(con.execute("SELECT * FROM managed_claim_intents").fetchone())
+        assert con.execute("SELECT consumed FROM authorization_contracts").fetchone()[0] == 2
+        assert con.execute("SELECT issued FROM authorization_approvals").fetchone()[0] == 1
+        assert con.execute("SELECT fence FROM authorization_fences").fetchone()[0] == 1
+    assert intent == {**intent_before, "state": "server_retired"}
+    assert claim == {**claim_before, "state": "failed_completion_observed"}
+    assert t.calls == ["submit"]
+    with pytest.raises(AuthorizationError):
+        t.f.make().acquire(t.f.directory)
+    assert local_holds(t.f.journal) == 0
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "artifact",
+        "case",
+        "contract",
+        "fence",
+        "unconsumed",
+        "capacity",
+        "local_intent",
+        "missing_intent",
+    ],
+)
+def test_failed_completion_cannot_retire_a_different_or_unproven_artifact(result_fixture, change):
+    t = result_fixture
+    t.handle.execute(t.f.directory)
+
+    def lost(body):
+        raise OSError("synthetic finish not received")
+
+    with pytest.raises(AuthorizationError):
+        t.handle.finalize(t.submit, lost)
+    reply = failed_completion_reply(t)
+    if change in {"artifact", "case"}:
+        key = "artifact_sha256" if change == "artifact" else "case_sha256"
+        reply["result"][key] = "f" * 64
+        reply["result"]["receipt_sha256"] = results.receipt(
+            observations.binding(reply),
+            reply["result"]["artifact_sha256"],
+            reply["result"]["case_sha256"],
+        )
+        reply["completion"]["receipt_sha256"] = reply["result"]["receipt_sha256"]
+    elif change in {"contract", "fence"}:
+        reply["claim"]["contract_id" if change == "contract" else "fence"] = (
+            "other-contract" if change == "contract" else 2
+        )
+    elif change == "unconsumed":
+        reply["claim"]["consumed"] = False
+    elif change == "capacity":
+        reply["capacity_reserved"] = True
+    else:
+        with t.f.journal._connection() as con:
+            if change == "local_intent":
+                con.execute("UPDATE managed_result_intents SET artifact_size=artifact_size+1")
+            else:
+                con.execute("DELETE FROM managed_result_intents")
+    before = t.f.journal.get(t.handle.run_id)
+    with pytest.raises(AuthorizationError):
+        reconcile_managed(t.f.journal, t.handle.run_id, t.f.s.context.runner_id, lambda _: reply)
+    assert t.f.journal.get(t.handle.run_id) == before and local_holds(t.f.journal) > 0
+    with t.f.journal._connection() as con:
+        assert con.execute("SELECT consumed FROM authorization_contracts").fetchone()[0] == 1
+
+
+def test_failed_completion_retirement_write_failure_is_atomic(result_fixture):
+    t = result_fixture
+    t.handle.execute(t.f.directory)
+
+    def lost(body):
+        raise OSError("synthetic finish not received")
+
+    with pytest.raises(AuthorizationError):
+        t.handle.finalize(t.submit, lost)
+    before = t.f.journal.get(t.handle.run_id)
+    with t.f.journal._connection() as con:
+        con.execute("""CREATE TRIGGER reject_failed_completion BEFORE UPDATE OF phase ON runs
+            WHEN NEW.last_event='managed_failed_completion_receipt'
+            BEGIN SELECT RAISE(ABORT, 'synthetic completion retirement failure'); END""")
+    with pytest.raises(Exception, match="synthetic completion retirement failure"):
+        reconcile_managed(
+            t.f.journal,
+            t.handle.run_id,
+            t.f.s.context.runner_id,
+            lambda _: failed_completion_reply(t),
+        )
+    assert t.f.journal.get(t.handle.run_id) == before and local_holds(t.f.journal) > 0
+    with t.f.journal._connection() as con:
+        assert con.execute("SELECT consumed FROM authorization_contracts").fetchone()[0] == 1
+        assert (
+            con.execute("SELECT state FROM managed_result_intents").fetchone()[0]
+            == "finish_in_flight"
+        )
 
 
 def test_retirement_transaction_failure_preserves_all_active_holds(stopped):
