@@ -28,7 +28,9 @@ does not reach Python; declaration grants no permission to resolve a credential.
 Existing engagement/origin grants and case checks still apply. Proxy-variable
 support has not been added to this initial candidate.
 
-An unnamed inherited SOCK_SEQPACKET socket carries fixed 56-byte messages. Each
+The retained v1 image uses 56-byte messages. The explicit v2 image uses a distinct
+magic value and fixed 64-byte messages carrying a uint64 attempt sequence over
+the same unnamed inherited SOCK_SEQPACKET socket. Each
 message requires kernel SCM_CREDENTIALS for the exact direct Runner child or
 PID 1/UID 10000. The public startup nonce is matched to host admission. The actual
 Python process sets and reads back nondumpability and child-subreaper status;
@@ -54,7 +56,7 @@ fresh platform proof; see [Docker copy limitations](https://docs.docker.com/refe
 Neither refusal establishes a failure of the native writer; the copy API did not
 provide its live tmpfs contents.
 The child waits for the separate readonly public admission file. Startup has a
-120-second owner ceiling. One validated attempt binding may arm a short lease and
+120-second owner ceiling. Each validated attempt binding may arm a short lease and
 an immutable hard ceiling, both measured in CLOCK_BOOTTIME. Clock conversion
 anchors BOOTTIME before MONOTONIC at connection establishment and rounds down.
 Every conversion reuses that anchor, so later suspend or scheduling between
@@ -69,12 +71,13 @@ reconciliation/reporting. The native owner stores both once and caps every lease
 and hard deadline before the work ceiling. The existing 120-second startup bound
 is also shortened by that ceiling. A requested allocation must fit in full just
 before the claim RPC; a short admission refuses before claim. This adds no expiry
-renewal, permission or sequential queue loop. Helper and Python source must match;
+renewal or permission. Helper and Python source must match;
 the earlier zero-deadline HELLO refuses with the new native owner.
 
-The current literal host operation timeouts can total 110 seconds (physical
+The ordinary literal host operation timeouts can total 110 seconds (physical
 observation, custody/volume revalidation, binding lookup, final direct inspection,
-report). The extra margin is a reporting opportunity under a responsive host and
+report). An explicit sequence-transition continuation can add one ten-second
+exact-history lookup. The extra margin is a reporting opportunity under a responsive host and
 Map, not a promise that capacity will be released. Missing hosts, disconnected
 services, grant revocation and expiry retain their holds. UTC trust/clock skew,
 filesystem responsiveness and actual Windows/WSL/VM suspend behavior remain
@@ -84,7 +87,7 @@ The adapter enables Linux `execution_control` only inside this verified context.
 It reuses `runner._spawn_tool`, including the existing launch guard, empty stdin
 and tool environment allowlist. A process-wide Python audit barrier refuses
 other subprocess/fork/exec paths in every Runner thread. This is a trusted Runner
-code invariant, not an arbitrary native-code sandbox. There is one tool launch,
+code invariant, not an arbitrary native-code sandbox. There is one tool launch per attempt,
 no installers/background helpers, no exec healthcheck and no external process
 insertion in the closed-lineage proof window.
 
@@ -104,6 +107,27 @@ with zero. EOF alone cannot establish success; an active-attempt EOF still refus
 The compiler stage exercises ordinary own-socket close and queued-packet cases
 under a five-second limit. These checks are separate from platform containment
 acceptance.
+
+Sequencing requires explicit `max_attempts` (1 through 32), owner-ready/2 and
+admission/2. Omission retains the old one-shot mode against its matching image;
+the new v2 image never downgrades its private protocol or admission. The six
+physical identity fields and existing signed authorization contracts remain
+unchanged. A v2 callback captures an immutable attempt epoch before claim. Each
+attempt uses a fresh Gate, Control and journal run. Sealing the epoch rejects
+late callbacks, and DONE independently requires its exact pinned Control to have
+closed and its actual refresh thread to have exited, plus the lineage drain.
+Only the canonical completed path may use its original Map token to release the
+active runtime association and advance.
+Unknown send, result, release or cleanup state prevents another claim.
+
+After each healthy DONE, the owner permits at most 60 seconds of nonspawning
+idle, capped by the original work ceiling. Idle cannot be renewed. The next lease
+must use exactly the next sequence and a fresh attempt binding; stale, duplicate,
+skipped or exhausted sequences refuse. All ACK fields, including sequence, must
+match. A validated DONE ACK produces `native_done_sha256` for the existing-token
+idle-release correlation. This digest is not independent server attestation.
+The compiler stage adds bounded protocol-state checks; actual sequential platform
+and failure-path acceptance remain pending.
 
 The candidate requires little-endian Linux, Python 3.10+ and kernel support for
 the checked primitives. Host/VM suspend behavior, deadline responsiveness under

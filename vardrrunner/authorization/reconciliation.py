@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable
 
 from vardrrunner.journal import TERMINAL_PHASES, Journal, Phase, utc_now
 
 from . import observations, results, stops
 from .codec import AuthorizationError, encoded, require
-from .worker_binding import claim_association
+from .worker_binding import (
+    claim_association,
+    retire_incarnation_observation,
+    sequence_holds,
+)
 
 _ROW_SQL = {
     "runs": "SELECT * FROM runs WHERE run_id=?",
@@ -163,6 +168,42 @@ def _unbound_runtime(reply: dict) -> bool:
     return type(reply.get("runtime_retirement")) is dict and reply["claim"] is None
 
 
+def _sequence_retirement_metadata(con, run_id: str, reply: dict) -> None:
+    """Keep physical retirement separate from DONE/release acknowledgements."""
+    if (
+        reply["schema"] != "vardr.managed-claim-observation/3"
+        or reply["runtime_retirement"] is None
+    ):
+        return
+    require(con.in_transaction, "worker_retirement_transaction_required")
+    claim = _row(con, "managed_claim_intents", run_id)
+    run = _row(con, "runs", run_id)
+    observed = _row(con, "managed_claim_observations", run_id)
+    require(
+        claim is not None
+        and run is not None
+        and observed is not None
+        and observed["snapshot"] == encoded(reply).decode()
+        and run["pid"] is None
+        and Phase(run["phase"]) in TERMINAL_PHASES,
+        "worker_retirement_source_changed",
+    )
+    association = claim_association(con, run_id)
+    require(
+        association is not None and association["schema"] == "vardr.worker-claim-association/2",
+        "worker_retirement_source_changed",
+    )
+    assert association is not None
+    root = {
+        "origin": run["backend_url"],
+        "job_id": run["job_id"],
+        "runner_id": association["runner_id"],
+        **{key: claim[key] for key in ("plan_sha256", "case_sha256", "association_sha256")},
+    }
+    observations.validate(reply, root, dict(claim), association)
+    retire_incarnation_observation(con, run_id, reply["runtime_retirement"])
+
+
 def _unbound_source(con, run, claim, reply):
     """A retired exact incarnation fences late claims; absence alone never does."""
     association = claim_association(con, run["run_id"])
@@ -261,6 +302,7 @@ def _retire_unbound_runtime(journal, run_id, root, source, before, reply):
                 run_id,
             ),
         )
+        _sequence_retirement_metadata(con, run_id, reply)
     return "terminal_runtime_unbound_retired"
 
 
@@ -436,6 +478,7 @@ def _retire_observed_terminal(journal, run_id, root, source, before, reply):
                 run_id,
             ),
         )
+        _sequence_retirement_metadata(con, run_id, reply)
     return "terminal_" + state
 
 
@@ -452,15 +495,25 @@ def reconcile_managed(
     if _host_exit(reply):
         return _retire_observed_terminal(journal, run_id, root, source, before, reply)
     if reply["stop"] is not None:
-        return observations.reconcile_stop(journal, run_id, runner_id, lambda _: reply)
-    if reply["result"] is not None:
+        status = observations.reconcile_stop(journal, run_id, runner_id, lambda _: reply)
+    elif reply["result"] is not None:
         if (
             _failed_completion(reply)
             and results.ResultStore(journal).get(run_id)["outcome"] == "completed"
         ):
             return _retire_observed_terminal(journal, run_id, root, source, before, reply)
-        return observations.reconcile_result(journal, run_id, runner_id, lambda _: reply)
-    return "held_no_terminal_receipt"
+        status = observations.reconcile_result(journal, run_id, runner_id, lambda _: reply)
+    else:
+        return "held_no_terminal_receipt"
+    if (
+        status.startswith("terminal_")
+        and reply["schema"] == "vardr.managed-claim-observation/3"
+        and reply["runtime_retirement"] is not None
+    ):
+        with journal._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            _sequence_retirement_metadata(con, run_id, reply)
+    return status
 
 
 def local_holds(journal: Journal) -> int:
@@ -633,4 +686,9 @@ def local_holds(journal: Journal) -> int:
                 )
             ):
                 holds.add(("fence", fence["issuer"], fence["job"]))
-    return len(holds)
+        try:
+            pending_sequences = sequence_holds(con)
+        except (AuthorizationError, sqlite3.Error):
+            holds.add(("sequence", "inconsistent_audit_state"))
+            pending_sequences = 0
+    return len(holds) + pending_sequences

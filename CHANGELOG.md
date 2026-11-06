@@ -7,6 +7,16 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicitly selected v2 managed batches of 1–32 healthy attempts in one
+  admitted incarnation. Capture immutable lease epochs, join the exact refresh
+  thread, require native drain/DONE and a durable original-token idle release
+  before another claim. Preserve append-only journal links, unknown-send holds,
+  spent allowances and legacy one-shot operation. Physical v2 acceptance is open.
+- Bind read-only v3 observation to the original runtime sequence. Revalidate full
+  retained retirement evidence during startup audits; missing or abbreviated
+  proof retains its hold. Physical retirement never invents claim, consume,
+  DONE or idle-release acknowledgements.
+
 - Handle clean worker-channel EOF after DONE while waiting for the exact Runner
   child to become waitable. Preserve packet validation, active-attempt refusal and
   all deadlines; only the tracked child's normal exit zero establishes success.

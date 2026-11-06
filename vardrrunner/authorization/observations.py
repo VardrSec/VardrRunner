@@ -35,6 +35,22 @@ RUNTIME_RETIREMENT = {
     "retired",
     "receipt_sha256",
 }
+SEQUENCE_RETIREMENT = (RUNTIME_RETIREMENT - {"bound"}) | {
+    "runtime_sequence",
+    "last_sequence",
+    "binding",
+    "attempt_receipt",
+}
+
+
+def _runtime_sequence(association: dict) -> int | None:
+    if association.get("schema") == "vardr.worker-claim-association/1":
+        return None
+    require(
+        association.get("schema") == "vardr.worker-claim-association/2",
+        "runtime_observation_association",
+    )
+    return integer(association.get("runtime_sequence"), 1, 32)
 
 
 def hash_value(value) -> str:
@@ -89,6 +105,10 @@ def _runtime_retirement(reply: dict, root: dict, association: dict) -> None:
     receipt = reply["runtime_retirement"]
     if receipt is None:
         return
+    sequence = _runtime_sequence(association)
+    if sequence is not None:
+        _sequence_retirement(reply, association, receipt, sequence)
+        return
     fields(receipt, RUNTIME_RETIREMENT)
     for key in ("report_sha256", "runtime_sha256", "receipt_sha256"):
         hash_value(receipt[key])
@@ -107,9 +127,83 @@ def _runtime_retirement(reply: dict, root: dict, association: dict) -> None:
     )
 
 
+def _sequence_retirement(reply: dict, association: dict, receipt: dict, sequence: int) -> None:
+    """Physical retirement is distinct from any historical job's terminal ACK."""
+    fields(receipt, SEQUENCE_RETIREMENT)
+    for key in ("report_sha256", "runtime_sha256", "receipt_sha256"):
+        hash_value(receipt[key])
+    last = integer(receipt["last_sequence"], 0, 32)
+    require(
+        receipt["schema"] == "vardr.worker-retirement/2"
+        and all(
+            receipt[k] == association[k]
+            for k in ("runtime_id", "runtime_sha256", "origin", "runner_id", "enrollment_id")
+        )
+        and receipt["retired"] is True
+        and receipt["receipt_sha256"]
+        == digest(encoded({k: v for k, v in receipt.items() if k != "receipt_sha256"})),
+        "runtime_retirement_receipt_binding",
+    )
+    require(
+        last < sequence if reply["claim"] is None else last >= sequence,
+        "runtime_retirement_sequence_binding",
+    )
+    active = receipt["runtime_sequence"]
+    nested, terminal = receipt["binding"], receipt["attempt_receipt"]
+    if active is None:
+        require(nested is None and terminal is None, "runtime_retirement_sequence_binding")
+        return
+    require(integer(active, 1, 32) == last, "runtime_retirement_sequence_binding")
+    fields(nested, results.BINDING)
+    require(
+        all(nested[k] == association[k] for k in ("origin", "runner_id")),
+        "runtime_retirement_sequence_binding",
+    )
+    for key in ("job_id", "runner_id", "contract_id", "attempt_id"):
+        identifier(nested[key])
+    integer(nested["fence"], 1)
+    hash_value(nested["contract_sha256"])
+    require(type(terminal) is dict, "runtime_retirement_sequence_binding")
+    hash_value(terminal.get("receipt_sha256"))
+    outcome = terminal.get("outcome")
+    require(
+        type(outcome) is str and outcome in {"completed", "failed", "cancelled"},
+        "runtime_retirement_sequence_binding",
+    )
+    if terminal.get("schema") == "vardr.managed-stop-receipt/1":
+        cause = terminal.get("cause")
+        require(type(cause) is str and cause in stops.RECEIPT_CAUSES, "invalid_observed_stop")
+        expected_outcome = "cancelled" if cause in stops.CANCEL_CAUSES else "failed"
+        stops.check_receipt(
+            terminal,
+            {
+                "binding": encoded(nested).decode(),
+                "outcome": expected_outcome,
+                "cause": cause,
+                "receipt_sha256": stops.stop_hash(nested, expected_outcome, cause),
+            },
+        )
+    else:
+        results.check_completion(
+            terminal,
+            {
+                "binding": encoded(nested).decode(),
+                "outcome": outcome,
+                "receipt_sha256": terminal["receipt_sha256"],
+            },
+        )
+    if active == sequence:
+        fields(reply["claim"], CLAIM)
+        require(
+            nested == binding(reply) and terminal in (reply["completion"], reply["stop"]),
+            "runtime_retirement_sequence_binding",
+        )
+
+
 def validate(
     reply: dict, root: dict, original_claim: dict, runtime_association: dict | None = None
 ) -> None:
+    sequence = _runtime_sequence(runtime_association) if runtime_association is not None else None
     fields(
         reply,
         ROOT
@@ -122,12 +216,15 @@ def validate(
             "completion",
             "stop",
         }
-        | ({"runtime_retirement"} if runtime_association is not None else set()),
+        | ({"runtime_retirement"} if runtime_association is not None else set())
+        | ({"runtime_id", "runtime_sha256", "runtime_sequence"} if sequence is not None else set()),
     )
     require(
         reply["schema"]
         == (
-            "vardr.managed-claim-observation/2"
+            "vardr.managed-claim-observation/3"
+            if sequence is not None
+            else "vardr.managed-claim-observation/2"
             if runtime_association is not None
             else "vardr.managed-claim-observation/1"
         )
@@ -135,6 +232,15 @@ def validate(
         and type(reply["capacity_reserved"]) is bool,
         "claim_observation_binding",
     )
+    if sequence is not None:
+        require(
+            runtime_association is not None
+            and integer(reply["runtime_sequence"], 1, 32) == sequence
+            and all(
+                reply[key] == runtime_association[key] for key in ("runtime_id", "runtime_sha256")
+            ),
+            "runtime_observation_association",
+        )
     if runtime_association is not None:
         _runtime_retirement(reply, root, runtime_association)
     claim = reply["claim"]
@@ -335,6 +441,9 @@ def observe(journal: Journal, run_id: str, runner_id: str, inspect: Callable[[di
     request = {k: v for k, v in root.items() if k != "job_id"}
     if association is not None:
         request.update({k: association[k] for k in ("runtime_id", "runtime_sha256")})
+        sequence = _runtime_sequence(association)
+        if sequence is not None:
+            request["runtime_sequence"] = sequence
     try:
         reply = inspect(request)
     except Exception:

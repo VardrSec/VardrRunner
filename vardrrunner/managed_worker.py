@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import threading
 import time
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NoReturn, Protocol
+from typing import NoReturn, Protocol, cast
 
 from vardrrunner import api, config, execution_control, identity
 from vardrrunner.authorization.claim import ManagedEntry, ManagedRun
@@ -27,7 +28,7 @@ from vardrrunner.authorization.documents import read_anchors, read_document
 from vardrrunner.authorization.reconciliation import local_holds
 from vardrrunner.authorization.results import BINDING
 from vardrrunner.authorization.worker_admission import Admission
-from vardrrunner.authorization.worker_binding import WorkerStore
+from vardrrunner.authorization.worker_binding import SequenceStore, WorkerStore, sequence_holds
 from vardrrunner.journal import Journal, Phase, RunRecord
 
 ADMISSION_PATH = Path("/run/vardr-worker-admission/admission.json")
@@ -76,6 +77,43 @@ class Owner(Protocol):
     def finished(self) -> None: ...
 
 
+class Epoch(Protocol):
+    def require_active(self) -> None: ...
+    def verified_lease(self, binding: dict, lease_end: float, hard_end: float) -> None: ...
+    def seal(self) -> None: ...
+    def quiescence_deadline(self) -> float: ...
+    def finished(self) -> str: ...
+
+
+class SequenceOwner(Owner, Protocol):
+    def begin_attempt(self, runtime_sequence: int) -> Epoch: ...
+
+
+class _EpochRefresh:
+    """Pin one immutable epoch across even a blocked refresh RPC."""
+
+    def __init__(self, epoch: Epoch, send: Callable[[dict], dict]):
+        self.epoch, self.send = epoch, send
+        self._lock = threading.Lock()
+        self._in_flight = 0
+
+    def __call__(self, body: dict) -> dict:
+        with self._lock:
+            self.epoch.require_active()
+            self._in_flight += 1
+        try:
+            reply = self.send(body)
+            self.epoch.require_active()
+            return reply
+        finally:
+            with self._lock:
+                self._in_flight -= 1
+
+    def require_quiescent(self) -> None:
+        with self._lock:
+            require(self._in_flight == 0, "worker_refresh_in_flight")
+
+
 def _job_id(value: object) -> str:
     require(
         type(value) is str and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value) is not None,
@@ -110,7 +148,9 @@ class Worker:
         self.output_root = output_root
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.monotonic, self.sleep = monotonic, sleep
-        self.store = WorkerStore(journal)
+        self.store: WorkerStore | SequenceStore = (
+            WorkerStore(journal) if admission.max_attempts is None else SequenceStore(journal)
+        )
         self._used = False
 
     def _ready(self) -> None:
@@ -175,10 +215,35 @@ class Worker:
         )
         self._ready()
         require(local_holds(self.journal) == 0, "worker_unresolved_local_attempt")
-        self.store.reserve_runtime(self.admission.runtime_id, self.admission.runtime_sha256)
-        job = self._discover(wait_seconds, poll_seconds)
-        if job is None:
-            return None
+        with self.journal._connection() as con:
+            require(sequence_holds(con) == 0, "worker_unresolved_local_attempt")
+        if isinstance(self.store, WorkerStore):
+            self.store.reserve_runtime(self.admission.runtime_id, self.admission.runtime_sha256)
+            job = self._discover(wait_seconds, poll_seconds)
+            return None if job is None else self._run_job(job)
+        maximum = self.admission.max_attempts
+        require(maximum is not None, "worker_sequence_admission_required")
+        assert maximum is not None
+        self.store.reserve_runtime(
+            self.admission.runtime_id, self.admission.runtime_sha256, maximum
+        )
+        last = None
+        for sequence in range(1, maximum + 1):
+            require(local_holds(self.journal) == 0, "worker_unresolved_local_attempt")
+            with self.journal._connection() as con:
+                require(sequence_holds(con) == 0, "worker_unresolved_local_attempt")
+            job = self._discover(wait_seconds, poll_seconds)
+            if job is None:
+                return last
+            # The callback captures this epoch before Entry/Gate construction.
+            epoch = cast(SequenceOwner, self.owner).begin_attempt(sequence)
+            epoch.require_active()
+            last = self._run_job(job, sequence=sequence, epoch=epoch)
+        return last
+
+    def _run_job(
+        self, job: dict, *, sequence: int | None = None, epoch: Epoch | None = None
+    ) -> RunRecord:
         self._ready()
         job_id = _job_id(job["id"])
         engagement_id = _job_id(job["program_id"])
@@ -202,6 +267,24 @@ class Worker:
         def post(operation: str, body: dict) -> dict:
             return self.client.managed_post(f"/jobs/{job_id}/managed/{operation}", body)
 
+        refresh = (
+            _EpochRefresh(epoch, lambda body: post("refresh", body)) if epoch is not None else None
+        )
+
+        def prepare_claim(con, run_id):
+            public = dict(
+                runtime_id=self.admission.runtime_id,
+                runtime_sha256=self.admission.runtime_sha256,
+                runner_id=self.runner_id,
+                enrollment_id=self.admission.enrollment_id,
+            )
+            if isinstance(self.store, SequenceStore):
+                require(sequence is not None, "worker_sequence_required")
+                assert sequence is not None
+                self.store.prepare_claim(con, run_id, runtime_sequence=sequence, **public)
+            else:
+                self.store.prepare_claim(con, run_id, **public)
+
         handle: ManagedRun
 
         def consume(body: dict) -> dict:
@@ -222,6 +305,8 @@ class Worker:
                 runtime_id=self.admission.runtime_id,
                 runtime_sha256=self.admission.runtime_sha256,
             )
+            if sequence is not None:
+                binding["runtime_sequence"] = sequence
             self.store.prepare_binding(handle.run_id, binding)
             self._ready()
             acknowledgement = post(
@@ -230,6 +315,7 @@ class Worker:
                     **body,
                     "runtime_id": binding["runtime_id"],
                     "runtime_sha256": binding["runtime_sha256"],
+                    **({"runtime_sequence": sequence} if sequence is not None else {}),
                 },
             )
             self.store.acknowledge_binding(handle.run_id, binding, acknowledgement)
@@ -248,6 +334,7 @@ class Worker:
                     **body,
                     "runtime_id": self.admission.runtime_id,
                     "runtime_sha256": self.admission.runtime_sha256,
+                    **({"runtime_sequence": sequence} if sequence is not None else {}),
                 },
             )
 
@@ -263,18 +350,12 @@ class Worker:
             allocated_seconds=self.allocated_seconds,
             anchors=self.anchors,
             claim=claim,
-            current=lambda body: post("refresh", body),
+            current=refresh if refresh is not None else lambda body: post("refresh", body),
             consume=consume,
-            verified_lease=self.owner.verified_lease,
+            verified_lease=self.owner.verified_lease if epoch is None else None,
+            verified_runtime_lease=epoch.verified_lease if epoch is not None else None,
             preclaim_check=preclaim_check,
-            before_claim_send=lambda con, run_id: self.store.prepare_claim(
-                con,
-                run_id,
-                runtime_id=self.admission.runtime_id,
-                runtime_sha256=self.admission.runtime_sha256,
-                runner_id=self.runner_id,
-                enrollment_id=self.admission.enrollment_id,
-            ),
+            before_claim_send=prepare_claim,
             clock=self.clock,
             monotonic=self.monotonic,
         )
@@ -289,10 +370,49 @@ class Worker:
             except Exception:
                 pass
             raise
-        handle.finalize(lambda body: post("result", body), lambda body: post("finish", body))
-        self.owner.finished()
+        completion = handle.finalize(
+            lambda body: post("result", body), lambda body: post("finish", body)
+        )
+        if epoch is None:
+            self.owner.finished()
+        else:
+            require(
+                isinstance(self.store, SequenceStore) and refresh is not None,
+                "worker_sequence_required",
+            )
+            assert isinstance(self.store, SequenceStore) and refresh is not None
+            require(completion["outcome"] == "completed", "worker_healthy_completion_required")
+            self.store.completion(handle.run_id, completion)
+            epoch.seal()
+            require(handle.gate.control is not None, "worker_control_missing")
+            assert handle.gate.control is not None
+            # No owner/Gate/refresh mutex is held across this bounded join.
+            handle.gate.control.quiesce(epoch.quiescence_deadline())
+            refresh.require_quiescent()
+            self.store.done(handle.run_id, epoch.finished())
+            expected = self.store.prepare_release(handle.run_id)
+            self._ready()
+            acknowledgement = post(
+                "runtime-idle-release",
+                {
+                    **handle.gate.request,
+                    "contract_sha256": expected["binding"]["contract_sha256"],
+                    **{
+                        key: expected[key]
+                        for key in (
+                            "runtime_id",
+                            "runtime_sha256",
+                            "runtime_sequence",
+                            "terminal_receipt_sha256",
+                            "native_done_sha256",
+                        )
+                    },
+                },
+            )
+            self.store.acknowledge_release(handle.run_id, acknowledgement)
         record = self.journal.get(handle.run_id)
         require(record is not None, "worker_terminal_record_missing")
+        assert record is not None
         return record
 
 
@@ -333,6 +453,7 @@ def main(argv: list[str] | None = None) -> int:
         url, key = config.require_auth()
         runner_id = identity.load_or_create().runner_id
         admission = await_admission(args.admission, args.admission_wait_seconds)
+        require(admission.max_attempts is not None, "worker_sequence_admission_required")
         admission.require_current(now=datetime.now(timezone.utc), origin=url, runner_id=runner_id)
         with connect(admission) as owner:
             remaining = int(

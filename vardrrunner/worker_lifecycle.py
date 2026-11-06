@@ -11,12 +11,14 @@ import errno
 import hashlib
 import math
 import os
+import re
 import signal
 import socket
 import struct
 import sys
 import threading
 import time
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -30,12 +32,19 @@ if TYPE_CHECKING:
     from vardrrunner.execution_control import Control
 
 _PACKET = struct.Struct("<IIQQ32s")
+_PACKET_V2 = struct.Struct("<IIQQQ32s")
 _CREDENTIALS = struct.Struct("=iii")
 _MAGIC = 0x31574456
+_MAGIC_V2 = 0x32574456
 _READY, _HELLO, _LEASE, _DONE, _ACK = 1, 2, 3, 4, 5
 _WALL = 0x40000000
 REPORT_RUNWAY_SECONDS = 150
 _SECOND = 1_000_000_000
+_IDLE_SECONDS = 60
+_BINDING = frozenset(
+    {"origin", "job_id", "runner_id", "contract_id", "attempt_id", "fence", "contract_sha256"}
+)
+_CONTROL_BINDING = (_BINDING - {"contract_sha256"}) | {"authority_revision", "authority_sha256"}
 _ACTIVE: WorkerOwner | None = None
 _GLOBAL = threading.Lock()
 _HOOK_INSTALLED = False
@@ -156,6 +165,11 @@ class WorkerOwner:
             self._channel.send(_PACKET.pack(_MAGIC, kind, lease, hard, binding)) == _PACKET.size
         )
         _require(self._receive() == (_ACK, lease, hard, binding))
+
+    def _handshake(self, nonce: bytes) -> None:
+        _require(self._receive() == (_READY, 0, 0, nonce))
+        _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < self._work_end)  # type: ignore[attr-defined]
+        self._exchange(_HELLO, self._work_end, self._grant_end, nonce)
 
     def require_ready(self, admission: Admission) -> None:
         _require(self._ready and not self._closed and os.getpid() == self._pid)
@@ -282,6 +296,201 @@ class WorkerOwner:
             self._finished = True
 
 
+class AttemptEpoch:
+    """An immutable sequence identity; stale callbacks never select a newer attempt."""
+
+    def __init__(self, owner: SequentialWorkerOwner, sequence: int):
+        self._owner, self._sequence = owner, sequence
+        self._sealed = self._finished = False
+        self._binding: dict | None = None
+        self._control: Control | None = None
+
+    @property
+    def runtime_sequence(self) -> int:
+        return self._sequence
+
+    def _current(self) -> None:
+        self._owner.require_ready(self._owner._admission)
+        _require(self._owner._epoch is self and not self._finished)
+
+    def require_active(self) -> None:
+        self._current()
+        _require(not self._sealed)
+
+    def verified_lease(self, binding: dict, lease_end: float, hard_end: float) -> None:
+        owner = self._owner
+        with owner._lock:
+            self.require_active()
+            _require(type(binding) is dict and set(binding) == _BINDING)
+            _require(binding["origin"] == owner._admission.origin)
+            _require(binding["runner_id"] == owner._admission.runner_id)
+            _require(
+                type(binding["job_id"]) is str
+                and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", binding["job_id"])
+            )
+            for key in ("runner_id", "contract_id", "attempt_id"):
+                _require(type(binding[key]) is str and str(uuid.UUID(binding[key])) == binding[key])
+            _require(type(binding["fence"]) is int and 1 <= binding["fence"] <= 2**53 - 1)
+            _require(
+                type(binding["contract_sha256"]) is str
+                and re.fullmatch(r"[a-f0-9]{64}", binding["contract_sha256"])
+            )
+            _require(self._binding is None or self._binding == binding)
+            for value in (lease_end, hard_end):
+                _require(type(value) in (int, float) and math.isfinite(value))
+            boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+            mono = time.monotonic()
+            _require(0 < lease_end - mono <= 10 and lease_end <= hard_end <= mono + 86400)
+            lease = owner._clock_boot + int((lease_end - owner._clock_monotonic) * _SECOND)
+            hard = min(
+                owner._clock_boot + int((hard_end - owner._clock_monotonic) * _SECOND),
+                owner._work_end,
+            )
+            if self._binding is not None:
+                hard = min(hard, owner._hard)
+            lease = min(lease, hard)
+            _require(boot < lease <= hard)
+            hashed = hashlib.sha256(
+                encoded(
+                    {
+                        "runtime_id": owner._admission.runtime_id,
+                        "runtime_sha256": owner._admission.runtime_sha256,
+                        "runtime_sequence": self._sequence,
+                        "binding": binding,
+                    }
+                )
+            ).digest()
+            owner._exchange_v2(_LEASE, self._sequence, lease, hard, hashed)
+            self._binding = dict(binding)
+            owner._binding, owner._lease, owner._hard = hashed, lease, hard
+
+    def seal(self) -> None:
+        with self._owner._lock:
+            self._current()
+            self._sealed = True
+
+    def quiescence_deadline(self) -> float:
+        with self._owner._lock:
+            self._current()
+            # Inverse conversion samples MONOTONIC first, BOOTTIME last: a
+            # pause can only shorten the remaining native-owner wait budget.
+            mono = time.monotonic()
+            boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+            ceiling = min(self._owner._lease, self._owner._hard, self._owner._work_end)
+            return mono + max(0.0, (ceiling - boot) / _SECOND)
+
+    def finished(self) -> str:
+        owner = self._owner
+        with owner._lock:
+            self._current()
+            _require(self._sealed and self._binding is not None)
+            _require(self._control is not None and self._control.worker_quiescent())
+            _require(owner._launched and owner._drained and owner._empty_children())
+            binding = owner._binding
+            if binding is None:
+                raise LifecycleUnavailable("worker_attempt_not_armed")
+            before = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+            proof = owner._exchange_v2(_DONE, self._sequence, 0, 0, binding)
+            owner._idle_end = min(before + _IDLE_SECONDS * _SECOND, owner._work_end)
+            self._finished = True
+            return proof
+
+
+class SequentialWorkerOwner(WorkerOwner):
+    """V2 native channel with bounded idle and per-attempt ownership epochs."""
+
+    def __init__(
+        self,
+        channel: socket.socket,
+        admission: Admission,
+        clock_anchor: tuple[int, float],
+        grant_end: int,
+    ):
+        super().__init__(channel, admission, clock_anchor, grant_end)
+        _require(
+            type(self._admission.max_attempts) is int and 1 <= self._admission.max_attempts <= 32
+        )
+        self._epoch: AttemptEpoch | None = None
+        self._sequence = 0
+        self._idle_end = self._work_end
+
+    def _receive_v2(self) -> tuple[int, int, int, int, bytes]:
+        data, ancillary, flags, _ = self._channel.recvmsg(  # type: ignore[attr-defined]
+            _PACKET_V2.size,
+            socket.CMSG_SPACE(_CREDENTIALS.size),  # type: ignore[attr-defined]
+        )
+        _require(not flags and len(data) == _PACKET_V2.size and len(ancillary) == 1)
+        level, kind, credentials = ancillary[0]
+        _require(level == socket.SOL_SOCKET and kind == socket.SCM_CREDENTIALS)  # type: ignore[attr-defined]
+        _require(len(credentials) == _CREDENTIALS.size)
+        _require(_CREDENTIALS.unpack(credentials) == (1, 10000, 10000))
+        magic, kind, sequence, lease, hard, binding = _PACKET_V2.unpack(data)
+        _require(magic == _MAGIC_V2)
+        return kind, sequence, lease, hard, binding
+
+    def _exchange_v2(self, kind: int, sequence: int, lease: int, hard: int, binding: bytes) -> str:
+        _require(
+            self._channel.send(_PACKET_V2.pack(_MAGIC_V2, kind, sequence, lease, hard, binding))
+            == _PACKET_V2.size
+        )
+        _require(self._receive_v2() == (_ACK, sequence, lease, hard, binding))
+        return hashlib.sha256(
+            _PACKET_V2.pack(_MAGIC_V2, _ACK, sequence, lease, hard, binding)
+        ).hexdigest()
+
+    def _handshake(self, nonce: bytes) -> None:
+        _require(self._receive_v2() == (_READY, 0, 0, 0, nonce))
+        before = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+        _require(before < self._work_end)
+        self._exchange_v2(_HELLO, 0, self._work_end, self._grant_end, nonce)
+        self._idle_end = min(before + _IDLE_SECONDS * _SECOND, self._work_end)
+
+    def require_ready(self, admission: Admission) -> None:
+        super().require_ready(admission)
+        if self._epoch is None or self._epoch._finished or self._binding is None:
+            _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < self._idle_end)  # type: ignore[attr-defined]
+
+    def begin_attempt(self, runtime_sequence: int) -> AttemptEpoch:
+        with self._lock:
+            self.require_ready(self._admission)
+            _require(self._epoch is None or self._epoch._finished)
+            _require(type(runtime_sequence) is int and runtime_sequence == self._sequence + 1)
+            maximum = self._admission.max_attempts
+            _require(maximum is not None and runtime_sequence <= maximum)
+            _require(self._empty_children())
+            self._binding, self._lease, self._hard = None, 0, 0
+            self._launched = self._drained = False
+            self._sequence = runtime_sequence
+            self._epoch = AttemptEpoch(self, runtime_sequence)
+            return self._epoch
+
+    def verified_lease(
+        self, binding: dict, lease_end_monotonic: float, hard_end_monotonic: float
+    ) -> None:
+        raise LifecycleUnavailable("worker_attempt_epoch_required")
+
+    def finished(self) -> None:
+        raise LifecycleUnavailable("worker_attempt_epoch_required")
+
+    def run(
+        self, cmd: list[str], seconds: int, observer: Callable[[int], None] | None, control: Control
+    ) -> int:
+        epoch = self._epoch
+        if epoch is None:
+            raise LifecycleUnavailable("worker_attempt_epoch_required")
+        epoch.require_active()
+        binding = epoch._binding
+        if binding is None:
+            raise LifecycleUnavailable("worker_attempt_not_armed")
+        _require(set(control.binding) == _CONTROL_BINDING)
+        _require(
+            all(control.binding[key] == binding[key] for key in _BINDING - {"contract_sha256"})
+        )
+        _require(epoch._control is None or epoch._control is control)
+        epoch._control = control
+        return super().run(cmd, seconds, observer, control)
+
+
 @contextmanager
 def connect(admission: Admission) -> Iterator[WorkerOwner]:
     """Accept only the fixed inherited fd3; never an env flag or caller socket."""
@@ -301,12 +510,14 @@ def connect(admission: Admission) -> Iterator[WorkerOwner]:
             channel.settimeout(1.0)
             _require(channel.family == socket.AF_UNIX and channel.type == socket.SOCK_SEQPACKET)  # type: ignore[attr-defined]
             _require(channel.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED) == 1)  # type: ignore[attr-defined]
-            owner = WorkerOwner(channel, admission, clock_anchor, grant_end)
-            ready = owner._receive()
+            owner_type = (
+                SequentialWorkerOwner
+                if getattr(admission, "max_attempts", None) is not None
+                else WorkerOwner
+            )
+            owner = owner_type(channel, admission, clock_anchor, grant_end)
             nonce = bytes.fromhex(admission.identity["owner_nonce"])
-            _require(ready == (_READY, 0, 0, nonce))
-            _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < owner._work_end)  # type: ignore[attr-defined]
-            owner._exchange(_HELLO, owner._work_end, owner._grant_end, nonce)
+            owner._handshake(nonce)
             if not _HOOK_INSTALLED:
                 sys.addaudithook(_audit)
                 _HOOK_INSTALLED = True

@@ -5,17 +5,18 @@ Gate execution and receipt protocols. It is inactive during ordinary Runner
 startup. It does not change `jobs run`, direct commands or Mapless/standalone
 execution, and it does not provide a second scanner.
 
-The initial implementation permits **one physical attempt per admitted container**.
-It can poll for approved pending work during a finite startup wait; it does not
-claim sequential jobs, schedule scans or restart itself. Deployment, operator
+The retained v1 mode permits one physical attempt per admitted container against
+its matching image. Explicit v2 admission selects **1–32 healthy attempts** with
+fresh execution objects for each job. The v2 image refuses v1 admission; no
+protocol downgrade or automatic enablement occurs. Deployment, operator
 enablement, public admission and host reconciliation belong to the distribution.
-Actual Linux/Docker and Windows Docker Desktop acceptance remains separate from
-the inert orchestration tests.
+The first one-attempt Desktop slice passed separately; actual v2 Linux/Docker and
+Windows Docker Desktop acceptance remains open.
 
 ## Entry and authority
 
-The fixed worker entrypoint is `python -I -m vardrrunner.managed_worker`, with no
-container command override. Its public admission and trust files default to
+The fixed native PID-1 owner starts only `python -I -m vardrrunner.managed_worker`,
+with no container command override. Its public admission and trust files default to
 `/run/vardr-worker-admission/admission.json` and `trust.json` in that same protected
 read-only directory. Missing admission may be awaited; malformed or expired data
 is refused immediately. The operator configures these profile values before start:
@@ -70,6 +71,35 @@ The additive `managed_runtime_bindings` table lives in the existing Runner
 journal. It stores public runtime/attempt bindings and `waiting`, `bind_in_flight`
 or `bound` state. It stores no control token, signed permission or host secret.
 An invocation or uncertain send cannot be reconstructed as permission to retry.
+
+## Explicit healthy sequencing candidate
+
+The operator selects v2 with `worker enable --max-attempts N` in the Distribution.
+Omitting the option preserves the matching v1 path. The fixed v2 image requires
+owner-ready/2, admission/2 and exact sequence-bearing native acknowledgements.
+Existing signed authorization contracts and job terminal receipts retain their
+formats. The original admission expiry and 150-second reporting runway stay fixed.
+
+Each healthy attempt needs its validated completed receipt durably recorded,
+an empty native lineage, a sealed callback epoch and the actual Control refresh
+thread joined. Only then may native DONE enter at most 60 seconds of nonspawning
+idle, capped by the unchanged work ceiling. The original in-memory claim token
+performs one exact Map idle-release call; its full-completion digest and native
+DONE digest are correlation metadata, not independent server attestation.
+Only its durable acknowledgement permits the next sequence. Idle cannot renew.
+
+The existing journal gains `managed_worker_incarnations` and
+`managed_worker_attempts`; original claim links, completion, DONE and release
+send/ACK history remain retained. No token or host secret is stored there. A
+completed job alone cannot clear an uncertain sequence hold. Exact authenticated
+v3 observation may record physical retirement while preserving every original
+ACK marker; startup rereads the complete retained proof before treating it closed.
+
+Failed, cancelled or uncertain work ends the incarnation. Recovery requires
+explicit observation/reconciliation and fresh admission where needed; it never
+retries that attempt or refunds its charges. Reaching the batch or finite idle
+limit also exits. Always-running supervision and automatic restarts are not
+implemented or silently enabled by this candidate.
 
 ## Failure and recovery
 

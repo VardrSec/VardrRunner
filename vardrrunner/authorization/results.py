@@ -242,7 +242,7 @@ def check_completion(reply: dict, record: dict) -> None:
     )
 
 
-def finalize(handle, submit: Callable[[dict], dict], finish: Callable[[dict], dict]) -> None:
+def finalize(handle, submit: Callable[[dict], dict], finish: Callable[[dict], dict]) -> dict:
     """One explicit call after normal native return; no retry after any ambiguity."""
     require(handle._returned_artifact is not None, "known_native_return_required")
     output, expected_hash, expected_size = handle._returned_artifact
@@ -297,6 +297,7 @@ def finalize(handle, submit: Callable[[dict], dict], finish: Callable[[dict], di
         raise AuthorizationError("managed_finish_outcome_unknown") from None
     check_completion(reply, record)
     store.close(handle.run_id, record)
+    return decoded(encoded(reply))  # Only the validated, durably accepted canonical ACK.
 
 
 def reconcile(journal: Journal, run_id: str, inspect: Callable[[dict], dict]) -> str:

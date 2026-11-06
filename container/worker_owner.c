@@ -30,7 +30,7 @@
 #endif
 #define OWNER 10000
 #define RUNNER 10001
-#define MAGIC 0x31574456u
+#define MAGIC 0x32574456u
 #define NS 1000000000ULL
 #define REPORT_RUNWAY (150ULL * NS)
 #define BOOT 0u
@@ -39,8 +39,15 @@
 #define LEASE 3u
 #define DONE 4u
 #define ACK 5u
-struct packet { uint32_t magic, type; uint64_t lease, hard; unsigned char binding[32]; };
-_Static_assert(sizeof(struct packet) == 56, "fixed local protocol ABI");
+#define MAX_ATTEMPTS 32u
+#define IDLE_SECONDS 60u
+struct packet { uint32_t magic, type; uint64_t sequence, lease, hard; unsigned char binding[32]; };
+_Static_assert(sizeof(struct packet) == 64, "fixed local protocol ABI");
+struct protocol {
+    int hello, armed, done;
+    uint64_t sequence, lease, hard, work_end, grant_end;
+    unsigned char binding[32];
+};
 static volatile sig_atomic_t stopping;
 static void stopped(int signo) { (void)signo; stopping = 1; }
 static void fail(void) { _exit(125); }
@@ -192,6 +199,40 @@ static int receive(int fd, pid_t pid, uid_t uid, int eof_allowed, struct packet 
     if (cred.pid != pid || cred.uid != uid || cred.gid != uid) fail();
     return 1;
 }
+static void accept_packet(struct protocol *state, const struct packet *p,
+    const unsigned char nonce[32], uint64_t now) {
+    if (now >= state->lease || now >= state->hard || now >= state->grant_end) fail();
+    if (!state->hello) {
+        if (p->type != HELLO || p->sequence || p->lease <= now || p->hard <= p->lease ||
+            p->hard - p->lease != REPORT_RUNWAY || p->hard > now + 604800 * NS ||
+            memcmp(p->binding, nonce, 32)) fail();
+        state->work_end = p->lease; state->grant_end = p->hard;
+        uint64_t idle = now + IDLE_SECONDS * NS;
+        if (idle < state->lease) state->lease = idle;
+        if (state->work_end < state->lease) state->lease = state->work_end;
+        state->hard = state->lease;
+        state->hello = 1;
+    } else if (p->type == LEASE) {
+        if (p->lease <= now || p->lease > now + 10 * NS || p->hard < p->lease ||
+            p->hard > now + 86400 * NS || p->hard > state->work_end) fail();
+        if (state->armed) {
+            if (p->sequence != state->sequence || memcmp(state->binding, p->binding, 32) ||
+                p->hard > state->hard) fail();
+        } else {
+            if (state->sequence >= MAX_ATTEMPTS || p->sequence != state->sequence + 1) fail();
+            state->sequence = p->sequence;
+            memcpy(state->binding, p->binding, 32);
+        }
+        state->hard = p->hard; state->lease = p->lease;
+        state->armed = 1; state->done = 0;
+    } else if (p->type == DONE && state->armed && !state->done) {
+        if (p->sequence != state->sequence || memcmp(state->binding, p->binding, 32) ||
+            p->lease || p->hard) fail();
+        state->armed = 0; state->done = 1;
+        state->lease = state->hard = now + IDLE_SECONDS * NS;
+        if (state->work_end < state->lease) state->lease = state->hard = state->work_end;
+    } else fail();
+}
 static void publish(const unsigned char nonce[32]) {
     int dir = open("/run/vardr-worker-ready", O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     struct stat st;
@@ -203,7 +244,7 @@ static void publish(const unsigned char nonce[32]) {
     for (int i = 0; i < 32; i++) snprintf(hex + i * 2, 3, "%02x", nonce[i]);
     char out[1024];
     int n = snprintf(out, sizeof(out),
-        "{\"schema\":\"vardr.worker-owner-ready/1\",\"owner_nonce\":\"%s\","
+        "{\"schema\":\"vardr.worker-owner-ready/2\",\"owner_nonce\":\"%s\","
         "\"owner_pid\":1,\"owner_uid\":10000,\"runner_uid\":10001,"
         "\"capabilities\":{\"effective\":\"0000000000000000\",\"permitted\":\"0000000000000000\","
         "\"inheritable\":\"0000000000000000\",\"ambient\":\"0000000000000000\","
@@ -273,16 +314,15 @@ int main(int argc, char **argv) {
     sigemptyset(&action.sa_mask);
     if (sigaction(SIGTERM, &action, NULL) || sigaction(SIGINT, &action, NULL) ||
         sigaction(SIGHUP, &action, NULL)) fail();
-    int booted = 0, hello = 0, armed = 0, done = 0;
-    uint64_t lease = startup, hard = startup;
-    uint64_t work_end = UINT64_MAX, grant_end = UINT64_MAX;
-    unsigned char binding[32] = {0};
+    int booted = 0;
+    struct protocol state = { .lease = startup, .hard = startup,
+        .work_end = UINT64_MAX, .grant_end = UINT64_MAX };
     while (1) {
-        if (stopping || now_ns() >= lease || now_ns() >= hard || now_ns() >= grant_end) fail();
+        if (stopping || now_ns() >= state.lease || now_ns() >= state.hard || now_ns() >= state.grant_end) fail();
         int status;
         pid_t waited = waitpid(child, &status, WNOHANG);
         if (waited == child) {
-            if (WIFEXITED(status) && WEXITSTATUS(status) == 0 && (!armed || done)) _exit(0);
+            if (WIFEXITED(status) && WEXITSTATUS(status) == 0 && (!state.armed || state.done)) _exit(0);
             fail();
         }
         if (waited < 0 && errno != EINTR) fail();
@@ -292,17 +332,17 @@ int main(int argc, char **argv) {
         if (!n) continue;
         if (!(poller.revents & (POLLIN | POLLHUP))) fail();
         struct packet p;
-        int terminal_eof = (poller.revents & POLLHUP) && (!armed || done);
+        int terminal_eof = (poller.revents & POLLHUP) && (!state.armed || state.done);
         if (!receive(pair[0], child, RUNNER, terminal_eof, &p)) {
             /* POLLIN may accompany EOF before the exact child is waitable.
              * Only waitpid above can establish success; deadlines stay armed. */
             struct timespec pause = { .tv_nsec = 20000000 };
             nanosleep(&pause, NULL); continue;
         }
-        if (now_ns() >= lease || now_ns() >= hard) fail();
+        if (now_ns() >= state.lease || now_ns() >= state.hard) fail();
         if (!booted) {
             unsigned char zero[32] = {0};
-            if (p.type != BOOT || p.lease || p.hard || memcmp(p.binding, zero, 32) ||
+            if (p.type != BOOT || p.sequence || p.lease || p.hard || memcmp(p.binding, zero, 32) ||
                 getsid(child) == getsid(0) || getsid(child) != child) fail();
             booted = 1;
             verify_zero(); publish(nonce);
@@ -310,27 +350,7 @@ int main(int argc, char **argv) {
             memcpy(ready.binding, nonce, 32); send_packet(pair[0], &ready);
             continue;
         }
-        if (!hello) {
-            uint64_t now = now_ns();
-            if (p.type != HELLO || p.lease <= now || p.hard <= p.lease ||
-                p.hard - p.lease != REPORT_RUNWAY || p.hard > now + 604800 * NS ||
-                memcmp(p.binding, nonce, 32)) fail();
-            work_end = p.lease; grant_end = p.hard;
-            if (work_end < lease) lease = work_end;
-            if (work_end < hard) hard = work_end;
-            hello = 1;
-        } else if (p.type == LEASE && !done) {
-            uint64_t now = now_ns();
-            if (p.lease <= now || p.lease > now + 10 * NS || p.hard < p.lease ||
-                p.hard > now + 86400 * NS || p.hard > work_end) fail();
-            if (armed) {
-                if (memcmp(binding, p.binding, 32) || p.hard > hard) fail();
-            } else memcpy(binding, p.binding, 32);
-            hard = p.hard; lease = p.lease; armed = 1;
-        } else if (p.type == DONE && armed && !done) {
-            if (memcmp(binding, p.binding, 32) || p.lease || p.hard) fail();
-            done = 1;
-        } else fail();
+        accept_packet(&state, &p, nonce, now_ns());
         p.type = ACK; send_packet(pair[0], &p);
     }
 }

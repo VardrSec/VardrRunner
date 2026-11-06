@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from vardrrunner.journal import normalize_backend_url
 
-from .codec import AuthorizationError, digest, encoded, fields, identifier, require
+from .codec import AuthorizationError, digest, encoded, fields, identifier, integer, require
 from .contracts import timestamp
 
 ADMISSION_FIELDS = {
@@ -55,11 +55,17 @@ class Admission:
     capability_sha256: str
     identity: dict
     expires_at: datetime
+    max_attempts: int | None = None
 
     @classmethod
     def parse(cls, value: dict, *, now: datetime) -> Admission:
-        fields(value, ADMISSION_FIELDS)
-        require(value["schema"] == "vardr.worker-admission/1", "worker_admission_schema")
+        sequenced = value.get("schema") == "vardr.worker-admission/2"
+        fields(value, ADMISSION_FIELDS | ({"max_attempts"} if sequenced else set()))
+        require(
+            value["schema"] in {"vardr.worker-admission/1", "vardr.worker-admission/2"},
+            "worker_admission_schema",
+        )
+        maximum = integer(value["max_attempts"], 1, 32) if sequenced else None
         identity = fields(value["identity"], IDENTITY_FIELDS)
         require(len(encoded(value)) <= 8192, "worker_admission_size")
         for key in ("daemon_id", "image_id", "project", "started_at"):
@@ -93,6 +99,7 @@ class Admission:
             hash_value(value["capability_sha256"]),
             copy.deepcopy(identity),
             expiry,
+            maximum,
         )
 
     def require_current(self, *, now: datetime, origin: str, runner_id: str) -> None:

@@ -314,10 +314,10 @@ class ManagedRun:
                 pass
             raise
 
-    def finalize(self, submit: Callable[[dict], dict], finish: Callable[[dict], dict]) -> None:
+    def finalize(self, submit: Callable[[dict], dict], finish: Callable[[dict], dict]) -> dict:
         from .results import finalize
 
-        finalize(self, submit, finish)
+        return finalize(self, submit, finish)
 
     def report_stop(self, send: Callable[[dict], dict]) -> None:
         from .stops import report
@@ -345,6 +345,7 @@ class ManagedEntry:
         current: Callable[[dict], dict],
         consume: Callable[[dict], dict] | None = None,
         verified_lease: Callable[[dict, float, float], None] | None = None,
+        verified_runtime_lease: Callable[[dict, float, float], None] | None = None,
         preclaim_check: Callable[[], None] | None = None,
         before_claim_send: Callable[[sqlite3.Connection, str], None] | None = None,
         clock: Callable[[], datetime] | None = None,
@@ -360,6 +361,7 @@ class ManagedEntry:
         self._claim, self._current = claim, current
         self._consume = consume
         self._verified_lease = verified_lease
+        self._verified_runtime_lease = verified_runtime_lease
         self._preclaim_check = preclaim_check
         self._before_claim_send = before_claim_send
         self.clock, self.monotonic = clock or (lambda: datetime.now(timezone.utc)), monotonic
@@ -542,6 +544,7 @@ class ManagedEntry:
                     grant_snapshot=dict(policy.expected or {}),
                     grant_expiry=policy.expires_at,
                     verified_lease=self._verified_lease,
+                    verified_runtime_lease=self._verified_runtime_lease,
                 )
                 handlers.check_gate_case(self.case, self.engagement_id)
                 gate.refresh()  # Full signed/owned/current validation before durable binding; consumes nothing.

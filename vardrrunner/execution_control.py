@@ -108,6 +108,27 @@ class Control:
         self._close.set()
         self._thread.join(timeout=0.1)
 
+    def quiesce(self, absolute_deadline: float) -> None:
+        """Worker-only join barrier; a timed-out refresh never permits reuse."""
+        if (
+            isinstance(absolute_deadline, bool)
+            or not isinstance(absolute_deadline, (int, float))
+            or not math.isfinite(absolute_deadline)
+            or threading.current_thread() is self._thread
+        ):
+            raise RuntimeError("worker_control_quiescence_unavailable")
+        self._close.set()
+        if self._thread.ident is not None:
+            self._thread.join(timeout=max(0.0, absolute_deadline - time.monotonic()))
+        if self._thread.is_alive():
+            raise RuntimeError("worker_control_quiescence_unavailable")
+
+    def worker_quiescent(self) -> bool:
+        """Read actual closure/thread state for the native worker epoch barrier."""
+        return (
+            self._close.is_set() and self._thread.ident is not None and not self._thread.is_alive()
+        )
+
 
 _CONTROL: ContextVar[Control | None] = ContextVar("execution_control", default=None)
 
