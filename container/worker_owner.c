@@ -179,7 +179,8 @@ static int receive(int fd, pid_t pid, uid_t uid, int eof_allowed, struct packet 
     struct msghdr msg = { .msg_iov = &iov, .msg_iovlen = 1,
         .msg_control = ancillary, .msg_controllen = sizeof(ancillary) };
     ssize_t n = recvmsg(fd, &msg, MSG_DONTWAIT | MSG_CMSG_CLOEXEC);
-    if (n == 0 && msg.msg_flags == 0 && msg.msg_controllen == 0) {
+    /* Linux may echo the requested CMSG_CLOEXEC flag even on clean EOF. */
+    if (n == 0 && !(msg.msg_flags & ~MSG_CMSG_CLOEXEC) && msg.msg_controllen == 0) {
         if (!eof_allowed) fail();
         return 0;
     }

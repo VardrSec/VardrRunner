@@ -1,7 +1,21 @@
 /* Ordinary private socket/close regressions; never invokes the PID1 bootstrap. */
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <sys/socket.h>
+
+static const char *stage = "startup";
+static ssize_t observed_recvmsg(int fd, struct msghdr *msg, int flags) {
+    ssize_t n = recvmsg(fd, msg, flags);
+    fprintf(stderr, "owner_eof_test stage=%s n=%zd flags=0x%x control=%zu\n",
+        stage, n, msg->msg_flags, msg->msg_controllen);
+    return n;
+}
+
+#define recvmsg observed_recvmsg
 #define main worker_owner_entrypoint
 #include "../worker_owner.c"
 #undef main
+#undef recvmsg
 
 static void check(int condition) {
     if (!condition) _exit(1);
@@ -21,6 +35,7 @@ static short ready(int fd) {
 }
 
 static void queued_packet_then_eof(void) {
+    stage = "queued_packet";
     int pair[2]; sockets(pair);
     struct packet sent = { .magic = MAGIC, .type = DONE };
     sent.binding[0] = 42;
@@ -30,12 +45,14 @@ static void queued_packet_then_eof(void) {
     struct packet got;
     check(receive(pair[0], getpid(), getuid(), event & POLLHUP, &got) == 1);
     check(memcmp(&sent, &got, sizeof(sent)) == 0);
+    stage = "queued_eof";
     event = ready(pair[0]);
     check(receive(pair[0], getpid(), getuid(), event & POLLHUP, &got) == 0);
     check(close(pair[0]) == 0);
 }
 
 static void eof_before_waitable_child(void) {
+    stage = "nonwaitable_child_eof";
     int pair[2], release[2]; sockets(pair);
     check(pipe2(release, O_CLOEXEC) == 0);
     pid_t child = fork();
@@ -61,6 +78,7 @@ static void eof_before_waitable_child(void) {
 }
 
 static void refused(int malformed) {
+    stage = malformed ? "malformed_packet_refused" : "active_eof_refused";
     pid_t child = fork();
     check(child >= 0);
     if (child == 0) {
