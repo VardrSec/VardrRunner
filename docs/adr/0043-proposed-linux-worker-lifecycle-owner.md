@@ -497,3 +497,34 @@ advance NM-3.
   [Moby defaults](https://github.com/moby/moby/blob/master/daemon/pkg/oci/defaults.go)
 - A new host daemon, Docker-socket proxy or alternative container runtime would
   introduce infrastructure. None is selected or required by this proposed ADR.
+
+## Offline existing-state inspection amendment
+
+Owner-approved private implementation/testing adds only an offline, explicit
+Runner-owned inspection contract. The top-level `worker-state` command requires
+existing identity/journal paths and exact Runner UUID, runtime UUID, runtime digest
+and admission digest. It skips startup cleanup only for this new command. Existing
+CLI behavior and default-disabled operation remain unchanged.
+
+One ordinary read-only WAL-consistent transaction reuses the existing full-holds
+and association validators. It creates no identity, journal or Store and performs
+no migration, repair, checkpoint, immutable read, credential lookup or Map call.
+A cooperative30-second inspection deadline, SQL progress checks and Python-loop
+checkpoints fail held rather than truncate counts; no job/history count ceiling
+or execution/startup deadline is introduced. Ordinary SQLite read-only access may
+create or change WAL sidecars. Noncreating path pins are not an OS sandbox.
+
+A canonical original-key-linked retirement and zero global holds can report
+`retired`; earlier released attempts retain their original states. Genuine
+`empty_unissued` requires the exact idle parent/cursor0 and zero per-runtime
+selections, attempts, associated runs and claims, plus zero global holds. It is
+not a retirement receipt. Distribution must independently join authenticated
+host/Map stop/retirement0 evidence. Missing schema, parent, binding, provenance,
+inspection support or incomplete audit is held with null counts/holds.
+
+This supplies no execution authority, new Map API, service or automatic lifecycle
+action. Same-installation next-enable remains a separate proposed operator flow,
+not an implemented or supported command. Actual first/next lifecycle trials must
+both use a facade-bearing immutable Runner image; an old image without this
+contract is explicitly unsupported/held. This amendment authorizes implementation
+and isolated testing only and waives no existing acceptance or release gate.

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 
-from vardrrunner.journal import Journal, Phase, normalize_backend_url
+from vardrrunner.journal import Journal, Phase, audit_rows, normalize_backend_url
 
 from .codec import (
     AuthorizationError,
@@ -648,7 +649,7 @@ def _retirement_snapshot(
     return snapshot
 
 
-def sequence_holds(con: sqlite3.Connection) -> int:
+def sequence_holds(con: sqlite3.Connection, *, checkpoint: Callable[[], None] | None = None) -> int:
     """Pure conservative v2 hold audit, including completed-but-unreleased jobs."""
     tables = {
         row[0]
@@ -661,11 +662,12 @@ def sequence_holds(con: sqlite3.Connection) -> int:
     require(len(tables) == 2, "worker_sequence_schema_incomplete")
     attempts = con.execute("SELECT * FROM managed_worker_attempts").fetchall()
     incarnations = {
-        row["runtime_id"]: row for row in con.execute("SELECT * FROM managed_worker_incarnations")
+        row["runtime_id"]: row
+        for row in audit_rows(con.execute("SELECT * FROM managed_worker_incarnations"), checkpoint)
     }
     holds = set()
     histories: dict[str, list[sqlite3.Row]] = {}
-    for row in attempts:
+    for row in audit_rows(attempts, checkpoint):
         histories.setdefault(row["runtime_id"], []).append(row)
         attempt_key = (row["runtime_id"], row["runtime_sequence"])
         incarnation = incarnations.get(row["runtime_id"])
@@ -746,13 +748,13 @@ def sequence_holds(con: sqlite3.Connection) -> int:
             _retirement_snapshot(con, row["run_id"], association, receipt)
         elif row["state"] != "released":
             holds.add(attempt_key)
-    for runtime_id, row in incarnations.items():
+    for runtime_id, row in audit_rows(incarnations.items(), checkpoint):
         _uuid(runtime_id)
         hash_value(row["runtime_sha256"])
         maximum = integer(row["max_attempts"], 1, 32)
         last = integer(row["last_sequence"], 0, maximum)
         ordered = sorted(histories.get(runtime_id, []), key=lambda item: item["runtime_sequence"])
-        history = [item["runtime_sequence"] for item in ordered]
+        history = [item["runtime_sequence"] for item in audit_rows(ordered, checkpoint)]
         require(history == list(range(1, last + 1)), "worker_sequence_history_gap")
         require(
             row["state"] in {"idle", "active", "physical_retirement_observed"},
@@ -762,7 +764,7 @@ def sequence_holds(con: sqlite3.Connection) -> int:
             require(
                 row["active_sequence"] is None
                 and row["retirement"] is None
-                and all(item["state"] == "released" for item in ordered),
+                and all(item["state"] == "released" for item in audit_rows(ordered, checkpoint)),
                 "worker_sequence_projection_changed",
             )
         elif row["state"] == "active":
@@ -772,7 +774,7 @@ def sequence_holds(con: sqlite3.Connection) -> int:
                 and row["retirement"] is None
                 and all(
                     item["state"] == "released"
-                    for item in ordered
+                    for item in audit_rows(ordered, checkpoint)
                     if item["runtime_sequence"] < last
                 ),
                 "worker_sequence_projection_changed",

@@ -1330,3 +1330,38 @@ validation of a signed projection does not authorize an executable recon path.
 Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
 Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
 No execution path is enabled.
+
+### Offline worker-state inspection (NM-2 candidate)
+
+`vardrrunner worker-state --journal PATH --identity PATH --runner-id UUID
+--runtime-id UUID --runtime-sha256 SHA256 --admission-sha256 SHA256` requires all
+six explicit selections. It reads existing local state offline, skips startup
+cleanup only for this command, creates no identity or journal, and performs no
+Map request, credential lookup, tool execution, migration or repair.
+
+The closed `vardr.worker-state-audit/1` JSON has `status` equal to `retired`,
+`empty_unissued` or `held`. Exit0 means a complete matching local audit with zero
+global holds and one of the first two states. Exit1 means held. Incomplete,
+unsupported, inconsistent or inspection-budget-exhausted state has `complete:false`
+and null counts/holds; it never masquerades as zero. Inputs that fail the fixed
+selection validators produce redacted JSON, without echoing their values.
+
+`empty_unissued` requires the exact idle parent/cursor0 and no selections,
+attempts, associated runs or claims. It supplies no physical stop or retirement
+proof. `retired` requires the retained original-key-linked retirement observation;
+earlier released job rows need not be rewritten as physically retired. Public
+output contains only the selected UUIDs/digests, parent/cursor, counts, retirement
+receipt digest and fixed status/reason fields. Identity labels/hostnames and raw
+journal documents never leave the inspection.
+
+The command has a cooperative30-second inspection budget, SQL progress checks and
+the existing5-second SQLite busy wait. It imposes no healthy-history/job ceiling
+and changes no execution, native or startup deadline. This is not a proven hard
+wall for filesystem calls or JSON parsing. Normal SQLite read-only WAL handling
+is retained and may create/change sidecars; no checkpoint or immutable fallback
+is used. Identity input is bounded to8192 bytes and rejects linked/reparse paths.
+
+This command is a new image capability. A lifecycle caller must explicitly hold
+when an old image lacks it; it must not assume e8 images support it or replace
+missing output with zero. Stop/re-enable remains an unimplemented, separate
+lifecycle candidate; this command enables no worker and closes no platform gate.

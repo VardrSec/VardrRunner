@@ -22,6 +22,25 @@ def isolated_journal(tmp_path, monkeypatch, request):
     # Never resolve, install, or delete the operator's real managed tools either.
     monkeypatch.setattr(config, "TOOLS_DIR", tmp_path / "tools")
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    if request.module.__name__.rsplit(".", 1)[-1] == "test_worker_state_audit":
+        # Resolve every fixture default before any Journal/Store fixture runs.
+        monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+        monkeypatch.setattr(config, "RUNS_DIR", tmp_path / "runs")
+        monkeypatch.setattr(config, "WORDLISTS_DIR", tmp_path / "wordlists")
+        assert all(
+            path.resolve().is_relative_to(tmp_path.resolve())
+            for path in (
+                config.CONFIG_FILE,
+                config.JOURNAL_FILE,
+                config.CONFIG_DIR,
+                config.RUNS_DIR,
+                config.TOOLS_DIR,
+                config.DATA_DIR,
+                config.WORDLISTS_DIR,
+                identity.identity_file(),
+            )
+        )
+
     # Nor the operator's cached release check, which `--version` and `status` read.
     monkeypatch.setattr(updates, "cache_file", lambda: tmp_path / "update-check.json")
 

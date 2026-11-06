@@ -563,3 +563,24 @@ security gate open. No execution adoption or full portability is claimed.
 Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
 Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
 No execution path is enabled.
+
+### Existing-worker inspection snapshot
+
+The explicit top-level `worker-state` facade reads an operator-selected existing
+identity and journal. It uses the pure identity validator and noncreating bounded
+reader, `journal_connection(readonly=True)`, and one `BEGIN` read snapshot. The
+existing full local-holds engine and unfinished RunRecord validation accept that
+same connection; ordinary callers delegate with unchanged predicates and no
+inspection budget. Optional checkpoints cover history loops and nested scans only
+when the inspection supplies them. No Store/Journal constructor or migration runs.
+
+Inspection validates current schema, exact admission/runtime/Runner binding,
+original association joins and canonical retirement provenance. Genuine parent0
+without any per-runtime association is `empty_unissued`, never fabricated local
+retirement. A retired nonempty runtime keeps earlier released rows unchanged.
+Incomplete facts are held with null counts; valid unretired state or nonzero
+global holds may report complete facts while remaining held. The closed public
+schema contains no raw rows, tokens, token hashes, identity labels or response
+values. Logical read-only WAL semantics do not promise zero filesystem writes.
+See [ADR0043](adr/0043-proposed-linux-worker-lifecycle-owner.md#offline-existing-state-inspection-amendment)
+and [the CLI contract](cli.md#offline-worker-state-inspection-nm-2-candidate).

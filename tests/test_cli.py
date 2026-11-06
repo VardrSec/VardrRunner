@@ -1203,3 +1203,25 @@ class TestCredentialApprovalCommands:
 
     def test_empty_listing_explains_what_happens(self):
         assert "will fail until" in invoke("credentials", "approvals").output
+
+
+def test_worker_state_routes_only_six_explicit_strings_without_startup_cleanup():
+    selected = {
+        "journal": "journal.sqlite3",
+        "identity": "identity.json",
+        "runner_id": "11111111-1111-4111-8111-111111111111",
+        "runtime_id": "22222222-2222-4222-8222-222222222222",
+        "runtime_sha256": "a" * 64,
+        "admission_sha256": "b" * 64,
+    }
+    args = ["worker-state"]
+    for name, value in selected.items():
+        args.extend(["--" + name.replace("_", "-"), value])
+    with (
+        patch("vardrrunner.commands.worker_audit.worker_state") as inspect,
+        patch("vardrrunner.cli.process_runner.cleanup_sensitive_temp_dirs") as cleanup,
+    ):
+        result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    inspect.assert_called_once_with(**selected)
+    cleanup.assert_not_called()

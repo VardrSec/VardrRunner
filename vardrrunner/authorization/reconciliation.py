@@ -6,7 +6,14 @@ import json
 import sqlite3
 from collections.abc import Callable
 
-from vardrrunner.journal import TERMINAL_PHASES, Journal, Phase, utc_now
+from vardrrunner.journal import (
+    TERMINAL_PHASES,
+    Journal,
+    Phase,
+    audit_rows,
+    unfinished_records,
+    utc_now,
+)
 
 from . import observations, results, stops
 from .codec import AuthorizationError, encoded, require
@@ -328,7 +335,7 @@ def _original_result(con, run, claim, reply) -> None:
     results.check_completion(reply["completion"], {**dict(intent), "outcome": "failed"})
 
 
-def _native_closed(table, intent, claim, run, contracts) -> bool:
+def _native_closed(table, intent, claim, run, contracts, *, checkpoint=None) -> bool:
     binding = json.loads(intent["binding"])
     require(set(binding) == results.BINDING, "local_terminal_binding")
     if (
@@ -347,7 +354,7 @@ def _native_closed(table, intent, claim, run, contracts) -> bool:
             and (row["job"], row["attempt"], row["fence"])
             == (claim["job"], claim["attempt"], claim["fence"])
             and row["consumed"] == 2
-            for row in contracts
+            for row in audit_rows(contracts, checkpoint)
         )
     ):
         return False
@@ -565,184 +572,199 @@ def reconcile_managed(
 
 def local_holds(journal: Journal) -> int:
     """A conservative snapshot, never permission to execute or clear a fence."""
-    holds: set[tuple] = {("run", run.run_id) for run in journal.unfinished()}
     with journal._connection() as con:
-        claims = (
-            con.execute("SELECT * FROM managed_claim_intents").fetchall()
-            if _table(con, "managed_claim_intents")
-            else []
-        )
-        contracts = (
-            con.execute("SELECT * FROM authorization_contracts").fetchall()
-            if _table(con, "authorization_contracts")
-            else []
-        )
-        for row in contracts:
-            if row["consumed"] not in (0, 2):
-                holds.add(("ledger", row["issuer"], row["contract"]))
-        for claim in claims:
-            run = _row(con, "runs", claim["run_id"])
-            if run is None or Phase(run["phase"]) not in TERMINAL_PHASES:
-                holds.add(("run", claim["run_id"]))
-                continue
-            state = claim["state"]
-            if state == "preclaim_retired":
-                valid = (
-                    run["failure_reason"] == "local_preclaim_denied_before_rpc"
-                    and run["phase"] == Phase.FAILED.value
-                    and run["pid"] is None
-                    and (claim["backend"], claim["job"]) == (run["backend_url"], run["job_id"])
-                    and all(
-                        claim[key] is None for key in ("issuer", "contract", "attempt", "fence")
-                    )
-                    and claim["consumption_sent"] == claim["consumption_acknowledged"] == 0
-                )
-            elif state == "runtime_unbound_retired":
-                observed = _row(con, "managed_claim_observations", claim["run_id"])
-                valid = observed is not None
-                if valid:
-                    snapshot = json.loads(observed["snapshot"])
-                    root = {
-                        "origin": claim["backend"],
-                        "job_id": claim["job"],
-                        "runner_id": snapshot["runner_id"],
-                        **{
-                            key: claim[key]
-                            for key in ("plan_sha256", "case_sha256", "association_sha256")
-                        },
-                    }
-                    try:
-                        association = _unbound_source(con, run, claim, snapshot)
-                        observations.validate(snapshot, root, dict(claim), association)
-                        valid = (
-                            run["phase"] == Phase.FAILED.value
-                            and run["status"] == "not_claimed"
-                            and run["failure_reason"] == "not_claimed_by_retired_runtime"
-                            and run["last_event"] == "managed_runtime_unbound_receipt"
-                            and {
-                                "code": "runtime_unbound_retirement",
-                                "runtime_id": association["runtime_id"],
-                                "receipt_sha256": snapshot["runtime_retirement"]["receipt_sha256"],
-                            }
-                            in json.loads(run["warnings_json"])
-                        )
-                    except AuthorizationError:
-                        valid = False
-            elif state in {"host_exit_observed", "failed_completion_observed"}:
-                failed_result = state == "failed_completion_observed"
-                reason = "observed_failed_completion" if failed_result else "observed_exit"
-                event = (
-                    "managed_failed_completion_receipt"
-                    if failed_result
-                    else "managed_host_exit_receipt"
-                )
-                warning = "server_failed_completion" if failed_result else "host_observed_exit"
-                retired = "server_retired" if failed_result else "host_retired"
-                observed = _row(con, "managed_claim_observations", claim["run_id"])
-                valid = (
-                    observed is not None and run["failure_reason"] == reason and run["pid"] is None
-                )
-                if valid:
-                    snapshot = json.loads(observed["snapshot"])
-                    root = {
-                        "origin": claim["backend"],
-                        "job_id": claim["job"],
-                        "runner_id": snapshot["runner_id"],
-                        **{
-                            key: claim[key]
-                            for key in ("plan_sha256", "case_sha256", "association_sha256")
-                        },
-                    }
-                    try:
-                        observations.validate(
-                            snapshot, root, dict(claim), claim_association(con, claim["run_id"])
-                        )
-                        if failed_result:
-                            _original_result(con, run, claim, snapshot)
-                        valid = (
-                            (
-                                _failed_completion(snapshot)
-                                if failed_result
-                                else _host_exit(snapshot)
-                            )
-                            and (run["backend_url"], run["job_id"])
-                            == (claim["backend"], claim["job"])
-                            and run["phase"] == Phase.FAILED.value
-                            and run["last_event"] == event
-                            and any(
-                                type(row) is dict
-                                and row.get("code") == warning
-                                and row.get("receipt_sha256")
-                                == snapshot["result" if failed_result else "stop"]["receipt_sha256"]
-                                for row in json.loads(run["warnings_json"])
-                            )
-                            and all(
-                                (intent := _row(con, table, claim["run_id"])) is None
-                                or intent["state"] == retired
-                                for table in ("managed_result_intents", "managed_stop_intents")
-                            )
-                            and (
-                                not claim["consumption_sent"]
-                                or any(
-                                    row["issuer"] == claim["issuer"]
-                                    and row["contract"] == claim["contract"]
-                                    and row["consumed"] == 2
-                                    for row in contracts
-                                )
-                            )
-                        )
-                    except AuthorizationError:
-                        valid = False
-            else:
-                valid = False
-                for table in ("managed_result_intents", "managed_stop_intents"):
-                    intent = _row(con, table, claim["run_id"])
-                    if intent is not None and intent["state"] == "terminal":
-                        valid = _native_closed(table, intent, claim, run, contracts)
-                        if valid:
-                            break
-            if not valid:
-                holds.add(("run", claim["run_id"]))
-        for table in ("managed_result_intents", "managed_stop_intents"):
-            if _table(con, table):
-                for intent in con.execute(_INTENT_ROWS_SQL[table]):
-                    if not any(row["run_id"] == intent["run_id"] for row in claims):
-                        holds.add(("intent", intent["run_id"]))
-        fences = (
-            con.execute("SELECT * FROM authorization_fences").fetchall()
-            if _table(con, "authorization_fences")
-            else []
-        )
-        for row in contracts:
-            if not any(
-                fence["issuer"] == row["issuer"]
-                and fence["job"] == row["job"]
-                and fence["fence"] >= row["fence"]
-                for fence in fences
-            ):
-                holds.add(("fence", row["issuer"], row["job"]))
-        for fence in fences:
-            if (
-                type(fence["fence"]) is not int
-                or fence["fence"] < 1
-                or any(
-                    row["issuer"] == fence["issuer"]
-                    and row["job"] == fence["job"]
-                    and row["fence"] > fence["fence"]
-                    for row in contracts
-                )
-            ):
-                holds.add(("fence", fence["issuer"], fence["job"]))
-        try:
-            pending_sequences = sequence_holds(con)
-        except (AuthorizationError, sqlite3.Error):
-            holds.add(("sequence", "inconsistent_audit_state"))
-            pending_sequences = 0
-        from .worker_persistent import persistent_holds
+        return local_holds_connection(con)
 
-        try:
-            pending_persistent = persistent_holds(con, full=True)
-        except (AuthorizationError, sqlite3.Error):
-            holds.add(("persistent", "inconsistent_audit_state"))
-            pending_persistent = 0
+
+def local_holds_connection(
+    con: sqlite3.Connection,
+    *,
+    checkpoint: Callable[[], None] | None = None,
+    strict: bool = False,
+) -> int:
+    """Use the same full audit on an existing connection; never open or migrate it.
+
+    Explicit inspection propagates incomplete audit failures instead of presenting
+    their conservative sentinel hold as a complete inventory.
+    """
+    holds: set[tuple] = {
+        ("run", run.run_id) for run in unfinished_records(con, checkpoint=checkpoint)
+    }
+    claims = (
+        con.execute("SELECT * FROM managed_claim_intents").fetchall()
+        if _table(con, "managed_claim_intents")
+        else []
+    )
+    contracts = (
+        con.execute("SELECT * FROM authorization_contracts").fetchall()
+        if _table(con, "authorization_contracts")
+        else []
+    )
+    for row in audit_rows(contracts, checkpoint):
+        if row["consumed"] not in (0, 2):
+            holds.add(("ledger", row["issuer"], row["contract"]))
+    for claim in audit_rows(claims, checkpoint):
+        run = _row(con, "runs", claim["run_id"])
+        if run is None or Phase(run["phase"]) not in TERMINAL_PHASES:
+            holds.add(("run", claim["run_id"]))
+            continue
+        state = claim["state"]
+        if state == "preclaim_retired":
+            valid = (
+                run["failure_reason"] == "local_preclaim_denied_before_rpc"
+                and run["phase"] == Phase.FAILED.value
+                and run["pid"] is None
+                and (claim["backend"], claim["job"]) == (run["backend_url"], run["job_id"])
+                and all(claim[key] is None for key in ("issuer", "contract", "attempt", "fence"))
+                and claim["consumption_sent"] == claim["consumption_acknowledged"] == 0
+            )
+        elif state == "runtime_unbound_retired":
+            observed = _row(con, "managed_claim_observations", claim["run_id"])
+            valid = observed is not None
+            if valid:
+                snapshot = json.loads(observed["snapshot"])
+                root = {
+                    "origin": claim["backend"],
+                    "job_id": claim["job"],
+                    "runner_id": snapshot["runner_id"],
+                    **{
+                        key: claim[key]
+                        for key in ("plan_sha256", "case_sha256", "association_sha256")
+                    },
+                }
+                try:
+                    association = _unbound_source(con, run, claim, snapshot)
+                    observations.validate(snapshot, root, dict(claim), association)
+                    valid = (
+                        run["phase"] == Phase.FAILED.value
+                        and run["status"] == "not_claimed"
+                        and run["failure_reason"] == "not_claimed_by_retired_runtime"
+                        and run["last_event"] == "managed_runtime_unbound_receipt"
+                        and {
+                            "code": "runtime_unbound_retirement",
+                            "runtime_id": association["runtime_id"],
+                            "receipt_sha256": snapshot["runtime_retirement"]["receipt_sha256"],
+                        }
+                        in json.loads(run["warnings_json"])
+                    )
+                except AuthorizationError:
+                    valid = False
+        elif state in {"host_exit_observed", "failed_completion_observed"}:
+            failed_result = state == "failed_completion_observed"
+            reason = "observed_failed_completion" if failed_result else "observed_exit"
+            event = (
+                "managed_failed_completion_receipt"
+                if failed_result
+                else "managed_host_exit_receipt"
+            )
+            warning = "server_failed_completion" if failed_result else "host_observed_exit"
+            retired = "server_retired" if failed_result else "host_retired"
+            observed = _row(con, "managed_claim_observations", claim["run_id"])
+            valid = observed is not None and run["failure_reason"] == reason and run["pid"] is None
+            if valid:
+                snapshot = json.loads(observed["snapshot"])
+                root = {
+                    "origin": claim["backend"],
+                    "job_id": claim["job"],
+                    "runner_id": snapshot["runner_id"],
+                    **{
+                        key: claim[key]
+                        for key in ("plan_sha256", "case_sha256", "association_sha256")
+                    },
+                }
+                try:
+                    observations.validate(
+                        snapshot, root, dict(claim), claim_association(con, claim["run_id"])
+                    )
+                    if failed_result:
+                        _original_result(con, run, claim, snapshot)
+                    valid = (
+                        (_failed_completion(snapshot) if failed_result else _host_exit(snapshot))
+                        and (run["backend_url"], run["job_id"]) == (claim["backend"], claim["job"])
+                        and run["phase"] == Phase.FAILED.value
+                        and run["last_event"] == event
+                        and any(
+                            type(row) is dict
+                            and row.get("code") == warning
+                            and row.get("receipt_sha256")
+                            == snapshot["result" if failed_result else "stop"]["receipt_sha256"]
+                            for row in audit_rows(json.loads(run["warnings_json"]), checkpoint)
+                        )
+                        and all(
+                            (intent := _row(con, table, claim["run_id"])) is None
+                            or intent["state"] == retired
+                            for table in ("managed_result_intents", "managed_stop_intents")
+                        )
+                        and (
+                            not claim["consumption_sent"]
+                            or any(
+                                row["issuer"] == claim["issuer"]
+                                and row["contract"] == claim["contract"]
+                                and row["consumed"] == 2
+                                for row in audit_rows(contracts, checkpoint)
+                            )
+                        )
+                    )
+                except AuthorizationError:
+                    valid = False
+        else:
+            valid = False
+            for table in ("managed_result_intents", "managed_stop_intents"):
+                intent = _row(con, table, claim["run_id"])
+                if intent is not None and intent["state"] == "terminal":
+                    valid = _native_closed(
+                        table, intent, claim, run, contracts, checkpoint=checkpoint
+                    )
+                    if valid:
+                        break
+        if not valid:
+            holds.add(("run", claim["run_id"]))
+    for table in ("managed_result_intents", "managed_stop_intents"):
+        if _table(con, table):
+            for intent in audit_rows(con.execute(_INTENT_ROWS_SQL[table]), checkpoint):
+                if not any(
+                    row["run_id"] == intent["run_id"] for row in audit_rows(claims, checkpoint)
+                ):
+                    holds.add(("intent", intent["run_id"]))
+    fences = (
+        con.execute("SELECT * FROM authorization_fences").fetchall()
+        if _table(con, "authorization_fences")
+        else []
+    )
+    for row in audit_rows(contracts, checkpoint):
+        if not any(
+            fence["issuer"] == row["issuer"]
+            and fence["job"] == row["job"]
+            and fence["fence"] >= row["fence"]
+            for fence in audit_rows(fences, checkpoint)
+        ):
+            holds.add(("fence", row["issuer"], row["job"]))
+    for fence in audit_rows(fences, checkpoint):
+        if (
+            type(fence["fence"]) is not int
+            or fence["fence"] < 1
+            or any(
+                row["issuer"] == fence["issuer"]
+                and row["job"] == fence["job"]
+                and row["fence"] > fence["fence"]
+                for row in audit_rows(contracts, checkpoint)
+            )
+        ):
+            holds.add(("fence", fence["issuer"], fence["job"]))
+    try:
+        pending_sequences = sequence_holds(con, checkpoint=checkpoint)
+    except (AuthorizationError, sqlite3.Error):
+        if strict:
+            raise
+        holds.add(("sequence", "inconsistent_audit_state"))
+        pending_sequences = 0
+    from .worker_persistent import persistent_holds
+
+    try:
+        pending_persistent = persistent_holds(con, full=True, checkpoint=checkpoint)
+    except (AuthorizationError, sqlite3.Error):
+        if strict:
+            raise
+        holds.add(("persistent", "inconsistent_audit_state"))
+        pending_persistent = 0
     return len(holds) + pending_sequences + pending_persistent

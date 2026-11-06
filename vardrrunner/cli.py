@@ -25,6 +25,7 @@ from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
 from vardrrunner.commands import test_cases as test_cases_cmd
 from vardrrunner.commands import updates as updates_cmd
+from vardrrunner.commands import worker_audit as worker_audit_cmd
 from vardrrunner.commands import workspace as workspace_cmd
 
 # Characters the CLI's output uses that legacy code pages (Windows cp1252 when
@@ -101,7 +102,8 @@ def _startup_cleanup(
     ),
 ) -> None:
     """Remove sensitive temp state left by a previously interrupted process."""
-    process_runner.cleanup_sensitive_temp_dirs()
+    if ctx.invoked_subcommand != "worker-state":
+        process_runner.cleanup_sensitive_temp_dirs()
     if ctx.invoked_subcommand is not None:
         return
     if _interactive() and not shell.is_running():
@@ -345,6 +347,28 @@ audit_app = typer.Typer(
     help="Inspect and export the sanitized local execution journal.", no_args_is_help=True
 )
 app.add_typer(audit_app, name="audit")
+
+
+@app.command("worker-state")
+def worker_state(
+    journal: str = typer.Option(..., "--journal", help="Explicit existing execution journal"),
+    identity: str = typer.Option(..., "--identity", help="Explicit existing Runner identity"),
+    runner_id: str = typer.Option(..., "--runner-id", help="Expected canonical Runner UUID"),
+    runtime_id: str = typer.Option(..., "--runtime-id", help="Expected canonical runtime UUID"),
+    runtime_sha256: str = typer.Option(..., "--runtime-sha256", help="Expected runtime digest"),
+    admission_sha256: str = typer.Option(
+        ..., "--admission-sha256", help="Expected admission digest"
+    ),
+):
+    """Inspect explicit existing worker state offline, without startup cleanup."""
+    worker_audit_cmd.worker_state(
+        journal=journal,
+        identity=identity,
+        runner_id=runner_id,
+        runtime_id=runtime_id,
+        runtime_sha256=runtime_sha256,
+        admission_sha256=admission_sha256,
+    )
 
 
 @audit_app.command("list")

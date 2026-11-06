@@ -649,3 +649,23 @@ remain open; these projection tests cannot close them.
 Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
 Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
 No execution path is enabled.
+
+### Existing-worker inspection validation
+
+`tests/test_worker_state_audit.py` uses only isolated temporary identity files and
+SQLite journals, the existing synthetic persistent fixtures, and inert original
+observation callbacks. The suite fixture selects and verifies every config,
+journal, identity, grant-catalog and tools/data path before dependent fixtures.
+The external guarded validator installs private HOME and permanent operator,
+provider, network and process denials before project imports. Ordinary CLI wiring
+checks cover all six explicit strings and the inspection-only cleanup bypass.
+
+Required coverage includes genuine unissued parent0, selected-but-unissued
+retirement, prior released history, original observation loss, schema/binding
+mismatches, orphan associations, unrelated global holds, incomplete budget failure,
+normal WAL reads and fixed JSON on bad selections. Component tests establish
+neither physical stop nor same-installation re-enable. Actual first and next
+incarnations must use an image containing the new inspection contract; unsupported
+old images remain held. Full validation/95% coverage and Linux/Desktop lifecycle
+acceptance remain separate gates. Inspection's30-second cooperative budget is not
+an execution or startup budget and must not truncate history into a false zero.

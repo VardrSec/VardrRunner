@@ -6,6 +6,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
+- Add explicit offline `worker-state` inspection for an existing persistent-worker
+  identity/journal and exact Runner/runtime/admission binding. Reuse the full audit
+  in one read-only WAL snapshot; incomplete facts are held with null counts.
+  Distinguish genuine unissued parent0 from original-key-linked retirement without
+  constructors, startup cleanup, credential lookup or network. A cooperative
+  inspection budget changes no execution authority, startup limit or history cap;
+  old images and actual stop/re-enable remain separately gated.
 
 - Keep the persistent worker channel open when Python's optional idle window
   closes. Recheck native readiness and full local holds in a bounded no-send

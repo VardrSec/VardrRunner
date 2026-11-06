@@ -14,13 +14,13 @@ import os
 import sqlite3
 import stat
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import urlsplit, urlunsplit
 
 from vardrrunner import manifests, redaction
@@ -30,6 +30,19 @@ SCHEMA_VERSION = 1
 RETENTION_RECORD_LIMIT = 10_000
 RETENTION_PATH_BYTES = 4096
 RETENTION_TOTAL_BYTES = 8 * 1024 * 1024
+
+
+_AuditRow = TypeVar("_AuditRow")
+
+
+def audit_rows(
+    rows: Iterable[_AuditRow], checkpoint: Callable[[], None] | None = None
+) -> Iterator[_AuditRow]:
+    """Keep existing row order, with optional cooperative inspection checkpoints."""
+    for row in rows:
+        if checkpoint is not None:
+            checkpoint()
+        yield row
 
 
 class JournalError(RuntimeError):
@@ -179,6 +192,19 @@ class RetainedPaths:
     run_dir: str | None
     artifact_path: str | None
     manifest_path: str | None
+
+
+def unfinished_records(
+    con: sqlite3.Connection, *, checkpoint: Callable[[], None] | None = None
+) -> list[RunRecord]:
+    """Validate the existing unfinished-row selection on the caller's snapshot."""
+    rows = con.execute(
+        """SELECT * FROM runs
+            WHERE phase NOT IN (?, ?, ?, ?, ?)
+            ORDER BY started_at""",
+        _TERMINAL_VALUES,
+    )
+    return [Journal._record(row) for row in audit_rows(rows, checkpoint)]
 
 
 class Journal:
@@ -550,13 +576,7 @@ class Journal:
 
     def unfinished(self) -> list[RunRecord]:
         with self._connection() as con:
-            rows = con.execute(
-                """SELECT * FROM runs
-                    WHERE phase NOT IN (?, ?, ?, ?, ?)
-                    ORDER BY started_at""",
-                _TERMINAL_VALUES,
-            ).fetchall()
-        return [self._record(row) for row in rows]
+            return unfinished_records(con)
 
     def list(
         self, *, since: str | None = None, limit: int = 100, engagement_id: str | None = None

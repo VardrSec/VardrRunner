@@ -7,10 +7,11 @@ permission renewal, process-stop proof or right to retry an unknown mutation.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from vardrrunner.journal import Journal, Phase, normalize_backend_url
+from vardrrunner.journal import Journal, Phase, audit_rows, normalize_backend_url
 
 from .codec import (
     AuthorizationError,
@@ -1174,7 +1175,9 @@ def _validate_selection(con: sqlite3.Connection, row: sqlite3.Row) -> None:
             _validate_attempt(con, issued)
 
 
-def persistent_holds(con: sqlite3.Connection, *, full: bool = False) -> int:
+def persistent_holds(
+    con: sqlite3.Connection, *, full: bool = False, checkpoint: Callable[[], None] | None = None
+) -> int:
     """Pure audit: full at startup/explicit inspection, selected unresolved rows thereafter.
 
     A caller must complete the existing full legacy audit at startup as well.
@@ -1182,7 +1185,12 @@ def persistent_holds(con: sqlite3.Connection, *, full: bool = False) -> int:
     healthy history on each idle poll. A nonzero count is conservative and may
     represent more than one fence for the same job; it grants no recovery right.
     """
-    tables = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    tables = {
+        row[0]
+        for row in audit_rows(
+            con.execute("SELECT name FROM sqlite_master WHERE type='table'"), checkpoint
+        )
+    }
     required = _TABLES
     if not required.intersection(tables):
         return 0
@@ -1193,7 +1201,7 @@ def persistent_holds(con: sqlite3.Connection, *, full: bool = False) -> int:
         if full
         else "SELECT runtime_id FROM managed_persistent_incarnations WHERE state!='retired'"
     )
-    for selected in parents:
+    for selected in audit_rows(parents, checkpoint):
         runtime = parent(con, selected["runtime_id"])
         if runtime["last_sequence"]:
             head = con.execute(
@@ -1209,7 +1217,7 @@ def persistent_holds(con: sqlite3.Connection, *, full: bool = False) -> int:
         if full
         else "SELECT * FROM managed_persistent_attempts WHERE state NOT IN ('released','physical_retirement_observed')"
     )
-    for row in rows:
+    for row in audit_rows(rows, checkpoint):
         _validate_attempt(con, row)
         if row["state"] not in {"released", "physical_retirement_observed"}:
             held.add((row["runtime_id"], row["runtime_sequence"]))
@@ -1218,7 +1226,7 @@ def persistent_holds(con: sqlite3.Connection, *, full: bool = False) -> int:
         if full
         else "SELECT * FROM managed_persistent_selections WHERE state='selected'"
     )
-    for selection in selections:
+    for selection in audit_rows(selections, checkpoint):
         _validate_selection(con, selection)
         if selection["state"] == "selected":
             held.add(("selection", selection["run_id"]))
