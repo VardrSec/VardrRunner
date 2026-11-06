@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Retain bounded, case-bound Gate cancellation evidence only after confirmed
+  native cleanup and an existing stop cause. Preserve the original Gate artifact,
+  publish a separate failed-result copy without overwriting files, and retain
+  ambiguous result/finish holds. Cancelled work never advances the healthy queue
+  or widens execution/grace deadlines; ordinary/manual behavior is unchanged.
 - Add explicitly selected v2 managed batches of 1–32 healthy attempts in one
   admitted incarnation. Capture immutable lease epochs, join the exact refresh
   thread, require native drain/DONE and a durable original-token idle release

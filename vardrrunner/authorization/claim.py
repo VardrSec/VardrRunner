@@ -308,10 +308,18 @@ class ManagedRun:
                         )
                     except Exception:
                         pass  # Lost durable proof is a hold, never a report right.
-            try:
-                self.store.hold(self.run_id, self._owner, "held_after_claim")
-            except Exception:
-                pass
+                if self._confirmed_stop is not None:
+                    try:
+                        from .results import retain_stopped_artifact
+
+                        retain_stopped_artifact(self, directory)
+                    except Exception:
+                        pass  # Missing/malformed evidence keeps the original stop lane.
+            if self._returned_artifact is None:
+                try:
+                    self.store.hold(self.run_id, self._owner, "held_after_claim")
+                except Exception:
+                    pass
             raise
 
     def finalize(self, submit: Callable[[dict], dict], finish: Callable[[dict], dict]) -> dict:
@@ -323,6 +331,15 @@ class ManagedRun:
         from .stops import report
 
         report(self, send)
+
+    def finalize_stopped(
+        self, submit: Callable[[dict], dict], finish: Callable[[dict], dict]
+    ) -> bool:
+        """Prefer the retained failed result; ambiguity never permits stop fallback."""
+        if self._confirmed_stop is None or self._returned_artifact is None:
+            return False
+        self.finalize(submit, finish)
+        return True
 
 
 class ManagedEntry:

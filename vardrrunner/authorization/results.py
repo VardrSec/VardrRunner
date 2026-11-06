@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import stat
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 
 from vardrrunner.journal import Journal, Phase, utc_now
 
@@ -19,6 +23,99 @@ RESULT_FIELDS = BINDING | {
     "evidence_created",
     "scan_items_created",
 }
+
+
+def _artifact_bytes(path: Path, maximum: int) -> bytes:
+    """Read bounded regular single-link bytes; check leaf identity around open/read."""
+
+    def identity(info):
+        require(
+            stat.S_ISREG(info.st_mode)
+            and info.st_nlink == 1
+            and not getattr(info, "st_file_attributes", 0) & 0x400
+            and 0 < info.st_size <= maximum,
+            "managed_partial_file",
+        )
+        return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+    try:
+        before = identity(path.lstat())
+        flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags | getattr(os, "O_BINARY", 0))
+        with os.fdopen(descriptor, "rb") as stream:
+            require(identity(os.fstat(stream.fileno())) == before, "managed_partial_changed")
+            data = stream.read(maximum + 1)
+            require(identity(os.fstat(stream.fileno())) == before, "managed_partial_changed")
+        require(identity(path.lstat()) == before, "managed_partial_changed")
+        require(len(data) == before[2], "managed_partial_changed")
+        return data
+    except OSError:
+        raise AuthorizationError("managed_partial_unavailable") from None
+
+
+def retain_stopped_artifact(handle, directory: Path) -> None:
+    """Stage existing Gate bytes only after the trusted native confirmed-stop path."""
+    from .stops import CAUSES
+
+    require(
+        handle._confirmed_stop is not None
+        and handle._confirmed_stop[1] in CAUSES
+        and handle._returned_artifact is None,
+        "known_native_stop_required",
+    )
+    maximum = min(512000, handle._artifact_limit, handle.gate.permission["max_artifact_bytes"])
+    raw = decoded(_artifact_bytes(directory / "vardrgate_result.json", maximum), maximum)
+    # Reuse the shared strict JSON/case binding; Map remains the result validator
+    # and assessment engine. The fixed marker never supplies termination proof.
+    require(
+        type(raw) is dict
+        and raw.get("test_case_id") == handle.gate.case["id"]
+        and raw.get("error") == "execution_cancelled"
+        and set(raw)
+        <= {"test_case_id", "executions", "findings", "assessments", "preflight", "error"}
+        and all(
+            type(raw.get(key)) is list and all(type(row) is dict for row in raw[key])
+            for key in ("executions", "findings", "assessments")
+        )
+        and (
+            "preflight" not in raw
+            or (
+                type(raw["preflight"]) is list
+                and all(type(row) is dict for row in raw["preflight"])
+            )
+        ),
+        "managed_partial_result",
+    )
+    raw["case_hash"] = handle.gate.plan["case_hash"]
+    data = encoded(raw)
+    require(len(data) <= maximum, "managed_artifact_size")
+    output = directory / "vardrgate_stopped_result.json"
+    # Keep the original atomic Gate file untouched. Publish a completed private
+    # copy without replacing an existing destination on either supported OS.
+    with tempfile.TemporaryDirectory(prefix=".stopped-result-", dir=directory) as temporary:
+        staged = Path(temporary) / "artifact.json"
+        descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if os.name == "nt":
+            os.rename(staged, output)  # Windows rename refuses an existing name.
+        else:
+            os.link(staged, output)  # Atomic no-replace publication on POSIX.
+    require(_artifact_bytes(output, maximum) == data, "managed_partial_changed")
+    record = handle.store.journal.transition(
+        handle.run_id,
+        Phase.ARTIFACT_READY,
+        pid=None,
+        artifact_path=str(output),
+        artifact_sha256=digest(data),
+        artifact_size=len(data),
+        status="stopped_artifact_held",
+        failure_reason=handle._confirmed_stop[1],
+        last_event="managed_stopped_artifact_not_uploaded",
+    )
+    handle._returned_artifact = (output, record.artifact_sha256 or "", record.artifact_size or 0)
 
 
 def receipt(binding: dict, artifact_sha256: str, case_sha256: str) -> str:
@@ -253,8 +350,11 @@ def finalize(handle, submit: Callable[[dict], dict], finish: Callable[[dict], di
         <= min(512000, handle._artifact_limit, handle.gate.permission["max_artifact_bytes"]),
         "managed_artifact_size",
     )
-    with output.open("rb") as stream:
-        data = stream.read(expected_size + 1)
+    if handle._confirmed_stop is not None:
+        data = _artifact_bytes(output, expected_size)
+    else:
+        with output.open("rb") as stream:
+            data = stream.read(expected_size + 1)
     require(
         len(data) == expected_size and digest(data) == expected_hash, "managed_artifact_changed"
     )
@@ -268,7 +368,13 @@ def finalize(handle, submit: Callable[[dict], dict], finish: Callable[[dict], di
         type(preflight) is list and all(type(p) is dict for p in preflight),
         "invalid_preflight_result",
     )
-    outcome = "failed" if any(p.get("status") != "passed" for p in preflight) else "completed"
+    outcome = (
+        "failed"
+        if handle._confirmed_stop is not None
+        or raw.get("error") == "execution_cancelled"
+        or any(p.get("status") != "passed" for p in preflight)
+        else "completed"
+    )
     gate = handle.gate
     binding = {k: gate.binding[k] for k in BINDING - {"contract_sha256"}}
     binding["contract_sha256"] = digest(encoded(gate.envelope))

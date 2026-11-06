@@ -366,8 +366,11 @@ class Worker:
             # Existing native ownership/proof decides whether any stop may be
             # reported. Unknown state stays held; no second claim or RPC replay.
             try:
-                handle.report_stop(lambda body: post("stopped", body))
-            except Exception:
+                if not handle.finalize_stopped(
+                    lambda body: post("result", body), lambda body: post("finish", body)
+                ):
+                    handle.report_stop(lambda body: post("stopped", body))
+            except BaseException:
                 pass
             raise
         completion = handle.finalize(

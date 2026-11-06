@@ -117,6 +117,26 @@ is not refunded or replayed. Automatic restart stays disabled until the stopped
 incarnation is explicitly reconciled; a new start needs fresh admission. A
 worker-disabled installation stays disabled.
 
+After native cleanup is actually confirmed with an existing allowlisted stop
+cause, the managed path may retain Gate's atomic `execution_cancelled` result.
+It reads only the fixed, bounded regular single-link output, checks its case ID
+with the shared strict JSON decoder, and preserves those original bytes. A new
+exclusive private copy adds the already approved unresolved case hash. Publication
+never overwrites an existing destination: Windows uses no-replace rename; POSIX
+uses an atomic hard link from the completed temporary file. Unsupported publication
+or missing/malformed output retains the ordinary stop/held path. This adds no
+filesystem or ancestor-replacement acceptance claim.
+
+Only this confirmed-stop lane may publish the retained copy as an existing
+**failed** result/completion. The native stop cause remains in the local journal;
+the artifact marker supplies neither that cause nor termination proof. Empty
+setup output or passed preflights cannot turn cancellation into success. Once
+result publication is selected, any changed artifact, lost result reply or lost
+finish reply stays held and cannot fall back to a second stop publication. The
+original stop still propagates; no native DONE, idle release or next job follows.
+Permission and grace deadlines remain unchanged. Windows private storage depends
+on the owning Runner directory's ACL, not POSIX mode bits.
+
 Read-only observation recognizes an exact `observed_exit` failure receipt,
 including the narrow pre-consumption retirement case. This never changes local
 consumption markers, supplies a native confirmed-stop right or broadens the

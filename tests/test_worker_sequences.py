@@ -208,6 +208,63 @@ def test_two_jobs_keep_distinct_attempts_and_release_only_after_done(sequence_wo
         assert "x" * 40 not in "\n".join(con.iterdump())
 
 
+@pytest.mark.parametrize("lost", [None, "result", "finish", "interrupt"])
+def test_confirmed_partial_result_never_done_releases_or_claims_next(
+    sequence_worker, monkeypatch, lost
+):
+    s = sequence_worker
+    stopped = execution_control.ExecutionStopped("local_emergency_stop", True, pid=600001)
+
+    def partial(self, targets, directory, cfg, **kwargs):
+        with launch_guard.boundary():
+            pass
+        record = s.t.f.journal.list()[0]
+        s.t.f.journal.transition(record.run_id, Phase.EXECUTING, pid=600001)
+        (directory / "vardrgate_result.json").write_text(
+            json.dumps(
+                {
+                    "test_case_id": cfg.test_case["id"],
+                    "executions": [],
+                    "findings": [],
+                    "assessments": [],
+                    "error": "execution_cancelled",
+                }
+            )
+        )
+        s.t.calls.append("native")
+        raise stopped
+
+    monkeypatch.setattr(handlers.VardrGateHandler, "execute", partial)
+    if lost:
+        s.t.faults["result" if lost == "interrupt" else lost] = (
+            KeyboardInterrupt()
+            if lost == "interrupt"
+            else OSError("synthetic unknown result reply")
+        )
+    with pytest.raises(execution_control.ExecutionStopped) as caught:
+        s.worker.run()
+    assert caught.value is stopped
+    assert s.t.calls.count("pending") == s.t.calls.count("claim") == s.t.calls.count("native") == 1
+    assert "stopped" not in s.t.calls and "done" not in s.t.calls
+    assert "runtime-idle-release" not in s.t.calls and "owner_finished" not in s.t.calls
+    assert len(s.epochs) == 1
+    with s.t.f.journal._connection() as con:
+        assert sequence_holds(con) == 1
+        result = con.execute("SELECT * FROM managed_result_intents").fetchone()
+    assert result["outcome"] == "failed"
+    assert (
+        result["state"]
+        == (
+            {
+                None: "terminal",
+                "result": "result_in_flight",
+                "finish": "finish_in_flight",
+                "interrupt": "result_in_flight",
+            }[lost]
+        )
+    )
+
+
 def test_bounded_idle_after_healthy_release_does_not_reclaim(sequence_worker):
     s = sequence_worker
     original = s.t.client.managed_post
