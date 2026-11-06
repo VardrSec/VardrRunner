@@ -9,8 +9,18 @@ from collections.abc import Callable
 from vardrrunner.journal import Journal, utc_now
 
 from . import results, stops
-from .codec import AuthorizationError, digest, encoded, fields, identifier, integer, require
-from .worker_binding import claim_association
+from .codec import (
+    AuthorizationError,
+    decoded,
+    digest,
+    encoded,
+    fields,
+    identifier,
+    integer,
+    require,
+)
+from .persistent_codec import sequence64
+from .worker_binding import CLAIM_ASSOCIATION, claim_association
 
 ROOT = {"origin", "job_id", "runner_id", "plan_sha256", "case_sha256", "association_sha256"}
 CLAIM = {
@@ -41,11 +51,25 @@ SEQUENCE_RETIREMENT = (RUNTIME_RETIREMENT - {"bound"}) | {
     "binding",
     "attempt_receipt",
 }
+OBSERVATION = ROOT | {
+    "schema",
+    "claim",
+    "execution_state",
+    "capacity_reserved",
+    "result",
+    "completion",
+    "stop",
+}
 
 
 def _runtime_sequence(association: dict) -> int | None:
     if association.get("schema") == "vardr.worker-claim-association/1":
         return None
+    if association.get("schema") == "vardr.worker-claim-association/3":
+        fields(association, CLAIM_ASSOCIATION | {"runtime_sequence", "admission_sha256"})
+        hash_value(association["runtime_sha256"])
+        hash_value(association["admission_sha256"])
+        return sequence64(association["runtime_sequence"], minimum=1)
     require(
         association.get("schema") == "vardr.worker-claim-association/2",
         "runtime_observation_association",
@@ -107,7 +131,13 @@ def _runtime_retirement(reply: dict, root: dict, association: dict) -> None:
         return
     sequence = _runtime_sequence(association)
     if sequence is not None:
-        _sequence_retirement(reply, association, receipt, sequence)
+        _sequence_retirement(
+            reply,
+            association,
+            receipt,
+            sequence,
+            persistent=association["schema"] == "vardr.worker-claim-association/3",
+        )
         return
     fields(receipt, RUNTIME_RETIREMENT)
     for key in ("report_sha256", "runtime_sha256", "receipt_sha256"):
@@ -127,14 +157,26 @@ def _runtime_retirement(reply: dict, root: dict, association: dict) -> None:
     )
 
 
-def _sequence_retirement(reply: dict, association: dict, receipt: dict, sequence: int) -> None:
+def _sequence_retirement(
+    reply: dict, association: dict, receipt: dict, sequence: int, *, persistent: bool = False
+) -> None:
     """Physical retirement is distinct from any historical job's terminal ACK."""
-    fields(receipt, SEQUENCE_RETIREMENT)
+    fields(receipt, SEQUENCE_RETIREMENT | ({"admission_sha256"} if persistent else set()))
     for key in ("report_sha256", "runtime_sha256", "receipt_sha256"):
         hash_value(receipt[key])
-    last = integer(receipt["last_sequence"], 0, 32)
+    last = (
+        sequence64(receipt["last_sequence"])
+        if persistent
+        else integer(receipt["last_sequence"], 0, 32)
+    )
+    if persistent:
+        require(
+            hash_value(receipt["admission_sha256"]) == association["admission_sha256"],
+            "runtime_retirement_admission_binding",
+        )
     require(
-        receipt["schema"] == "vardr.worker-retirement/2"
+        receipt["schema"]
+        == ("vardr.worker-retirement/3" if persistent else "vardr.worker-retirement/2")
         and all(
             receipt[k] == association[k]
             for k in ("runtime_id", "runtime_sha256", "origin", "runner_id", "enrollment_id")
@@ -153,7 +195,8 @@ def _sequence_retirement(reply: dict, association: dict, receipt: dict, sequence
     if active is None:
         require(nested is None and terminal is None, "runtime_retirement_sequence_binding")
         return
-    require(integer(active, 1, 32) == last, "runtime_retirement_sequence_binding")
+    active_number = sequence64(active, minimum=1) if persistent else integer(active, 1, 32)
+    require(active_number == last, "runtime_retirement_sequence_binding")
     fields(nested, results.BINDING)
     require(
         all(nested[k] == association[k] for k in ("origin", "runner_id")),
@@ -192,7 +235,7 @@ def _sequence_retirement(reply: dict, association: dict, receipt: dict, sequence
                 "receipt_sha256": terminal["receipt_sha256"],
             },
         )
-    if active == sequence:
+    if active_number == sequence:
         fields(reply["claim"], CLAIM)
         require(
             nested == binding(reply) and terminal in (reply["completion"], reply["stop"]),
@@ -204,25 +247,23 @@ def validate(
     reply: dict, root: dict, original_claim: dict, runtime_association: dict | None = None
 ) -> None:
     sequence = _runtime_sequence(runtime_association) if runtime_association is not None else None
+    persistent = (
+        runtime_association is not None
+        and runtime_association["schema"] == "vardr.worker-claim-association/3"
+    )
     fields(
         reply,
-        ROOT
-        | {
-            "schema",
-            "claim",
-            "execution_state",
-            "capacity_reserved",
-            "result",
-            "completion",
-            "stop",
-        }
+        OBSERVATION
         | ({"runtime_retirement"} if runtime_association is not None else set())
-        | ({"runtime_id", "runtime_sha256", "runtime_sequence"} if sequence is not None else set()),
+        | ({"runtime_id", "runtime_sha256", "runtime_sequence"} if sequence is not None else set())
+        | ({"admission_sha256"} if persistent else set()),
     )
     require(
         reply["schema"]
         == (
-            "vardr.managed-claim-observation/3"
+            "vardr.managed-claim-observation/4"
+            if persistent
+            else "vardr.managed-claim-observation/3"
             if sequence is not None
             else "vardr.managed-claim-observation/2"
             if runtime_association is not None
@@ -235,9 +276,19 @@ def validate(
     if sequence is not None:
         require(
             runtime_association is not None
-            and integer(reply["runtime_sequence"], 1, 32) == sequence
+            and (
+                sequence64(reply["runtime_sequence"], minimum=1)
+                if persistent
+                else integer(reply["runtime_sequence"], 1, 32)
+            )
+            == sequence
             and all(
-                reply[key] == runtime_association[key] for key in ("runtime_id", "runtime_sha256")
+                reply[key] == runtime_association[key]
+                for key in (
+                    "runtime_id",
+                    "runtime_sha256",
+                    *(["admission_sha256"] if persistent else []),
+                )
             ),
             "runtime_observation_association",
         )
@@ -410,21 +461,77 @@ class ObservationStore:
                 "SELECT snapshot FROM managed_claim_observations WHERE run_id=?", (run_id,)
             ).fetchone()
             if previous is not None:
-                old = json.loads(previous[0])
+                old = decoded(previous[0].encode(), 16384)
+                require(
+                    type(old) is dict and encoded(old).decode() == previous[0],
+                    "observed_snapshot_noncanonical",
+                )
+                schemas = {
+                    "vardr.managed-claim-observation/1": OBSERVATION,
+                    "vardr.managed-claim-observation/2": OBSERVATION | {"runtime_retirement"},
+                    "vardr.managed-claim-observation/3": OBSERVATION
+                    | {"runtime_retirement", "runtime_id", "runtime_sha256", "runtime_sequence"},
+                    "vardr.managed-claim-observation/4": OBSERVATION
+                    | {
+                        "runtime_retirement",
+                        "runtime_id",
+                        "runtime_sha256",
+                        "runtime_sequence",
+                        "admission_sha256",
+                    },
+                }
+                require(
+                    type(old.get("schema")) is str and old["schema"] in schemas,
+                    "observed_snapshot_schema",
+                )
+                fields(old, schemas[old["schema"]])
+                require(all(old[key] == root[key] for key in ROOT), "observed_root_regressed")
+                require(
+                    encoded(
+                        {
+                            key: old[key]
+                            for key in (
+                                "runtime_id",
+                                "runtime_sha256",
+                                "runtime_sequence",
+                                "admission_sha256",
+                            )
+                            if key in old
+                        }
+                    )
+                    == encoded(
+                        {
+                            key: reply.get(key)
+                            for key in (
+                                "runtime_id",
+                                "runtime_sha256",
+                                "runtime_sequence",
+                                "admission_sha256",
+                            )
+                            if key in old
+                        }
+                    ),
+                    "observed_runtime_association_regressed",
+                )
                 if old["claim"] is not None:
+                    fields(old["claim"], CLAIM)
+                    require(type(old["claim"]["consumed"]) is bool, "observed_claim_regressed")
                     require(
                         reply["claim"] is not None
-                        and all(old["claim"][k] == reply["claim"][k] for k in CLAIM - {"consumed"})
+                        and encoded({key: old["claim"][key] for key in CLAIM - {"consumed"}})
+                        == encoded({key: reply["claim"][key] for key in CLAIM - {"consumed"}})
                         and (not old["claim"]["consumed"] or reply["claim"]["consumed"]),
                         "observed_claim_regressed",
                     )
                 for key in ("result", "completion", "stop"):
                     require(
-                        old[key] is None or old[key] == reply[key], "observed_receipt_regressed"
+                        old[key] is None or encoded(old[key]) == encoded(reply[key]),
+                        "observed_receipt_regressed",
                     )
                 require(
                     old.get("runtime_retirement") is None
-                    or old["runtime_retirement"] == reply.get("runtime_retirement"),
+                    or encoded(old["runtime_retirement"])
+                    == encoded(reply.get("runtime_retirement")),
                     "observed_runtime_retirement_regressed",
                 )
             con.execute(
@@ -440,10 +547,14 @@ def observe(journal: Journal, run_id: str, runner_id: str, inspect: Callable[[di
         association = claim_association(con, run_id)
     request = {k: v for k, v in root.items() if k != "job_id"}
     if association is not None:
+        if association["schema"] == "vardr.worker-claim-association/3":
+            require(association["runner_id"] == runner_id, "original_runner_required")
         request.update({k: association[k] for k in ("runtime_id", "runtime_sha256")})
         sequence = _runtime_sequence(association)
         if sequence is not None:
-            request["runtime_sequence"] = sequence
+            request["runtime_sequence"] = association["runtime_sequence"]
+            if association["schema"] == "vardr.worker-claim-association/3":
+                request["admission_sha256"] = association["admission_sha256"]
     try:
         reply = inspect(request)
     except Exception:

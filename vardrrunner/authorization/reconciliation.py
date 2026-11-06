@@ -171,7 +171,8 @@ def _unbound_runtime(reply: dict) -> bool:
 def _sequence_retirement_metadata(con, run_id: str, reply: dict) -> None:
     """Keep physical retirement separate from DONE/release acknowledgements."""
     if (
-        reply["schema"] != "vardr.managed-claim-observation/3"
+        reply["schema"]
+        not in {"vardr.managed-claim-observation/3", "vardr.managed-claim-observation/4"}
         or reply["runtime_retirement"] is None
     ):
         return
@@ -190,7 +191,9 @@ def _sequence_retirement_metadata(con, run_id: str, reply: dict) -> None:
     )
     association = claim_association(con, run_id)
     require(
-        association is not None and association["schema"] == "vardr.worker-claim-association/2",
+        association is not None
+        and association["schema"]
+        in {"vardr.worker-claim-association/2", "vardr.worker-claim-association/3"},
         "worker_retirement_source_changed",
     )
     assert association is not None
@@ -507,7 +510,8 @@ def reconcile_managed(
         return "held_no_terminal_receipt"
     if (
         status.startswith("terminal_")
-        and reply["schema"] == "vardr.managed-claim-observation/3"
+        and reply["schema"]
+        in {"vardr.managed-claim-observation/3", "vardr.managed-claim-observation/4"}
         and reply["runtime_retirement"] is not None
     ):
         with journal._connection() as con:
@@ -691,4 +695,11 @@ def local_holds(journal: Journal) -> int:
         except (AuthorizationError, sqlite3.Error):
             holds.add(("sequence", "inconsistent_audit_state"))
             pending_sequences = 0
-    return len(holds) + pending_sequences
+        from .worker_persistent import persistent_holds
+
+        try:
+            pending_persistent = persistent_holds(con, full=True)
+        except (AuthorizationError, sqlite3.Error):
+            holds.add(("persistent", "inconsistent_audit_state"))
+            pending_persistent = 0
+    return len(holds) + pending_sequences + pending_persistent
