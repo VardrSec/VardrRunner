@@ -353,7 +353,9 @@ class Worker:
                 )
                 if job is None:
                     continue
-                selection_epoch = _DeferredEpoch(cast(SequenceOwner, self.owner), self._next_sequence)
+                selection_epoch = _DeferredEpoch(
+                    cast(SequenceOwner, self.owner), self._next_sequence
+                )
                 record = self._run_job(job, sequence=self._next_sequence, epoch=selection_epoch)
                 if record is None:
                     self._ready()
