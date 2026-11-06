@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Hold v3 reuse after a local stop-journal callback fails in the refresh loop,
+  including when later renewal succeeds. Bound clean idle-channel EOF cleanup
+  by a separate immutable five-second BOOTTIME deadline; repeated EOF or later
+  frames cannot revive it. Healthy persistent idle and finite protocols keep
+  their existing behavior. Physical disconnect acceptance remains open.
+
 - Keep v3 available after source-proven local credential denials before claim.
   Retain provisional selections without consuming an issued sequence; start each
   immutable owner epoch only after the final trusted preclaim checks. Unknown

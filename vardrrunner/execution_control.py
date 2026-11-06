@@ -75,10 +75,10 @@ class Control:
 
     def _refresh(self) -> None:
         while not self._close.wait(0.5):
-            if self.stop_reason():
-                return
-            started = time.monotonic()
             try:
+                if self.stop_reason():
+                    return
+                started = time.monotonic()
                 response = self.refresh()
                 if any(response.get(key) != value for key, value in self.binding.items()):
                     raise ValueError("control binding mismatch")

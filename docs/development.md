@@ -20,6 +20,12 @@ fresh initial grants, immutable late-denial tombstones and unarmed deferred
 epochs. Owner/storage/custody/clock failures cannot masquerade as grant denials.
 The native owner and Map counters are not reset to continue after an unknown send.
 
+`test_worker_reuse_control` reproduces transient stop-journal exceptions before
+HTTP and verifies that later clean joins/valid refreshes never reset the reuse
+latch. Persistent native scalar units cover first/repeated EOF, exact cleanup
+expiry, overflow and non-revival; they create no owner or control-channel probe.
+Source review and compiler tests do not replace physical disconnect acceptance.
+
 `test_runtime_retirement_observation` additionally checks exact v2 receipt binding,
 legacy v1 behavior, monotonic receipt retention, source changes during RPC and
 refusal when execution/artifact/ledger metadata conflicts. `test_worker_binding`

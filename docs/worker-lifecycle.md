@@ -149,6 +149,13 @@ has no default expiry. A first LEASE for the exact next sequence is mandatory
 before any launch and fixes a finite per-job hard ceiling. Refresh, expiry and
 namespace-exit rules remain unchanged.
 
+After clean EOF while idle, v3 uses a separate five-second BOOTTIME deadline to
+wait for the exact Runner child to exit. Repeated EOF cannot refresh that deadline
+and no later frame can revive the channel. Only waitpid's exact clean child exit
+establishes success; expiry refuses the incarnation. This disconnection deadline
+does not limit healthy persistent idle or modify a job lease. Active EOF retains
+its immediate refusal, and finite v1/v2 behavior is unchanged.
+
 The adapter captures BOOTTIME before MONOTONIC for each fresh persistent epoch;
 an active epoch never resamples its offset. DONE independently requires normal
 native return, no Control stop reason and no rejected or failed refresh, as well
@@ -163,6 +170,10 @@ they do not establish persistent platform or hostile-process acceptance.
 The Python discovery window also respects an explicitly selected idle limit for
 best-effort clean no-job exit. A stalled RPC still faces the authoritative native
 idle ceiling; this does not widen that ceiling.
+
+The refresh failure envelope includes the local stop-journal read before HTTP.
+A transient exception there also permanently denies v3 reuse, even if the thread
+later joins cleanly or a subsequent authenticated refresh renews the same job.
 
 Primary semantics: [Unix credentials](https://man7.org/linux/man-pages/man7/unix.7.html),
 [subreaper](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html),

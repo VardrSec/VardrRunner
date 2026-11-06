@@ -54,6 +54,9 @@ struct protocol {
     uint64_t sequence, lease, hard, work_end, grant_end;
     unsigned char binding[32];
     uint64_t idle_seconds, maximum;
+#ifdef VARDR_PERSISTENT
+    uint64_t eof_end;
+#endif
 };
 static volatile sig_atomic_t stopping;
 static void stopped(int signo) { (void)signo; stopping = 1; }
@@ -217,8 +220,21 @@ static void idle(struct protocol *state, uint64_t now) {
     state->lease = state->hard = now + seconds * NS;
     if (state->work_end < state->lease) state->lease = state->hard = state->work_end;
 }
+#ifdef VARDR_PERSISTENT
+static void eof_wait(struct protocol *state, uint64_t now) {
+    if (state->armed) fail();
+    if (!state->eof_end) {
+        if (now > UINT64_MAX - 5 * NS) fail();
+        state->eof_end = now + 5 * NS;
+    }
+    if (now >= state->eof_end) fail();
+}
+#endif
 static void accept_packet(struct protocol *state, const struct packet *p,
     const unsigned char nonce[32], uint64_t now) {
+#ifdef VARDR_PERSISTENT
+    if (state->eof_end) fail();
+#endif
     if (now >= state->lease || now >= state->hard || now >= state->grant_end) fail();
     if (!state->hello) {
 #ifdef VARDR_PERSISTENT
@@ -348,6 +364,9 @@ int main(int argc, char **argv) {
     struct protocol state = { .lease = startup, .hard = startup,
         .work_end = UINT64_MAX, .grant_end = UINT64_MAX };
     while (1) {
+#ifdef VARDR_PERSISTENT
+        if (state.eof_end && now_ns() >= state.eof_end) fail();
+#endif
         if (stopping || now_ns() >= state.lease || now_ns() >= state.hard || now_ns() >= state.grant_end) fail();
         int status;
         pid_t waited = waitpid(child, &status, WNOHANG);
@@ -366,9 +385,15 @@ int main(int argc, char **argv) {
         if (!receive(pair[0], child, RUNNER, terminal_eof, &p)) {
             /* POLLIN may accompany EOF before the exact child is waitable.
              * Only waitpid above can establish success; deadlines stay armed. */
+#ifdef VARDR_PERSISTENT
+            eof_wait(&state, now_ns());
+#endif
             struct timespec pause = { .tv_nsec = 20000000 };
             nanosleep(&pause, NULL); continue;
         }
+#ifdef VARDR_PERSISTENT
+        if (state.eof_end) fail();
+#endif
         if (now_ns() >= state.lease || now_ns() >= state.hard) fail();
         if (!booted) {
             unsigned char zero[32] = {0};

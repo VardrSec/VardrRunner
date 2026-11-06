@@ -14,6 +14,11 @@ observation and metadata reconciliation preserve existing audit commands and
 never recreate execution authority or replay an uncertain request. Finite v1/v2
 receipts retain their original meaning; they do not prove persistent availability.
 
+Persistent availability applies while the trusted worker channel remains healthy.
+An idle channel disconnect enters bounded cleanup; it never grants a replacement
+execution handle or automatically restarts the worker. Callback/journal failures
+retain their no-reuse hold even after a clean thread join.
+
 DNSx invocations suppress automatic version checks. Existing connected commands
 retain their meaning; this correction does not enable standalone recon or grant
 authority for DNS/HTTP targets or auxiliary services.

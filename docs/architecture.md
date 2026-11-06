@@ -20,6 +20,11 @@ unknown reply retains its original association and hold. A source-proven local
 no-send denial can close only that selection; it cannot reset an issued attempt
 or delete the generic claim tombstone.
 
+V3 reusability records every refresh-loop callback failure, including local
+stop-journal reads. Exact thread quiescence alone cannot erase that failure.
+Native idle-channel EOF has its own immutable cleanup deadline; an open healthy
+idle channel retains persistent availability without job authority.
+
 The worker's pre-send runtime/enrollment/root association commits in the same
 journal transaction as its send marker. Optional authenticated observation v2
 can retire an untouched unknown intent only after Map has irreversibly fenced

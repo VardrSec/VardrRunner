@@ -58,10 +58,40 @@ static void refused(int change) {
     int status; check(waitpid(child, &status, 0) == child);
     check(WIFEXITED(status) && WEXITSTATUS(status) == 125);
 }
+static void eof_deadline(void) {
+    struct protocol state = started(0, 0);
+    uint64_t lease_end = state.lease, hard_end = state.hard;
+    eof_wait(&state, 100 * NS);
+    check(state.eof_end == 105 * NS);
+    eof_wait(&state, 104 * NS);
+    check(state.eof_end == 105 * NS);
+    check(state.lease == lease_end && state.hard == hard_end && !state.armed);
+    state = started(1, 0);
+    eof_wait(&state, NS / 2);
+    check(state.lease == NS && state.hard == NS); /* Earlier policy still wins. */
+}
+static void eof_refused(int change) {
+    pid_t child = fork(); check(child >= 0);
+    if (!child) {
+        struct protocol state = started(0, 0);
+        if (change == 0) { eof_wait(&state, 0); eof_wait(&state, 5 * NS); }
+        if (change == 1) eof_wait(&state, UINT64_MAX - 5 * NS + 1);
+        if (change == 2) { state.armed = 1; eof_wait(&state, 0); }
+        eof_wait(&state, 0);
+        struct packet p = lease(1, NS);
+        if (change == 4) { p.type = HELLO; p.sequence = p.lease = p.hard = 0; }
+        accept_packet(&state, &p, nonce, NS); /* No frame revives an EOF channel. */
+        _exit(1);
+    }
+    int status; check(waitpid(child, &status, 0) == child);
+    check(WIFEXITED(status) && WEXITSTATUS(status) == 125);
+}
 int main(void) {
     healthy(0, 40); /* Beyond both old operational limits, without sleeping. */
     healthy(UINT64_C(9007199254740992), 2);
     healthy((uint64_t)INT64_MAX - 1, 1);
     for (int change = 0; change < 7; change++) refused(change);
+    eof_deadline();
+    for (int change = 0; change < 5; change++) eof_refused(change);
     return 0;
 }

@@ -67,6 +67,56 @@ def test_later_valid_refresh_preserves_legacy_renewal_but_never_clears_reuse_fai
     assert value.worker_quiescent() and not value.worker_reuse_safe()
 
 
+def test_transient_local_stop_read_failure_latches_reuse_even_after_exact_thread_join():
+    failed = threading.Event()
+    reads = []
+
+    def local_stop():
+        reads.append(True)
+        if len(reads) == 1:
+            failed.set()
+            raise OSError("synthetic local stop journal read failure")
+        return False
+
+    value = Control(
+        Mock(side_effect=AuthorizationError("synthetic no renewal")),
+        {"job_id": "one"},
+        5,
+        started=time.monotonic(),
+        local_stop=local_stop,
+    )
+    before = value.deadline
+    with value:
+        assert failed.wait(2)
+        value.quiesce(time.monotonic() + 2)
+    assert value.worker_quiescent() and not value.worker_reuse_safe()
+    assert value.deadline == before and not value.stop_reason()
+
+
+def test_valid_refresh_after_local_stop_read_failure_never_resets_reuse_latch():
+    succeeded = threading.Event()
+    reads = []
+
+    def local_stop():
+        reads.append(True)
+        if len(reads) == 1:
+            raise OSError("synthetic transient local stop read failure")
+        return False
+
+    def refresh():
+        value._close.set()
+        succeeded.set()
+        return {"job_id": "one", "lease_seconds": 10, "action": "continue"}
+
+    value = Control(refresh, {"job_id": "one"}, 5, started=time.monotonic(), local_stop=local_stop)
+    before = value.deadline
+    with value:
+        assert succeeded.wait(3)
+        value.quiesce(time.monotonic() + 2)
+    assert value.deadline > before and not value.stop_reason()
+    assert value.worker_quiescent() and not value.worker_reuse_safe()
+
+
 def test_valid_refresh_remains_reusable_after_actual_thread_join():
     called = threading.Event()
 
