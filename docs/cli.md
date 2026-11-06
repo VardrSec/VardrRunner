@@ -24,6 +24,9 @@ permanently before a bounded nonspawning wait for the native owner. The fixed
 five-second shutdown reserve grants no job authority or renewed claim window.
 Native exit 124 is an optional-idle diagnostic, not job success or a confirmed
 physical-stop receipt. This adds no CLI flag and enables no worker.
+Python's idle discovery window cannot establish a clean shutdown: after it
+closes, Runner rechecks native readiness and full holds without sending another
+request. Explicit count completion retains its existing clean return.
 
 DNSx invocations suppress automatic version checks. Existing connected commands
 retain their meaning; this correction does not enable standalone recon or grant

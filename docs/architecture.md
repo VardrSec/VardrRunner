@@ -32,6 +32,10 @@ idle bound includes a fixed five-second shutdown-only reserve; no claim, native
 or job deadline moves. Native exit 124 identifies an unambiguous optional-idle
 branch only, not a successful job or physical-stop receipt. The separate native
 EOF cleanup deadline and all unresolved holds remain unchanged.
+Python's separate discovery window stops new requests but never selects physical
+idle termination. If it closes before the owner cutoff is observed, Runner
+rechecks readiness and full holds with bounded sleeps while keeping fd3 open.
+Count exhaustion still returns through its existing completed-session path.
 
 The worker's pre-send runtime/enrollment/root association commits in the same
 journal transaction as its send marker. Optional authenticated observation v2

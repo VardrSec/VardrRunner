@@ -35,6 +35,13 @@ These model/compiler checks do not prove that actual PID 1 selected that branch;
 exact-incarnation Windows Docker Desktop/Linux stop and containment acceptance
 remain separate. Keep the full native suite and exact 95% coverage floor.
 
+`test_worker_idle_return` covers a direct Python boundary jump with a
+10-microsecond ACK and two-second polling, one original job's DONE/release,
+one-nanosecond boundary ordering, full-hold refusal and finite count completion.
+It uses the existing journal/claim fixture with inert I/O and mocked owner ACKs;
+no native process or channel is created. The optional idle discovery cutoff
+must neither return cleanly nor send another request while awaiting PID 1.
+
 `test_runtime_retirement_observation` additionally checks exact v2 receipt binding,
 legacy v1 behavior, monotonic receipt retention, source changes during RPC and
 refusal when execution/artifact/ledger metadata conflicts. `test_worker_binding`

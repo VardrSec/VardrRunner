@@ -321,10 +321,17 @@ def test_explicit_finite_count_and_naturally_failed_job_preserve_default_persist
     assert outcomes == ["failed", "completed"]
 
 
-def test_optional_idle_timeout_is_explicit_and_never_launches(persistent_worker):
+def test_optional_idle_timeout_rechecks_owner_without_launching(persistent_worker):
     p = persistent_worker
     p.settings.update(jobs=0, limits={"max_attempts": None, "idle_timeout_seconds": 2})
-    assert p.configure().run() is None  # The default 30s window respects explicit 2s idle.
+
+    def ready(_admission):
+        if p.t.f.s.ticks[0] >= 2:
+            raise AuthorizationError("unit_idle_owner_boundary")
+
+    p.t.owner.require_ready.side_effect = ready
+    with pytest.raises(AuthorizationError, match="^unit_idle_owner_boundary$"):
+        p.configure().run()  # The default 30s window respects explicit 2s idle.
     assert p.t.f.s.ticks[0] == 2 and not p.epochs and "claim" not in p.t.calls
 
 

@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Keep the persistent worker channel open when Python's optional idle window
+  closes. Recheck native readiness and full local holds in a bounded no-send
+  wait instead of returning cleanly before PID 1 selects its idle branch.
+  Preserve count completion, unlimited availability and every existing deadline;
+  pure scheduling models do not close physical platform acceptance.
+
 - Classify an optional persistent-v3 idle cutoff as native exit 124 when its
   owner state is unambiguous. Latch Runner into a nonspawning, no-RPC wait with a
   checked five-second shutdown-only reserve after the valid ACK idle bound.

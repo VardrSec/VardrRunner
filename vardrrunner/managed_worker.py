@@ -358,7 +358,11 @@ class Worker:
             while self._next_sequence <= persistent_maximum:
                 idle = self.admission.idle_timeout_seconds
                 if idle is not None and self.monotonic() - idle_started >= idle:
-                    return last
+                    # Stop discovery, but leave physical idle termination to PID1.
+                    self._ready()
+                    self._no_holds(full=True)
+                    self.sleep(min(poll_seconds, 0.05))
+                    continue
                 self._ready()
                 self._no_holds()
                 job = self._discover(
