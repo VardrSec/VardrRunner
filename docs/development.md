@@ -15,6 +15,11 @@ Compiler-stage native state tests establish protocol behavior only; actual idle
 availability, more than 32 jobs, physical stops and containment still need the
 separate Linux and Docker Desktop acceptance matrix.
 
+`test_worker_persistent_preclaim` exercises denied-first/healthy-next discovery,
+fresh initial grants, immutable late-denial tombstones and unarmed deferred
+epochs. Owner/storage/custody/clock failures cannot masquerade as grant denials.
+The native owner and Map counters are not reset to continue after an unknown send.
+
 `test_runtime_retirement_observation` additionally checks exact v2 receipt binding,
 legacy v1 behavior, monotonic receipt retention, source changes during RPC and
 refusal when execution/artifact/ledger metadata conflicts. `test_worker_binding`

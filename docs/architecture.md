@@ -14,6 +14,12 @@ original-key observation `/4` may record physical retirement; it never supplies 
 missing claim, consume, DONE or idle-release acknowledgment. Full startup audits
 validate retained history; normal idle checks select unresolved rows.
 
+Persistent selections are provisional metadata until the claim transport returns.
+Preparing one does not advance the issued history head or native sequence. An
+unknown reply retains its original association and hold. A source-proven local
+no-send denial can close only that selection; it cannot reset an issued attempt
+or delete the generic claim tombstone.
+
 The worker's pre-send runtime/enrollment/root association commits in the same
 journal transaction as its send marker. Optional authenticated observation v2
 can retire an untouched unknown intent only after Map has irreversibly fenced

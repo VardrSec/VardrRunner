@@ -21,6 +21,15 @@ The owner approved its STOP-only reporting lifetime until revocation or physical
 retirement for isolated testing on 2026-11-06. The trusted-host false-exit risk and
 independent acceptance gates remain; see [ADR0043](adr/0043-proposed-linux-worker-lifecycle-owner.md).
 
+In v3, a known local credential-policy denial before the claim callback sends no
+claim and advances no issued sequence. The worker may inspect other queued jobs;
+its per-selection owner epoch begins only after the final trusted preclaim checks.
+An initial denial can be checked again after fresh local grants. A later denial
+after durable preparation retains its unique no-send tombstone: queue a new Map
+job after remediation. Custody, clock, owner, storage and unknown-response failures
+remain held. A crash between generic denial and selection retirement requires
+exact original-key physical-retirement evidence, not automatic repair or replay.
+
 ## Entry and authority
 
 The fixed native PID-1 owner starts only `python -I -m vardrrunner.managed_worker`,

@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Keep v3 available after source-proven local credential denials before claim.
+  Retain provisional selections without consuming an issued sequence; start each
+  immutable owner epoch only after the final trusted preclaim checks. Unknown
+  replies and custody/clock/owner/storage failures retain their holds. Late-denied
+  jobs keep their unique tombstones and require a new queued job after remediation.
+
 - Retain persistent-v3 admission and attempt history in the existing journal,
   with exact original-key observation/reconciliation and canonical receipt
   bindings. Physical retirement preserves missing ACKs and spent allowances;
