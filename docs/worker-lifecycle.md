@@ -40,8 +40,19 @@ with a 258-entry cap and closes every descriptor except stdin/stdout/stderr and
 the known control descriptor. Enumeration, bounds or close errors refuse exec;
 the directory descriptor is also closed. No newer close_range primitive is used.
 
-The owner publishes one 0400 regular `owner.json` under its private 0700 tmpfs.
+The owner publishes one 0400 regular `owner.json` under its private 0700 readiness
+volume. The image seeds an empty directory owned by UID/GID 10000 at build time;
+a fresh default-local Docker volume copies that ownership for each incarnation.
+No runtime capability is added for ownership changes. This public metadata volume
+is distinct from Runner state and contains no STOP secret. Its name is explicit,
+unused and never automatically reused; a stale file refuses rather than being
+overwritten. Stopping retains it for review.
 The Distribution reads it directly without inserting an exec/healthcheck process.
+The earlier tmpfs transport failed two bounded platform proofs: Docker documents
+that its copy API cannot read tmpfs resources. The volume correction is pending
+fresh platform proof; see [Docker copy limitations](https://docs.docker.com/reference/cli/docker/container/cp/#corner-cases).
+Neither refusal establishes a failure of the native writer; the copy API did not
+provide its live tmpfs contents.
 The child waits for the separate readonly public admission file. Startup has a
 120-second owner ceiling. One validated attempt binding may arm a short lease and
 an immutable hard ceiling, both measured in CLOCK_BOOTTIME. Clock conversion

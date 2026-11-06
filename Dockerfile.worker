@@ -7,6 +7,11 @@ RUN gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
 
 FROM ${RUNNER_BASE_IMAGE}
 USER 0:0
+# A fresh per-incarnation local volume copies this empty, owner-only seed.
+# Existing/stale readiness data is never imported or overwritten by the image.
+RUN test ! -e /run/vardr-worker-ready \
+    && mkdir -m 0700 /run/vardr-worker-ready \
+    && chown 10000:10000 /run/vardr-worker-ready
 COPY --from=owner-build /vardr-worker-owner /usr/local/bin/vardr-worker-owner
 COPY vardrrunner /opt/runner/vardrrunner
 # Replace only Python package source; reuse installed dependencies and toolkit.

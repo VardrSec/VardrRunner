@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Seed an empty UID/GID-10000 readiness directory at worker-image build time for
+  a fresh per-incarnation local metadata volume. Docker's copy API cannot read
+  the earlier tmpfs path; preserve both refused trials. Add no runtime capability
+  or secret mount. Corrected platform proof remains pending.
 - Add the explicit managed-worker candidate over existing claim, contract, grant,
   budget and receipt services. The worker-only PID-1 owner drops its three approved
   bootstrap capabilities before work; live private-channel/kernel readiness is

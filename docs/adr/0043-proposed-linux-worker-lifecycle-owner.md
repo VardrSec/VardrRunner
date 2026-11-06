@@ -38,6 +38,16 @@ tools. Runner remains the only execution engine and continues to validate shared
 contracts, authenticate Map control, resolve grants and account for budgets.
 The lifecycle owner supplies termination enforcement, not a second policy engine.
 
+The first two bounded Desktop readiness trials refused before admission or target
+execution: Docker's copy API cannot read the original tmpfs readiness path.
+The candidate now uses a fresh, dedicated default-local metadata volume, seeded
+empty at image build with UID/GID10000 and mode0700. The owner exclusively writes
+one mode0400 public readiness file; stale data is refused. It adds no secret store,
+service or runtime privilege. Exact volume ownership/attachments and the corrected
+readiness transport still require platform proof. See
+[Docker copy limitations](https://docs.docker.com/reference/cli/docker/container/cp/#corner-cases)
+and [the implementation boundary](../worker-lifecycle.md).
+
 The recommended candidate for owner review is bootstrap variant B below, paired
 with a bounded host stop-report capability for recovery after whole-container
 exit. This recommendation is not approval or implementation of either change.
@@ -408,21 +418,13 @@ it does not acknowledge confirmed cancellation or release a fence automatically.
 Restart policy must not silently enable an operator-disabled worker. Health and
 readiness are observations, not authorization or termination evidence.
 
-## Owner decision and acceptance still required
+## Implementation approval and acceptance gates
 
-Software drafts, static checks and protocol tests that do not enable the changed
-bootstrap can be prepared under the existing development authorization. This ADR
-does not add a blanket permission requirement for writing proposed code.
-
-Before enabling this proposed worker, the owner must explicitly approve this
-concrete combined candidate: variant B's temporary UID-0/SETUID/SETGID/SETPCAP
-bootstrap and empty steady-state capability sets, together with the protected host
-stop-capability holder's authority to assert termination and release the exact
-bound attempt's concurrency. That decision covers the departure from the current
-initial-user/no-added-capabilities baseline and the new trusted-host recovery
-assertion; it does not approve extra infrastructure or host sandbox claims.
-Approval of an opt-in worker in principle does not approve either change. This ADR
-records a recommendation, grants no approval and enables nothing.
+The explicit owner decision recorded above authorizes bounded implementation and
+testing of variant B and the protected host stop-report producer, including their
+disclosed privilege and trusted-host departures. No repeated approval is required
+for that same development scope. Default startup remains disabled; this decision
+does not approve extra infrastructure, host sandbox claims, release or deployment.
 
 Independent security review and actual Windows Docker Desktop/Linux acceptance
 must then cover bootstrap failures and actual capability sets, PID-1 identity,
