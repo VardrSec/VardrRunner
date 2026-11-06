@@ -47,6 +47,7 @@ class Control:
         self.grace = grace
         self.lease_deadline = lease_deadline
         self.reason = ""
+        self._worker_reuse_safe = True
         self._lock = threading.Lock()
         self._close = threading.Event()
         self._thread = threading.Thread(target=self._refresh, daemon=True, name="vardr-control")
@@ -93,10 +94,15 @@ class Control:
                         self.reason = self.reason or "control_lease_expired"
                         return
                     if response.get("action") != "continue":
+                        self._worker_reuse_safe = False
                         self.reason = "remote_stop_requested"
                         return
                     self.deadline = self._capped(started + lease)
-            except Exception:
+            except BaseException as error:
+                with self._lock:
+                    self._worker_reuse_safe = False
+                if not isinstance(error, Exception):
+                    raise
                 # Do not log remote payloads/errors or extend the last lease.
                 continue
 
@@ -128,6 +134,11 @@ class Control:
         return (
             self._close.is_set() and self._thread.ident is not None and not self._thread.is_alive()
         )
+
+    def worker_reuse_safe(self) -> bool:
+        """V3 reuse metadata; refresh failure never grants another attempt."""
+        with self._lock:
+            return self._worker_reuse_safe
 
 
 _CONTROL: ContextVar[Control | None] = ContextVar("execution_control", default=None)

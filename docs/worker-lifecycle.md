@@ -138,6 +138,32 @@ experiments remain stopped; this implementation does not close those gates.
 
 Protocol and state-machine tests use mocks; actual native bootstrap, descriptor
 isolation and descendant proof require separately reviewed platform evidence.
+
+The explicit inactive persistent image compiles the same owner with
+`VARDR_PERSISTENT=1`, native magic `0x33574456`, and immutable owner-ready/3. It
+cannot negotiate or downgrade to the finite image. The fixed 64-byte HELLO uses
+its lease slot for optional idle seconds (`0` means none) and hard slot for the
+optional attempt count (`0` means none). These slots carry policy, not execution
+deadlines. The bounded startup still precedes HELLO; afterward nonspawning idle
+has no default expiry. A first LEASE for the exact next sequence is mandatory
+before any launch and fixes a finite per-job hard ceiling. Refresh, expiry and
+namespace-exit rules remain unchanged.
+
+The adapter captures BOOTTIME before MONOTONIC for each fresh persistent epoch;
+an active epoch never resamples its offset. DONE independently requires normal
+native return, no Control stop reason and no rejected or failed refresh, as well
+as the existing actual drain and quiescence checks. The refresh-failure latch
+only denies v3 reuse; existing active-lease renewal and expiry behavior is
+unchanged. Only then does DONE clear job authority back to idle. V3
+binding digests include the admission hash and canonical decimal sequence;
+legacy bindings and native frames remain unchanged. Optional count/idle limits
+are immutable, and signed-int64 exhaustion refuses rather than wrapping. Native
+state tests model these transitions without PID1 bootstrap or credential changes;
+they do not establish persistent platform or hostile-process acceptance.
+The Python discovery window also respects an explicitly selected idle limit for
+best-effort clean no-job exit. A stalled RPC still faces the authoritative native
+idle ceiling; this does not widen that ceiling.
+
 Primary semantics: [Unix credentials](https://man7.org/linux/man-pages/man7/unix.7.html),
 [subreaper](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html),
 [wait](https://man7.org/linux/man-pages/man2/waitpid.2.html),

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import NoReturn, Protocol, cast
 
 from vardrrunner import api, config, execution_control, identity
+from vardrrunner.authorization import worker_persistent
 from vardrrunner.authorization.claim import ManagedEntry, ManagedRun
 from vardrrunner.authorization.codec import (
     AuthorizationError,
@@ -25,6 +26,7 @@ from vardrrunner.authorization.codec import (
     require,
 )
 from vardrrunner.authorization.documents import read_anchors, read_document
+from vardrrunner.authorization.persistent_codec import MAX_SEQUENCE, sequence64, wire_sequence64
 from vardrrunner.authorization.reconciliation import local_holds
 from vardrrunner.authorization.results import BINDING
 from vardrrunner.authorization.worker_admission import Admission
@@ -148,10 +150,29 @@ class Worker:
         self.output_root = output_root
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.monotonic, self.sleep = monotonic, sleep
-        self.store: WorkerStore | SequenceStore = (
-            WorkerStore(journal) if admission.max_attempts is None else SequenceStore(journal)
+        self.store: WorkerStore | SequenceStore | worker_persistent.PersistentStore = (
+            worker_persistent.PersistentStore(journal)
+            if admission.mode == "persistent"
+            else WorkerStore(journal)
+            if admission.max_attempts is None
+            else SequenceStore(journal)
         )
         self._used = False
+        self._next_sequence = 1
+
+    def _no_holds(self, *, full: bool = False) -> None:
+        if isinstance(self.store, worker_persistent.PersistentStore):
+            if full:
+                require(local_holds(self.journal) == 0, "worker_unresolved_local_attempt")
+            with self.journal._connection() as con:
+                require(
+                    worker_persistent.persistent_holds(con, full=full) == 0,
+                    "worker_unresolved_local_attempt",
+                )
+        else:
+            require(local_holds(self.journal) == 0, "worker_unresolved_local_attempt")
+            with self.journal._connection() as con:
+                require(sequence_holds(con) == 0, "worker_unresolved_local_attempt")
 
     def _ready(self) -> None:
         self.admission.require_current(
@@ -162,30 +183,73 @@ class Worker:
         # an admission file, environment variable or callback cannot enable it.
         require(execution_control.available(), "controlled_process_tree_unsupported")
 
-    def _discover(self, wait_seconds: int, poll_seconds: float) -> dict | None:
+    def _discover(
+        self, wait_seconds: int, poll_seconds: float, *, idle_deadline: float | None = None
+    ) -> dict | None:
         entered, wall = self.monotonic(), self.clock()
         cursor = None
 
         def remaining() -> float:
             elapsed = self.monotonic() - entered
             require(elapsed >= 0, "worker_clock_rollback")
-            return min(
+            left = min(
                 wait_seconds - elapsed,
                 wait_seconds - (self.clock() - wall).total_seconds(),
             )
+            return left if idle_deadline is None else min(left, idle_deadline - self.monotonic())
 
         while True:
+            if idle_deadline is not None and remaining() <= 0:
+                return None
             self._ready()
             left = remaining()
             if left <= 0:
                 return None
             body = {"origin": self.admission.origin, "runner_id": self.runner_id, "limit": 1}
+            persistent = isinstance(self.store, worker_persistent.PersistentStore)
+            if persistent:
+                self._no_holds()
+                body.update(
+                    runtime_id=self.admission.runtime_id,
+                    runtime_sha256=self.admission.runtime_sha256,
+                    admission_sha256=self.admission.admission_sha256,
+                    cursor={
+                        "last_sequence": wire_sequence64(self._next_sequence - 1),
+                        "phase": "idle",
+                    },
+                )
             if cursor is not None:
                 body["after"] = cursor
-            reply = self.client.managed_post("/jobs/managed/pending", body)
+            try:
+                reply = self.client.managed_post("/jobs/managed/pending", body)
+            except api.ManagedTransportError:
+                if not persistent:
+                    raise
+                # Discovery has no claim/lease/allowance effects. Idle transport
+                # loss may wait; never retry an unknown authority-bearing RPC.
+                self.sleep(min(poll_seconds, max(0.0, remaining())))
+                continue
             if remaining() <= 0:
                 return None  # A late discovery reply never authorizes a later claim.
-            fields(reply, {"jobs", "next_after"})
+            fields(reply, {"jobs", "next_after"} | ({"availability"} if persistent else set()))
+            if persistent:
+                presence = fields(
+                    reply["availability"], {"state", "observed_at", "fresh_until", "cursor"}
+                )
+                current = fields(presence["cursor"], {"last_sequence", "phase"})
+                require(
+                    sequence64(current["last_sequence"]) == self._next_sequence - 1
+                    and current["phase"] == "idle"
+                    and presence["state"] == "idle-ready",
+                    "worker_availability_held",
+                )
+                require(
+                    all(
+                        value is None or type(value) is str
+                        for value in (presence["observed_at"], presence["fresh_until"])
+                    ),
+                    "worker_availability_shape",
+                )
             require(type(reply["jobs"]) is list and len(reply["jobs"]) <= 1, "worker_pending_size")
             cursor = None if reply["next_after"] is None else _job_id(reply["next_after"])
             if reply["jobs"]:
@@ -214,13 +278,45 @@ class Worker:
             "worker_poll_interval",
         )
         self._ready()
-        require(local_holds(self.journal) == 0, "worker_unresolved_local_attempt")
-        with self.journal._connection() as con:
-            require(sequence_holds(con) == 0, "worker_unresolved_local_attempt")
+        self._no_holds(full=True)
         if isinstance(self.store, WorkerStore):
             self.store.reserve_runtime(self.admission.runtime_id, self.admission.runtime_sha256)
             job = self._discover(wait_seconds, poll_seconds)
             return None if job is None else self._run_job(job)
+        if isinstance(self.store, worker_persistent.PersistentStore):
+            self.store.reserve_runtime(
+                self.admission.runtime_id,
+                self.admission.runtime_sha256,
+                self.admission.max_attempts,
+                admission_sha256=self.admission.admission_sha256 or "",
+                admission_snapshot=self.admission.to_document(),
+            )
+            last = None
+            idle_started = self.monotonic()
+            persistent_maximum = (
+                self.admission.max_attempts
+                if self.admission.max_attempts is not None
+                else MAX_SEQUENCE
+            )
+            while self._next_sequence <= persistent_maximum:
+                idle = self.admission.idle_timeout_seconds
+                if idle is not None and self.monotonic() - idle_started >= idle:
+                    return last
+                self._ready()
+                self._no_holds()
+                job = self._discover(
+                    wait_seconds,
+                    poll_seconds,
+                    idle_deadline=None if idle is None else idle_started + idle,
+                )
+                if job is None:
+                    continue
+                epoch = cast(SequenceOwner, self.owner).begin_attempt(self._next_sequence)
+                epoch.require_active()
+                last = self._run_job(job, sequence=self._next_sequence, epoch=epoch)
+                self._next_sequence += 1
+                idle_started = self.monotonic()
+            return last
         maximum = self.admission.max_attempts
         require(maximum is not None, "worker_sequence_admission_required")
         assert maximum is not None
@@ -278,10 +374,20 @@ class Worker:
                 runner_id=self.runner_id,
                 enrollment_id=self.admission.enrollment_id,
             )
-            if isinstance(self.store, SequenceStore):
+            if isinstance(self.store, (SequenceStore, worker_persistent.PersistentStore)):
                 require(sequence is not None, "worker_sequence_required")
                 assert sequence is not None
-                self.store.prepare_claim(con, run_id, runtime_sequence=sequence, **public)
+                self.store.prepare_claim(
+                    con,
+                    run_id,
+                    runtime_sequence=sequence,
+                    **public,
+                    **(
+                        {"admission_sha256": self.admission.admission_sha256}
+                        if isinstance(self.store, worker_persistent.PersistentStore)
+                        else {}
+                    ),
+                )
             else:
                 self.store.prepare_claim(con, run_id, **public)
 
@@ -306,7 +412,13 @@ class Worker:
                 runtime_sha256=self.admission.runtime_sha256,
             )
             if sequence is not None:
-                binding["runtime_sequence"] = sequence
+                binding["runtime_sequence"] = (
+                    wire_sequence64(sequence, minimum=1)
+                    if isinstance(self.store, worker_persistent.PersistentStore)
+                    else sequence
+                )
+            if isinstance(self.store, worker_persistent.PersistentStore):
+                binding["admission_sha256"] = self.admission.admission_sha256
             self.store.prepare_binding(handle.run_id, binding)
             self._ready()
             acknowledgement = post(
@@ -315,7 +427,13 @@ class Worker:
                     **body,
                     "runtime_id": binding["runtime_id"],
                     "runtime_sha256": binding["runtime_sha256"],
-                    **({"runtime_sequence": sequence} if sequence is not None else {}),
+                    **(
+                        {
+                            key: binding[key]
+                            for key in ("runtime_sequence", "admission_sha256")
+                            if key in binding
+                        }
+                    ),
                 },
             )
             self.store.acknowledge_binding(handle.run_id, binding, acknowledgement)
@@ -335,6 +453,15 @@ class Worker:
                     "runtime_id": self.admission.runtime_id,
                     "runtime_sha256": self.admission.runtime_sha256,
                     **({"runtime_sequence": sequence} if sequence is not None else {}),
+                    **(
+                        {
+                            "runtime_sequence": wire_sequence64(sequence, minimum=1),
+                            "admission_sha256": self.admission.admission_sha256,
+                        }
+                        if isinstance(self.store, worker_persistent.PersistentStore)
+                        and sequence is not None
+                        else {}
+                    ),
                 },
             )
 
@@ -380,11 +507,34 @@ class Worker:
             self.owner.finished()
         else:
             require(
-                isinstance(self.store, SequenceStore) and refresh is not None,
+                isinstance(self.store, (SequenceStore, worker_persistent.PersistentStore))
+                and refresh is not None,
                 "worker_sequence_required",
             )
-            assert isinstance(self.store, SequenceStore) and refresh is not None
-            require(completion["outcome"] == "completed", "worker_healthy_completion_required")
+            assert (
+                isinstance(self.store, (SequenceStore, worker_persistent.PersistentStore))
+                and refresh is not None
+            )
+            persistent = isinstance(self.store, worker_persistent.PersistentStore)
+            require(
+                completion["outcome"] in ({"completed", "failed"} if persistent else {"completed"}),
+                "worker_healthy_completion_required",
+            )
+            if persistent:
+                from vardrrunner.authorization import results
+                from vardrrunner.authorization.codec import decoded
+
+                require(
+                    handle._confirmed_stop is None and handle._returned_artifact is not None,
+                    "worker_normal_completion_required",
+                )
+                assert handle._returned_artifact is not None
+                output, hashed, size = handle._returned_artifact
+                data = results._artifact_bytes(output, size)
+                require(
+                    digest(data) == hashed and decoded(data).get("error") != "execution_cancelled",
+                    "worker_normal_completion_required",
+                )
             self.store.completion(handle.run_id, completion)
             epoch.seal()
             require(handle.gate.control is not None, "worker_control_missing")
@@ -392,6 +542,9 @@ class Worker:
             # No owner/Gate/refresh mutex is held across this bounded join.
             handle.gate.control.quiesce(epoch.quiescence_deadline())
             refresh.require_quiescent()
+            if persistent:
+                require(not handle.gate.control.stop_reason(), "worker_normal_completion_required")
+                require(handle.gate.control.worker_reuse_safe(), "worker_refresh_reuse_held")
             self.store.done(handle.run_id, epoch.finished())
             expected = self.store.prepare_release(handle.run_id)
             self._ready()
@@ -410,6 +563,7 @@ class Worker:
                             "native_done_sha256",
                         )
                     },
+                    **({"admission_sha256": expected["admission_sha256"]} if persistent else {}),
                 },
             )
             self.store.acknowledge_release(handle.run_id, acknowledgement)
@@ -456,7 +610,10 @@ def main(argv: list[str] | None = None) -> int:
         url, key = config.require_auth()
         runner_id = identity.load_or_create().runner_id
         admission = await_admission(args.admission, args.admission_wait_seconds)
-        require(admission.max_attempts is not None, "worker_sequence_admission_required")
+        require(
+            admission.mode == "persistent" or admission.max_attempts is not None,
+            "worker_sequence_admission_required",
+        )
         admission.require_current(now=datetime.now(timezone.utc), origin=url, runner_id=runner_id)
         with connect(admission) as owner:
             remaining = int(
@@ -478,7 +635,11 @@ def main(argv: list[str] | None = None) -> int:
                 allocated_seconds=args.duration_seconds,
                 output_root=config.runs_dir(),
             ).run(wait_seconds=remaining)
-        return 0 if record is None or record.phase == Phase.DONE else 1
+        return (
+            0
+            if admission.mode == "persistent" or record is None or record.phase == Phase.DONE
+            else 1
+        )
     except (Exception, KeyboardInterrupt):
         # No transport body, target, credential, pathname or raw exception output.
         print("managed_worker_held")

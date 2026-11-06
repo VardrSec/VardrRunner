@@ -30,7 +30,13 @@
 #endif
 #define OWNER 10000
 #define RUNNER 10001
+#ifdef VARDR_PERSISTENT
+#define MAGIC 0x33574456u
+#define READY_SCHEMA "vardr.worker-owner-ready/3"
+#else
 #define MAGIC 0x32574456u
+#define READY_SCHEMA "vardr.worker-owner-ready/2"
+#endif
 #define NS 1000000000ULL
 #define REPORT_RUNWAY (150ULL * NS)
 #define BOOT 0u
@@ -47,6 +53,7 @@ struct protocol {
     int hello, armed, done;
     uint64_t sequence, lease, hard, work_end, grant_end;
     unsigned char binding[32];
+    uint64_t idle_seconds, maximum;
 };
 static volatile sig_atomic_t stopping;
 static void stopped(int signo) { (void)signo; stopping = 1; }
@@ -199,18 +206,37 @@ static int receive(int fd, pid_t pid, uid_t uid, int eof_allowed, struct packet 
     if (cred.pid != pid || cred.uid != uid || cred.gid != uid) fail();
     return 1;
 }
+static void idle(struct protocol *state, uint64_t now) {
+#ifdef VARDR_PERSISTENT
+    uint64_t seconds = state->idle_seconds;
+    if (!seconds) { state->lease = state->hard = UINT64_MAX; return; }
+#else
+    uint64_t seconds = IDLE_SECONDS;
+#endif
+    if (now > UINT64_MAX - seconds * NS) fail();
+    state->lease = state->hard = now + seconds * NS;
+    if (state->work_end < state->lease) state->lease = state->hard = state->work_end;
+}
 static void accept_packet(struct protocol *state, const struct packet *p,
     const unsigned char nonce[32], uint64_t now) {
     if (now >= state->lease || now >= state->hard || now >= state->grant_end) fail();
     if (!state->hello) {
+#ifdef VARDR_PERSISTENT
+        /* HELLO slots carry optional seconds/count policy, never job deadlines. */
+        if (p->type != HELLO || p->sequence || p->lease > 86400 ||
+            p->hard > INT64_MAX || memcmp(p->binding, nonce, 32)) fail();
+        state->idle_seconds = p->lease; state->maximum = p->hard;
+        state->work_end = state->grant_end = UINT64_MAX;
+        idle(state, now);
+#else
         if (p->type != HELLO || p->sequence || p->lease <= now || p->hard <= p->lease ||
             p->hard - p->lease != REPORT_RUNWAY || p->hard > now + 604800 * NS ||
             memcmp(p->binding, nonce, 32)) fail();
         state->work_end = p->lease; state->grant_end = p->hard;
-        uint64_t idle = now + IDLE_SECONDS * NS;
-        if (idle < state->lease) state->lease = idle;
-        if (state->work_end < state->lease) state->lease = state->work_end;
-        state->hard = state->lease;
+        uint64_t ending = state->lease;
+        idle(state, now);
+        if (ending < state->lease) state->lease = state->hard = ending;
+#endif
         state->hello = 1;
     } else if (p->type == LEASE) {
         if (p->lease <= now || p->lease > now + 10 * NS || p->hard < p->lease ||
@@ -219,7 +245,12 @@ static void accept_packet(struct protocol *state, const struct packet *p,
             if (p->sequence != state->sequence || memcmp(state->binding, p->binding, 32) ||
                 p->hard > state->hard) fail();
         } else {
+#ifdef VARDR_PERSISTENT
+            if (state->sequence >= INT64_MAX || (state->maximum &&
+                state->sequence >= state->maximum) || p->sequence != state->sequence + 1) fail();
+#else
             if (state->sequence >= MAX_ATTEMPTS || p->sequence != state->sequence + 1) fail();
+#endif
             state->sequence = p->sequence;
             memcpy(state->binding, p->binding, 32);
         }
@@ -229,8 +260,7 @@ static void accept_packet(struct protocol *state, const struct packet *p,
         if (p->sequence != state->sequence || memcmp(state->binding, p->binding, 32) ||
             p->lease || p->hard) fail();
         state->armed = 0; state->done = 1;
-        state->lease = state->hard = now + IDLE_SECONDS * NS;
-        if (state->work_end < state->lease) state->lease = state->hard = state->work_end;
+        idle(state, now);
     } else fail();
 }
 static void publish(const unsigned char nonce[32]) {
@@ -244,7 +274,7 @@ static void publish(const unsigned char nonce[32]) {
     for (int i = 0; i < 32; i++) snprintf(hex + i * 2, 3, "%02x", nonce[i]);
     char out[1024];
     int n = snprintf(out, sizeof(out),
-        "{\"schema\":\"vardr.worker-owner-ready/2\",\"owner_nonce\":\"%s\","
+        "{\"schema\":\"" READY_SCHEMA "\",\"owner_nonce\":\"%s\","
         "\"owner_pid\":1,\"owner_uid\":10000,\"runner_uid\":10001,"
         "\"capabilities\":{\"effective\":\"0000000000000000\",\"permitted\":\"0000000000000000\","
         "\"inheritable\":\"0000000000000000\",\"ambient\":\"0000000000000000\","

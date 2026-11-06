@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 
 from vardrrunner import launch_guard
 from vardrrunner.authorization.codec import encoded
+from vardrrunner.authorization.persistent_codec import MAX_SEQUENCE, wire_sequence64
 
 if TYPE_CHECKING:
     from vardrrunner.authorization.worker_admission import Admission
@@ -36,6 +37,7 @@ _PACKET_V2 = struct.Struct("<IIQQQ32s")
 _CREDENTIALS = struct.Struct("=iii")
 _MAGIC = 0x31574456
 _MAGIC_V2 = 0x32574456
+_MAGIC_V3 = 0x33574456
 _READY, _HELLO, _LEASE, _DONE, _ACK = 1, 2, 3, 4, 5
 _WALL = 0x40000000
 REPORT_RUNWAY_SECONDS = 150
@@ -72,6 +74,7 @@ def _incarnation_clock(admission: Admission) -> tuple[tuple[int, float], int]:
     now = _utcnow()
     expiry = admission.expires_at
     _require(isinstance(expiry, datetime) and expiry.tzinfo is not None)
+    assert expiry is not None
     remaining = (expiry - now).total_seconds()
     _require(REPORT_RUNWAY_SECONDS < remaining <= 604800)
     grant_end = boot + int(remaining * _SECOND)
@@ -143,6 +146,7 @@ class WorkerOwner:
         self._lease = 0
         self._launched = False
         self._drained = False
+        self._normal_return = False
         self._finished = False
         self._launch_thread: int | None = None
 
@@ -260,6 +264,7 @@ class WorkerOwner:
                     self._drained = True
                     if reason:
                         raise execution_control.ExecutionStopped(reason, True)
+                    self._normal_return = True
                     return code
                 if reason:
                     # Best-effort group cleanup cannot prove escaped descendants.
@@ -304,6 +309,7 @@ class AttemptEpoch:
         self._sealed = self._finished = False
         self._binding: dict | None = None
         self._control: Control | None = None
+        self._clock_boot, self._clock_monotonic = owner._epoch_clock()
 
     @property
     def runtime_sequence(self) -> int:
@@ -341,9 +347,9 @@ class AttemptEpoch:
             boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
             mono = time.monotonic()
             _require(0 < lease_end - mono <= 10 and lease_end <= hard_end <= mono + 86400)
-            lease = owner._clock_boot + int((lease_end - owner._clock_monotonic) * _SECOND)
+            lease = self._clock_boot + int((lease_end - self._clock_monotonic) * _SECOND)
             hard = min(
-                owner._clock_boot + int((hard_end - owner._clock_monotonic) * _SECOND),
+                self._clock_boot + int((hard_end - self._clock_monotonic) * _SECOND),
                 owner._work_end,
             )
             if self._binding is not None:
@@ -351,14 +357,7 @@ class AttemptEpoch:
             lease = min(lease, hard)
             _require(boot < lease <= hard)
             hashed = hashlib.sha256(
-                encoded(
-                    {
-                        "runtime_id": owner._admission.runtime_id,
-                        "runtime_sha256": owner._admission.runtime_sha256,
-                        "runtime_sequence": self._sequence,
-                        "binding": binding,
-                    }
-                )
+                encoded(owner._attempt_binding(self._sequence, binding))
             ).digest()
             owner._exchange_v2(_LEASE, self._sequence, lease, hard, hashed)
             self._binding = dict(binding)
@@ -385,19 +384,26 @@ class AttemptEpoch:
             self._current()
             _require(self._sealed and self._binding is not None)
             _require(self._control is not None and self._control.worker_quiescent())
+            assert self._control is not None
             _require(owner._launched and owner._drained and owner._empty_children())
+            if isinstance(owner, PersistentWorkerOwner):
+                _require(owner._normal_return and not self._control.stop_reason())
+                _require(self._control.worker_reuse_safe())
             binding = owner._binding
             if binding is None:
                 raise LifecycleUnavailable("worker_attempt_not_armed")
             before = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+            _require(before < min(owner._lease, owner._hard, owner._work_end))
             proof = owner._exchange_v2(_DONE, self._sequence, 0, 0, binding)
-            owner._idle_end = min(before + _IDLE_SECONDS * _SECOND, owner._work_end)
+            owner._idle_end = owner._next_idle_end(before)
             self._finished = True
             return proof
 
 
 class SequentialWorkerOwner(WorkerOwner):
     """V2 native channel with bounded idle and per-attempt ownership epochs."""
+
+    _magic = _MAGIC_V2
 
     def __init__(
         self,
@@ -407,12 +413,33 @@ class SequentialWorkerOwner(WorkerOwner):
         grant_end: int,
     ):
         super().__init__(channel, admission, clock_anchor, grant_end)
+        _require(getattr(admission, "mode", None) is None)
         _require(
             type(self._admission.max_attempts) is int and 1 <= self._admission.max_attempts <= 32
         )
         self._epoch: AttemptEpoch | None = None
         self._sequence = 0
         self._idle_end = self._work_end
+
+    def _epoch_clock(self) -> tuple[int, float]:
+        return self._clock_boot, self._clock_monotonic
+
+    def _sequence_limit(self) -> int:
+        maximum = self._admission.max_attempts
+        _require(maximum is not None)
+        assert maximum is not None
+        return maximum
+
+    def _next_idle_end(self, before: int) -> int:
+        return min(before + _IDLE_SECONDS * _SECOND, self._work_end)
+
+    def _attempt_binding(self, sequence: int, binding: dict) -> dict:
+        return {
+            "runtime_id": self._admission.runtime_id,
+            "runtime_sha256": self._admission.runtime_sha256,
+            "runtime_sequence": sequence,
+            "binding": binding,
+        }
 
     def _receive_v2(self) -> tuple[int, int, int, int, bytes]:
         data, ancillary, flags, _ = self._channel.recvmsg(  # type: ignore[attr-defined]
@@ -425,17 +452,17 @@ class SequentialWorkerOwner(WorkerOwner):
         _require(len(credentials) == _CREDENTIALS.size)
         _require(_CREDENTIALS.unpack(credentials) == (1, 10000, 10000))
         magic, kind, sequence, lease, hard, binding = _PACKET_V2.unpack(data)
-        _require(magic == _MAGIC_V2)
+        _require(magic == self._magic)
         return kind, sequence, lease, hard, binding
 
     def _exchange_v2(self, kind: int, sequence: int, lease: int, hard: int, binding: bytes) -> str:
         _require(
-            self._channel.send(_PACKET_V2.pack(_MAGIC_V2, kind, sequence, lease, hard, binding))
+            self._channel.send(_PACKET_V2.pack(self._magic, kind, sequence, lease, hard, binding))
             == _PACKET_V2.size
         )
         _require(self._receive_v2() == (_ACK, sequence, lease, hard, binding))
         return hashlib.sha256(
-            _PACKET_V2.pack(_MAGIC_V2, _ACK, sequence, lease, hard, binding)
+            _PACKET_V2.pack(self._magic, _ACK, sequence, lease, hard, binding)
         ).hexdigest()
 
     def _handshake(self, nonce: bytes) -> None:
@@ -455,11 +482,10 @@ class SequentialWorkerOwner(WorkerOwner):
             self.require_ready(self._admission)
             _require(self._epoch is None or self._epoch._finished)
             _require(type(runtime_sequence) is int and runtime_sequence == self._sequence + 1)
-            maximum = self._admission.max_attempts
-            _require(maximum is not None and runtime_sequence <= maximum)
+            _require(1 <= runtime_sequence <= self._sequence_limit())
             _require(self._empty_children())
             self._binding, self._lease, self._hard = None, 0, 0
-            self._launched = self._drained = False
+            self._launched = self._drained = self._normal_return = False
             self._sequence = runtime_sequence
             self._epoch = AttemptEpoch(self, runtime_sequence)
             return self._epoch
@@ -491,6 +517,73 @@ class SequentialWorkerOwner(WorkerOwner):
         return super().run(cmd, seconds, observer, control)
 
 
+class PersistentWorkerOwner(SequentialWorkerOwner):
+    """Explicit v3 idle availability; every attempt still needs a finite native lease."""
+
+    _magic = _MAGIC_V3
+
+    def __init__(
+        self,
+        channel: socket.socket,
+        admission: Admission,
+        clock_anchor: tuple[int, float],
+        grant_end: int,
+    ):
+        WorkerOwner.__init__(self, channel, admission, clock_anchor, grant_end)
+        _require(admission.mode == "persistent")
+        admission.to_document()
+        self._epoch = None
+        self._sequence = 0
+        self._work_end = self._grant_end = self._idle_end = (1 << 64) - 1
+
+    def _epoch_clock(self) -> tuple[int, float]:
+        # A fresh conservative offset belongs to this attempt only. Never sample
+        # again when that active epoch refreshes its immutable hard ceiling.
+        boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+        return boot, time.monotonic()
+
+    def _sequence_limit(self) -> int:
+        return (
+            MAX_SEQUENCE if self._admission.max_attempts is None else self._admission.max_attempts
+        )
+
+    def _next_idle_end(self, before: int) -> int:
+        seconds = self._admission.idle_timeout_seconds
+        return (
+            self._work_end if seconds is None else min(before + seconds * _SECOND, self._work_end)
+        )
+
+    def _attempt_binding(self, sequence: int, binding: dict) -> dict:
+        return {
+            **super()._attempt_binding(sequence, binding),
+            "admission_sha256": self._admission.admission_sha256,
+            "runtime_sequence": wire_sequence64(sequence, minimum=1),
+        }
+
+    def _handshake(self, nonce: bytes) -> None:
+        _require(self._receive_v2() == (_READY, 0, 0, 0, nonce))
+        before = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+        # These HELLO fields are immutable optional policy, not job deadlines.
+        self._exchange_v2(
+            _HELLO,
+            0,
+            self._admission.idle_timeout_seconds or 0,
+            self._admission.max_attempts or 0,
+            nonce,
+        )
+        self._idle_end = self._next_idle_end(before)
+
+    def require_ready(self, admission: Admission) -> None:
+        WorkerOwner.require_ready(self, admission)
+        admission.to_document()
+        if self._epoch is None or self._epoch._finished or self._binding is None:
+            _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < self._idle_end)  # type: ignore[attr-defined]
+
+    def require_allocation(self, seconds: int) -> None:
+        self.require_ready(self._admission)
+        _require(type(seconds) is int and 1 <= seconds <= 86400)
+
+
 @contextmanager
 def connect(admission: Admission) -> Iterator[WorkerOwner]:
     """Accept only the fixed inherited fd3; never an env flag or caller socket."""
@@ -498,7 +591,10 @@ def connect(admission: Admission) -> Iterator[WorkerOwner]:
     _require(sys.platform == "linux" and hasattr(time, "CLOCK_BOOTTIME"))
     # Reuse this conservative offset for the complete connection. A later
     # suspend must shorten/refuse permission, never shift first arm or renewal.
-    clock_anchor, grant_end = _incarnation_clock(admission)
+    persistent = getattr(admission, "mode", None) == "persistent"
+    clock_anchor, grant_end = (
+        ((0, 0.0), (1 << 64) - 1) if persistent else _incarnation_clock(admission)
+    )
     with _GLOBAL:
         _require(_ACTIVE is None and threading.active_count() == 1)
         _prctl(4, 0)  # PR_SET_DUMPABLE in the actual Python process after exec.
@@ -511,7 +607,9 @@ def connect(admission: Admission) -> Iterator[WorkerOwner]:
             _require(channel.family == socket.AF_UNIX and channel.type == socket.SOCK_SEQPACKET)  # type: ignore[attr-defined]
             _require(channel.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED) == 1)  # type: ignore[attr-defined]
             owner_type = (
-                SequentialWorkerOwner
+                PersistentWorkerOwner
+                if persistent
+                else SequentialWorkerOwner
                 if getattr(admission, "max_attempts", None) is not None
                 else WorkerOwner
             )

@@ -13,6 +13,13 @@ enablement, public admission and host reconciliation belong to the distribution.
 The first one-attempt Desktop slice passed separately; actual v2 Linux/Docker and
 Windows Docker Desktop acceptance remains open.
 
+The owner's clarified normal behavior is persistent availability until explicit
+operator stop. An **inactive v3 candidate** now implements that behavior beside
+the finite modes. It uses a separate `Dockerfile.worker.persistent` image and
+`vardr.worker-admission/3`, with `mode:"persistent"`. Default startup remains off.
+Its proposed STOP-only reporting lifetime requires a concrete owner disposition
+before live admission; implementation and component tests do not activate it.
+
 ## Entry and authority
 
 The fixed native PID-1 owner starts only `python -I -m vardrrunner.managed_worker`,
@@ -100,6 +107,39 @@ explicit observation/reconciliation and fresh admission where needed; it never
 retries that attempt or refunds its charges. Reaching the batch or finite idle
 limit also exits. Always-running supervision and automatic restarts are not
 implemented or silently enabled by this candidate.
+
+## Persistent v3 candidate
+
+Persistent admission binds the same physical identity plus a separate immutable
+admission hash. Its default `limits` are `max_attempts:null` and
+`idle_timeout_seconds:null`; there is no implicit 32-job or 60-second idle limit.
+Operators may explicitly select a finite count or idle timeout. Wire sequences
+are canonical decimal strings through signed-int64 maximum; local/native values
+remain exact integers and never wrap, reset or reuse an attempt. Existing v1/v2
+numeric formats and matching finite images are unchanged.
+
+One full startup audit precedes discovery. Subsequent iterations use indexed
+unresolved rows and the exact history head, retaining every prior tombstone.
+Read-only idle discovery can wait through transport loss; unknown claim, binding,
+result or release replies cannot be retried. Advisory presence is neither a lease
+nor readiness proof. Every discovered job creates fresh Gate, Control and epoch
+objects and repeats authority, local credential, resource, budget and cancellation
+checks before launch.
+
+The v3 native HELLO establishes only nonspawning idle. Each first validated job
+lease pins a fresh finite hard ceiling using a new conservative per-attempt clock
+anchor. No active anchor is rebased. Normal native return, empty lineage, sealed
+callbacks, joined Control thread, no stop reason, no failed/rejected refresh and
+durable canonical completion are all required before DONE and original-token
+release. A naturally failed
+result may continue under those same conditions. Cancellation markers, confirmed
+stopped partial results and control/lease loss cannot use that path. Unknown work
+still ends the incarnation or remains held; persistent availability adds no
+automatic crash restart.
+
+Pure component tests model late discovery and more than 32 jobs. Actual supported
+Linux and Docker Desktop proofs, the complete failure matrix and retained
+ADR 0043 security gates remain required.
 
 ## Failure and recovery
 

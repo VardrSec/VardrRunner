@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Prepare explicit persistent-v3 worker availability until operator stop, with
+  optional finite session controls and unchanged fresh per-job authority and
+  termination checks. Preserve matching finite images/protocols; use exact int64
+  decimal sequences, per-attempt clock anchors, and normal drained failed-result
+  continuation only. The candidate remains inactive pending the proposed
+  reporting-lifetime disposition and independent platform/security acceptance.
 - Retain bounded, case-bound Gate cancellation evidence only after confirmed
   native cleanup and an existing stop cause. Preserve the original Gate artifact,
   publish a separate failed-result copy without overwriting files, and retain
