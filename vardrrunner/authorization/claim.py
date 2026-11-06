@@ -47,6 +47,20 @@ class ClaimError(AuthorizationError):
     """Fixed local reason; never a raw transport or journal exception."""
 
 
+class LocalPreclaimDenied(ClaimError):
+    """Opt-in local grant-policy denial before the claim callback is invoked."""
+
+
+def _local_grant_denial(error: Exception) -> bool:
+    return (
+        isinstance(error, credential_grants.GrantError)
+        and len(error.args) == 1
+        and type(error.args[0]) is str
+        and error.args[0]
+        in {"grant_missing_or_replaced", "grant_expired_or_revoked", "grant_binding_changed"}
+    )
+
+
 class ClaimStore:
     """Additive tombstones in the SAME journal; no capability or signed payload."""
 
@@ -365,6 +379,7 @@ class ManagedEntry:
         verified_runtime_lease: Callable[[dict, float, float], None] | None = None,
         preclaim_check: Callable[[], None] | None = None,
         before_claim_send: Callable[[sqlite3.Connection, str], None] | None = None,
+        classify_local_denials: bool = False,
         clock: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ):
@@ -381,11 +396,21 @@ class ManagedEntry:
         self._verified_runtime_lease = verified_runtime_lease
         self._preclaim_check = preclaim_check
         self._before_claim_send = before_claim_send
+        require(type(classify_local_denials) is bool, "invalid_preclaim_denial_mode")
+        self._classify_local_denials = classify_local_denials
         self.clock, self.monotonic = clock or (lambda: datetime.now(timezone.utc)), monotonic
         self._used = False
         self._artifact_limit: int | None = None
         self._invocation = uuid.uuid4().hex
         self.run_id: str | None = None
+
+    def _credential_check(self) -> None:
+        try:
+            handlers.check_gate_case(self.case, self.engagement_id)
+        except credential_grants.GrantError as error:
+            if self._classify_local_denials and _local_grant_denial(error):
+                raise LocalPreclaimDenied("local_credential_denied_before_rpc") from None
+            raise
 
     def _check(self, directory: Path, plan: dict | None = None):
         require(execution_control.available(), "controlled_process_tree_unsupported")
@@ -393,7 +418,7 @@ class ManagedEntry:
         cfg = configs.VardrGateConfig.from_dict(
             {"test_case": self.case, "execution": self.execution}
         )
-        handlers.check_gate_case(self.case, self.engagement_id)
+        self._credential_check()
         binding, compiled = target_budget.prepare(cfg)
         require(
             encoded(
@@ -492,14 +517,12 @@ class ManagedEntry:
                 self.store.prepare_send(record.run_id, owner, utc, mono, self._before_claim_send)
                 self._check(directory, plan)  # No journal writer held while checking grants.
                 require(not self.journal.stop_requested(record.run_id), "local_stop_before_claim")
-                handlers.check_gate_case(
-                    self.case, self.engagement_id
-                )  # Last blocking check after all preparation/journal waits.
+                self._credential_check()  # Last blocking check after preparation/journal waits.
                 if self._preclaim_check is not None:
                     # Trusted local-only check, inside the known pre-RPC guard.
                     # Opaque claim callback failures below remain unknown sends.
                     self._preclaim_check()
-            except Exception:
+            except Exception as error:
                 try:
                     self.store.hold(record.run_id, owner, "denied_before_rpc")
                     from .reconciliation import retire_preclaim
@@ -507,6 +530,8 @@ class ManagedEntry:
                     retire_preclaim(self.journal, record.run_id)
                 except Exception:
                     pass
+                if isinstance(error, LocalPreclaimDenied):
+                    raise error from None
                 raise ClaimError("local_claim_denied_before_rpc") from None
             try:
                 reply = self._claim(

@@ -15,7 +15,7 @@ from typing import NoReturn, Protocol, cast
 
 from vardrrunner import api, config, execution_control, identity
 from vardrrunner.authorization import worker_persistent
-from vardrrunner.authorization.claim import ManagedEntry, ManagedRun
+from vardrrunner.authorization.claim import LocalPreclaimDenied, ManagedEntry, ManagedRun
 from vardrrunner.authorization.codec import (
     AuthorizationError,
     TrustAnchor,
@@ -91,6 +91,45 @@ class SequenceOwner(Owner, Protocol):
     def begin_attempt(self, runtime_sequence: int) -> Epoch: ...
 
 
+class _DeferredEpoch:
+    """One selection's epoch, assigned once only after trusted local checks."""
+
+    def __init__(self, owner: SequenceOwner, sequence: int):
+        self._owner, self._sequence = owner, sequence
+        self._epoch: Epoch | None = None
+        self._entered = False
+
+    @property
+    def entered(self) -> bool:
+        return self._entered
+
+    def begin(self) -> None:
+        require(not self._entered, "worker_epoch_already_entered")
+        self._entered = True  # A failed native-owner entry must never permit a skip.
+        self._epoch = self._owner.begin_attempt(self._sequence)
+        self._epoch.require_active()
+
+    def _selected(self) -> Epoch:
+        require(self._epoch is not None, "worker_epoch_not_entered")
+        assert self._epoch is not None
+        return self._epoch
+
+    def require_active(self) -> None:
+        self._selected().require_active()
+
+    def verified_lease(self, binding: dict, lease_end: float, hard_end: float) -> None:
+        self._selected().verified_lease(binding, lease_end, hard_end)
+
+    def seal(self) -> None:
+        self._selected().seal()
+
+    def quiescence_deadline(self) -> float:
+        return self._selected().quiescence_deadline()
+
+    def finished(self) -> str:
+        return self._selected().finished()
+
+
 class _EpochRefresh:
     """Pin one immutable epoch across even a blocked refresh RPC."""
 
@@ -159,6 +198,7 @@ class Worker:
         )
         self._used = False
         self._next_sequence = 1
+        self._discovery_after: str | None = None
 
     def _no_holds(self, *, full: bool = False) -> None:
         if isinstance(self.store, worker_persistent.PersistentStore):
@@ -187,7 +227,8 @@ class Worker:
         self, wait_seconds: int, poll_seconds: float, *, idle_deadline: float | None = None
     ) -> dict | None:
         entered, wall = self.monotonic(), self.clock()
-        cursor = None
+        persistent = isinstance(self.store, worker_persistent.PersistentStore)
+        cursor = self._discovery_after if persistent else None
 
         def remaining() -> float:
             elapsed = self.monotonic() - entered
@@ -206,7 +247,6 @@ class Worker:
             if left <= 0:
                 return None
             body = {"origin": self.admission.origin, "runner_id": self.runner_id, "limit": 1}
-            persistent = isinstance(self.store, worker_persistent.PersistentStore)
             if persistent:
                 self._no_holds()
                 body.update(
@@ -252,6 +292,8 @@ class Worker:
                 )
             require(type(reply["jobs"]) is list and len(reply["jobs"]) <= 1, "worker_pending_size")
             cursor = None if reply["next_after"] is None else _job_id(reply["next_after"])
+            if persistent:
+                self._discovery_after = cursor
             if reply["jobs"]:
                 return fields(
                     reply["jobs"][0],
@@ -311,9 +353,20 @@ class Worker:
                 )
                 if job is None:
                     continue
-                epoch = cast(SequenceOwner, self.owner).begin_attempt(self._next_sequence)
-                epoch.require_active()
-                last = self._run_job(job, sequence=self._next_sequence, epoch=epoch)
+                selection_epoch = _DeferredEpoch(cast(SequenceOwner, self.owner), self._next_sequence)
+                record = self._run_job(job, sequence=self._next_sequence, epoch=selection_epoch)
+                if record is None:
+                    self._ready()
+                    self._no_holds()
+                    # Local denials never start a new discovery window in a busy loop.
+                    remaining = (
+                        poll_seconds
+                        if idle is None
+                        else max(0.0, idle_started + idle - self.monotonic())
+                    )
+                    self.sleep(min(poll_seconds, remaining))
+                    continue
+                last = record
                 self._next_sequence += 1
                 idle_started = self.monotonic()
             return last
@@ -339,10 +392,17 @@ class Worker:
 
     def _run_job(
         self, job: dict, *, sequence: int | None = None, epoch: Epoch | None = None
-    ) -> RunRecord:
+    ) -> RunRecord | None:
         self._ready()
         job_id = _job_id(job["id"])
         engagement_id = _job_id(job["program_id"])
+        persistent = isinstance(self.store, worker_persistent.PersistentStore)
+        if isinstance(
+            self.store, worker_persistent.PersistentStore
+        ) and self.store.denied_selection(self.admission.origin, job_id):
+            # The original no-send tombstone is immutable. Queue a new Map job
+            # after remediation; never reuse ClaimStore's (backend, job) key.
+            return None
         require(
             job["authorization_contract_required"] is True
             and job["tool_type"] == "vardrgate_api_test",
@@ -377,7 +437,12 @@ class Worker:
             if isinstance(self.store, (SequenceStore, worker_persistent.PersistentStore)):
                 require(sequence is not None, "worker_sequence_required")
                 assert sequence is not None
-                self.store.prepare_claim(
+                prepare = (
+                    self.store.prepare_selection
+                    if isinstance(self.store, worker_persistent.PersistentStore)
+                    else self.store.prepare_claim
+                )
+                prepare(
                     con,
                     run_id,
                     runtime_sequence=sequence,
@@ -444,9 +509,11 @@ class Worker:
             # The independent owner checks its immutable suspend-aware ceiling
             # immediately before the only claim RPC. A file/boolean cannot arm it.
             self.owner.require_allocation(self.allocated_seconds)
+            if isinstance(epoch, _DeferredEpoch):
+                epoch.begin()
 
         def claim(body: dict) -> dict:
-            return post(
+            reply = post(
                 "claim",
                 {
                     **body,
@@ -464,6 +531,11 @@ class Worker:
                     ),
                 },
             )
+            if isinstance(self.store, worker_persistent.PersistentStore):
+                require(entry.run_id is not None, "worker_selection_missing")
+                assert entry.run_id is not None
+                self.store.promote_selection(entry.run_id)
+            return reply
 
         entry = ManagedEntry(
             self.journal,
@@ -483,10 +555,25 @@ class Worker:
             verified_runtime_lease=epoch.verified_lease if epoch is not None else None,
             preclaim_check=preclaim_check,
             before_claim_send=prepare_claim,
+            classify_local_denials=persistent,
             clock=self.clock,
             monotonic=self.monotonic,
         )
-        handle = entry.acquire(directory)
+        try:
+            handle = entry.acquire(directory)
+        except LocalPreclaimDenied:
+            require(
+                isinstance(self.store, worker_persistent.PersistentStore)
+                and isinstance(epoch, _DeferredEpoch)
+                and not epoch.entered,
+                "worker_preclaim_denial_unproven",
+            )
+            assert isinstance(self.store, worker_persistent.PersistentStore)
+            if entry.run_id is not None:
+                self.store.retire_selection(entry.run_id)
+            self._ready()
+            self._no_holds()
+            return None
         try:
             handle.execute(directory)
         except BaseException:
