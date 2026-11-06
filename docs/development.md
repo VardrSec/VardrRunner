@@ -7,6 +7,14 @@ process/clock readbacks and conservative unknown-state holds. Run the repository
 normal Ruff/format, mypy and complete 95%-coverage suite for the combined change.
 Python mocks do not certify native containment.
 
+`test_worker_persistent_journal`, `test_worker_persistent_observations` and
+`test_worker_persistent_reconciliation` cover exact signed-64-bit string counters,
+SQL history backstops, lost replies, original-key recovery and retained snapshot
+corruption. Later-job retirement cannot replace an earlier job's terminal receipt.
+Compiler-stage native state tests establish protocol behavior only; actual idle
+availability, more than 32 jobs, physical stops and containment still need the
+separate Linux and Docker Desktop acceptance matrix.
+
 `test_runtime_retirement_observation` additionally checks exact v2 receipt binding,
 legacy v1 behavior, monotonic receipt retention, source changes during RPC and
 refusal when execution/artifact/ledger metadata conflicts. `test_worker_binding`

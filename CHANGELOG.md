@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Retain persistent-v3 admission and attempt history in the existing journal,
+  with exact original-key observation/reconciliation and canonical receipt
+  bindings. Physical retirement preserves missing ACKs and spent allowances;
+  full startup audits reject missing or changed evidence.
+
 - Prepare explicit persistent-v3 worker availability until operator stop, with
   optional finite session controls and unchanged fresh per-job authority and
   termination checks. Preserve matching finite images/protocols; use exact int64

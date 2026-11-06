@@ -8,6 +8,12 @@ behavior remain unchanged. Host-observed retirement is authenticated metadata;
 it does not recreate a native execution handle or consumption acknowledgement.
 Runtime acceptance remains open and default startup remains inert.
 
+The inactive persistent-v3 candidate retains signed-64-bit decimal sequences and
+immutable admission snapshots in additive tables of the same journal. Exact
+original-key observation `/4` may record physical retirement; it never supplies a
+missing claim, consume, DONE or idle-release acknowledgment. Full startup audits
+validate retained history; normal idle checks select unresolved rows.
+
 The worker's pre-send runtime/enrollment/root association commits in the same
 journal transaction as its send marker. Optional authenticated observation v2
 can retire an untouched unknown intent only after Map has irreversibly fenced

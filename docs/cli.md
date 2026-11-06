@@ -9,6 +9,11 @@ Read-only SQLite access is not a strict filesystem non-mutation guarantee.
 These limits leave the required Full/Mapless, Docker and cross-platform acceptance
 open. Earlier test evidence applies only to its recorded source revision.
 
+The separately prepared persistent-v3 worker remains inactive. Its original-key
+observation and metadata reconciliation preserve existing audit commands and
+never recreate execution authority or replay an uncertain request. Finite v1/v2
+receipts retain their original meaning; they do not prove persistent availability.
+
 DNSx invocations suppress automatic version checks. Existing connected commands
 retain their meaning; this correction does not enable standalone recon or grant
 authority for DNS/HTTP targets or auxiliary services.

@@ -58,10 +58,22 @@ def claim_association(con: sqlite3.Connection, run_id: str) -> dict | None:
                 "SELECT * FROM managed_worker_attempts WHERE run_id=?", (run_id,)
             ).fetchall()
         )
+    if con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_persistent_attempts'"
+    ).fetchone():
+        rows.extend(
+            con.execute(
+                "SELECT * FROM managed_persistent_attempts WHERE run_id=?", (run_id,)
+            ).fetchall()
+        )
     if not rows:
         return None
     require(len(rows) == 1, "worker_claim_association_changed")
     row = rows[0]
+    if "admission_sha256" in row.keys():
+        from .worker_persistent import association
+
+        return association(con, run_id)
     sequenced = "runtime_sequence" in row.keys()
     if row["claim_link"] is None:
         require(row["state"] != "claim_prepared", "worker_claim_association_missing")
@@ -773,6 +785,11 @@ def retire_incarnation_observation(
     """After caller's full /3 validation, retain physical retirement without ACKs."""
     require(con.in_transaction, "worker_retirement_transaction_required")
     association = claim_association(con, run_id)
+    if association is not None and association["schema"] == "vardr.worker-claim-association/3":
+        from .worker_persistent import retire_incarnation_observation as retire_persistent
+
+        retire_persistent(con, run_id, runtime_retirement)
+        return
     if association is None or association["schema"] != "vardr.worker-claim-association/2":
         return
     receipt = fields(
