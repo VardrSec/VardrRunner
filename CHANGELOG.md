@@ -7,6 +7,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Classify an optional persistent-v3 idle cutoff as native exit 124 when its
+  owner state is unambiguous. Latch Runner into a nonspawning, no-RPC wait with a
+  checked five-second shutdown-only reserve after the valid ACK idle bound.
+  Preserve claim cutoffs, per-job deadlines, EOF cleanup and unknown-state holds;
+  model/compiler checks do not close actual platform acceptance.
+
 - Hold v3 reuse after a local stop-journal callback fails in the refresh loop,
   including when later renewal succeeds. Bound clean idle-channel EOF cleanup
   by a separate immutable five-second BOOTTIME deadline; repeated EOF or later

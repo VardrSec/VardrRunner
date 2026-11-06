@@ -33,6 +33,7 @@
 #ifdef VARDR_PERSISTENT
 #define MAGIC 0x33574456u
 #define READY_SCHEMA "vardr.worker-owner-ready/3"
+#define IDLE_LIMIT_EXIT 124
 #else
 #define MAGIC 0x32574456u
 #define READY_SCHEMA "vardr.worker-owner-ready/2"
@@ -229,6 +230,20 @@ static void eof_wait(struct protocol *state, uint64_t now) {
     }
     if (now >= state->eof_end) fail();
 }
+static int idle_limit_due(const struct protocol *state, uint64_t now) {
+    return state->hello && state->idle_seconds && !state->armed &&
+        state->lease == state->hard && state->lease != UINT64_MAX &&
+        state->work_end == UINT64_MAX && state->grant_end == UINT64_MAX &&
+        now >= state->lease;
+}
+static int idle_limit_exit(const struct protocol *state, uint64_t now, int stop,
+    int child_waited, int status, int channel_events) {
+    /* This enum identifies the selected owner branch, never a job receipt. */
+    if (!idle_limit_due(state, now) || stop || state->eof_end || channel_events) return 125;
+    if (child_waited)
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 125;
+    return IDLE_LIMIT_EXIT;
+}
 #endif
 static void accept_packet(struct protocol *state, const struct packet *p,
     const unsigned char nonce[32], uint64_t now) {
@@ -366,6 +381,17 @@ int main(int argc, char **argv) {
     while (1) {
 #ifdef VARDR_PERSISTENT
         if (state.eof_end && now_ns() >= state.eof_end) fail();
+        if (state.hello && state.idle_seconds && !state.armed &&
+            idle_limit_due(&state, now_ns())) {
+            int status = 0;
+            pid_t waited = waitpid(child, &status, WNOHANG);
+            if (waited < 0) { if (errno == EINTR) continue; fail(); }
+            struct pollfd pending = { .fd = pair[0], .events = POLLIN };
+            int count = poll(&pending, 1, 0);
+            if (count < 0) { if (errno == EINTR) continue; fail(); }
+            _exit(idle_limit_exit(&state, now_ns(), stopping, waited == child, status,
+                count ? pending.revents : 0));
+        }
 #endif
         if (stopping || now_ns() >= state.lease || now_ns() >= state.hard || now_ns() >= state.grant_end) fail();
         int status;

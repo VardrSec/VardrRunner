@@ -429,6 +429,42 @@ it does not acknowledge confirmed cancellation or release a fence automatically.
 Restart policy must not silently enable an operator-disabled worker. Health and
 readiness are observations, not authorization or termination evidence.
 
+## Persistent-v3 optional idle shutdown classification
+
+An explicitly enabled persistent-v3 worker remains available until operator stop
+unless the operator selected a finite idle policy. Availability supplies no job
+authority. The default remains disabled; finite v1/v2 behavior is unchanged.
+
+For an optional finite idle policy, the native owner selects exit 124 only while
+unarmed at its existing idle deadline, with no stop, EOF cleanup or pending
+channel event. An already waitable child keeps its existing clean-zero or failure
+classification. Exit 124 identifies the selected native branch, not a successful
+job, authenticated physical-stop receipt or permission to release an uncertain
+attempt. Actual exact-incarnation exit and the existing reporting rules remain
+mandatory.
+
+Runner retains the conservative pre-ACK claim cutoff. Reaching that boundary
+latches a typed idle close; even a backward clock cannot reopen claims. After a
+full unresolved-hold audit and empty-lineage check, it keeps the inherited channel
+open in a bounded wait. The wait performs existing ownership/readiness readbacks
+but sends no RPC, claims no job and launches no process. A readback fault remains a
+failure, and an unconfirmed owner exit never becomes success.
+
+A valid HELLO or DONE ACK establishes a separate post-ACK idle wait bound plus a
+fixed five-second shutdown-only reserve. Checked uint64 addition refuses overflow.
+This reserve allows observation scheduling after native expiry; it changes no
+conservative claim cutoff, native or job deadline, lease, wire field, capability,
+privilege, termination cause or STOP authority. The separate immutable five-second
+native idle-EOF cleanup deadline is unchanged and cannot be extended by this wait.
+
+Pure-clock regressions cover a 10-microsecond ACK round trip with native expiry
+observed 20 milliseconds late, bounded refusal, sticky closure, empty lineage,
+full holds, overflow and no post-cutoff RPC. Normal native Python/static validation
+and compiler-stage scalar tests are component evidence. They do not establish the
+actual PID-1 branch, bootstrap capability sets, live channel, physical stop,
+containment, suspend behavior, or Windows Docker Desktop/Linux acceptance. Those
+gates remain open; no release, deployment or default activation is authorized.
+
 ## Implementation approval and acceptance gates
 
 The explicit owner decision recorded above authorizes bounded implementation and

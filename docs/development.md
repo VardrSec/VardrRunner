@@ -26,6 +26,15 @@ latch. Persistent native scalar units cover first/repeated EOF, exact cleanup
 expiry, overflow and non-revival; they create no owner or control-channel probe.
 Source review and compiler tests do not replace physical disconnect acceptance.
 
+`test_worker_idle_stop` composes the real worker adapter with pure clocks for
+finite idle closure, including a 10-microsecond ACK and a native observation
+20 milliseconds after expiry. It checks sticky no-claim/no-RPC waiting, unchanged
+permission bounds, uint64 overflow, full holds, empty lineage and readback faults.
+Native scalar classification units cover exit 124 versus clean/failure branches.
+These model/compiler checks do not prove that actual PID 1 selected that branch;
+exact-incarnation Windows Docker Desktop/Linux stop and containment acceptance
+remain separate. Keep the full native suite and exact 95% coverage floor.
+
 `test_runtime_retirement_observation` additionally checks exact v2 receipt binding,
 legacy v1 behavior, monotonic receipt retention, source changes during RPC and
 refusal when execution/artifact/ledger metadata conflicts. `test_worker_binding`

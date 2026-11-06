@@ -19,6 +19,12 @@ An idle channel disconnect enters bounded cleanup; it never grants a replacement
 execution handle or automatically restarts the worker. Callback/journal failures
 retain their no-reuse hold even after a clean thread join.
 
+If an optional finite v3 idle policy is selected, its claim cutoff closes
+permanently before a bounded nonspawning wait for the native owner. The fixed
+five-second shutdown reserve grants no job authority or renewed claim window.
+Native exit 124 is an optional-idle diagnostic, not job success or a confirmed
+physical-stop receipt. This adds no CLI flag and enables no worker.
+
 DNSx invocations suppress automatic version checks. Existing connected commands
 retain their meaning; this correction does not enable standalone recon or grant
 authority for DNS/HTTP targets or auxiliary services.

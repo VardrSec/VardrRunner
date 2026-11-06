@@ -312,6 +312,21 @@ class Worker:
             self.sleep(min(poll_seconds, left))
 
     def run(self, *, wait_seconds: int = 30, poll_seconds: float = 1.0) -> RunRecord | None:
+        from vardrrunner import worker_lifecycle
+
+        try:
+            return self._run(wait_seconds=wait_seconds, poll_seconds=poll_seconds)
+        except worker_lifecycle.IdleBoundaryReached:
+            require(
+                isinstance(self.store, worker_persistent.PersistentStore)
+                and isinstance(self.owner, worker_lifecycle.PersistentWorkerOwner),
+                "worker_idle_boundary_unproven",
+            )
+            self._no_holds(full=True)
+            assert isinstance(self.owner, worker_lifecycle.PersistentWorkerOwner)
+            self.owner.wait_idle_stop()
+
+    def _run(self, *, wait_seconds: int, poll_seconds: float) -> RunRecord | None:
         require(not self._used, "single_worker_invocation")
         self._used = True
         integer(wait_seconds, 1, 60)

@@ -25,6 +25,14 @@ stop-journal reads. Exact thread quiescence alone cannot erase that failure.
 Native idle-channel EOF has its own immutable cleanup deadline; an open healthy
 idle channel retains persistent availability without job authority.
 
+An optional finite v3 idle policy closes claims at the conservative pre-ACK
+cutoff. Closure is sticky: after a full hold audit and empty-lineage check,
+Runner keeps the channel open in a nonspawning, no-RPC wait. Its checked post-ACK
+idle bound includes a fixed five-second shutdown-only reserve; no claim, native
+or job deadline moves. Native exit 124 identifies an unambiguous optional-idle
+branch only, not a successful job or physical-stop receipt. The separate native
+EOF cleanup deadline and all unresolved holds remain unchanged.
+
 The worker's pre-send runtime/enrollment/root association commits in the same
 journal transaction as its send marker. Optional authenticated observation v2
 can retire an untouched unknown intent only after Map has irreversibly fenced

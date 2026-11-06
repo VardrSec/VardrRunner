@@ -22,7 +22,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from vardrrunner import launch_guard
 from vardrrunner.authorization.codec import encoded
@@ -43,6 +43,7 @@ _WALL = 0x40000000
 REPORT_RUNWAY_SECONDS = 150
 _SECOND = 1_000_000_000
 _IDLE_SECONDS = 60
+_IDLE_STOP_RESERVE = 5 * _SECOND
 _BINDING = frozenset(
     {"origin", "job_id", "runner_id", "contract_id", "attempt_id", "fence", "contract_sha256"}
 )
@@ -55,6 +56,10 @@ _SPAWN_EVENTS = frozenset({"subprocess.Popen", "os.fork", "os.forkpty", "os.posi
 
 class LifecycleUnavailable(RuntimeError):
     """Incomplete ownership or child-drain proof; retain the attempt hold."""
+
+
+class IdleBoundaryReached(LifecycleUnavailable):
+    """Verified v3 idle cutoff reached; no execution permission remains."""
 
 
 def _require(value: object) -> None:
@@ -396,6 +401,13 @@ class AttemptEpoch:
             _require(before < min(owner._lease, owner._hard, owner._work_end))
             proof = owner._exchange_v2(_DONE, self._sequence, 0, 0, binding)
             owner._idle_end = owner._next_idle_end(before)
+            if (
+                isinstance(owner, PersistentWorkerOwner)
+                and owner._admission.idle_timeout_seconds is not None
+            ):
+                owner._idle_wait_end = owner._next_idle_wait_end(
+                    time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+                )
             self._finished = True
             return proof
 
@@ -535,6 +547,8 @@ class PersistentWorkerOwner(SequentialWorkerOwner):
         self._epoch = None
         self._sequence = 0
         self._work_end = self._grant_end = self._idle_end = (1 << 64) - 1
+        self._idle_wait_end = self._idle_end
+        self._idle_closing = False
 
     def _epoch_clock(self) -> tuple[int, float]:
         # A fresh conservative offset belongs to this attempt only. Never sample
@@ -552,6 +566,17 @@ class PersistentWorkerOwner(SequentialWorkerOwner):
         return (
             self._work_end if seconds is None else min(before + seconds * _SECOND, self._work_end)
         )
+
+    def _next_idle_wait_end(self, acknowledged: int) -> int:
+        seconds = self._admission.idle_timeout_seconds
+        _require(seconds is not None)
+        assert seconds is not None
+        # Shutdown observation only: never extend the pre-ACK claim cutoff.
+        _require(
+            type(acknowledged) is int
+            and 0 <= acknowledged <= (1 << 64) - 1 - seconds * _SECOND - _IDLE_STOP_RESERVE
+        )
+        return self._next_idle_end(acknowledged) + _IDLE_STOP_RESERVE
 
     def _attempt_binding(self, sequence: int, binding: dict) -> dict:
         return {
@@ -572,12 +597,33 @@ class PersistentWorkerOwner(SequentialWorkerOwner):
             nonce,
         )
         self._idle_end = self._next_idle_end(before)
+        if self._admission.idle_timeout_seconds is not None:
+            self._idle_wait_end = self._next_idle_wait_end(
+                time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+            )
 
     def require_ready(self, admission: Admission) -> None:
         WorkerOwner.require_ready(self, admission)
         admission.to_document()
+        if self._idle_closing:
+            raise IdleBoundaryReached("worker_idle_boundary_reached")
         if self._epoch is None or self._epoch._finished or self._binding is None:
-            _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < self._idle_end)  # type: ignore[attr-defined]
+            if time.clock_gettime_ns(time.CLOCK_BOOTTIME) >= self._idle_end:  # type: ignore[attr-defined]
+                _require(self._admission.idle_timeout_seconds is not None)
+                self._idle_closing = True
+                raise IdleBoundaryReached("worker_idle_boundary_reached")
+
+    def wait_idle_stop(self) -> NoReturn:
+        """Keep fd3 open; only PID1 may establish the physical idle-limit exit."""
+        _require(self._idle_closing and self._admission.idle_timeout_seconds is not None)
+        _require(self._epoch is None or self._epoch._finished)
+        _require(self._empty_children())
+        while True:
+            WorkerOwner.require_ready(self, self._admission)
+            boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+            _require(boot < self._idle_wait_end)
+            # The post-ACK bound plus fixed shutdown reserve grants no execution.
+            time.sleep(min(0.05, (self._idle_wait_end - boot) / _SECOND))
 
     def require_allocation(self, seconds: int) -> None:
         self.require_ready(self._admission)

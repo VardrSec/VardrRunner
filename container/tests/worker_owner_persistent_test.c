@@ -86,6 +86,33 @@ static void eof_refused(int change) {
     int status; check(waitpid(child, &status, 0) == child);
     check(WIFEXITED(status) && WEXITSTATUS(status) == 125);
 }
+static void idle_classification(void) {
+    struct protocol state = started(15, 0);
+    check(!idle_limit_due(&state, 15 * NS - 1));
+    check(idle_limit_due(&state, 15 * NS));
+    check(idle_limit_exit(&state, 15 * NS - 1, 0, 0, 0, 0) == 125);
+    check(idle_limit_exit(&state, 15 * NS, 0, 0, 0, 0) == IDLE_LIMIT_EXIT);
+    check(idle_limit_exit(&state, 15 * NS, 1, 0, 0, 0) == 125);
+    check(idle_limit_exit(&state, 15 * NS, 0, 1, 1 << 8, 0) == 125);
+    check(idle_limit_exit(&state, 15 * NS, 0, 1, 0, 0) == 0);
+    for (unsigned i = 0; i < 4; i++) {
+        int events[] = {POLLIN, POLLHUP, POLLERR, POLLNVAL};
+        check(idle_limit_exit(&state, 15 * NS, 0, 0, 0, events[i]) == 125);
+    }
+    state.eof_end = 16 * NS;
+    check(idle_limit_exit(&state, 15 * NS, 0, 0, 0, 0) == 125);
+    state.eof_end = 0; state.armed = 1;
+    check(!idle_limit_due(&state, 15 * NS));
+    check(idle_limit_exit(&state, 15 * NS, 0, 0, 0, 0) == 125);
+    state.armed = 0; state.hello = 0;
+    check(!idle_limit_due(&state, 15 * NS));
+    state = started(0, 1); /* Count-only normal child0 path stays unchanged. */
+    check(!idle_limit_due(&state, 15 * NS));
+    state = started(0, 0);
+    check(!idle_limit_due(&state, 100 * NS));
+    state = started(15, 0);
+    check(state.lease == 15 * NS && state.hard == 15 * NS);
+}
 int main(void) {
     healthy(0, 40); /* Beyond both old operational limits, without sleeping. */
     healthy(UINT64_C(9007199254740992), 2);
@@ -93,5 +120,6 @@ int main(void) {
     for (int change = 0; change < 7; change++) refused(change);
     eof_deadline();
     for (int change = 0; change < 5; change++) eof_refused(change);
+    idle_classification();
     return 0;
 }
