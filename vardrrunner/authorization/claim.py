@@ -333,6 +333,7 @@ class ManagedEntry:
         claim: Callable[[dict], dict],
         current: Callable[[dict], dict],
         consume: Callable[[dict], dict] | None = None,
+        verified_lease: Callable[[dict, float, float], None] | None = None,
         clock: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ):
@@ -345,6 +346,7 @@ class ManagedEntry:
         self.allocated_seconds = allocated_seconds
         self._claim, self._current = claim, current
         self._consume = consume
+        self._verified_lease = verified_lease
         self.clock, self.monotonic = clock or (lambda: datetime.now(timezone.utc)), monotonic
         self._used = False
         self._artifact_limit: int | None = None
@@ -424,18 +426,30 @@ class ManagedEntry:
                 record.command_profile.get("managed_invocation") == self._invocation,
                 "managed_claim_existing_invocation",
             )
-            owner = self.store.reserve(
-                record.run_id,
-                fingerprints,
-                {
-                    "backend_url": self.origin,
-                    "job_id": self.job_id,
-                    "engagement_id": self.engagement_id,
-                    "job_type": "vardrgate_api_test",
-                    "tool": "vardrgate_api_test",
-                    "target_source": "case",
-                },
-            )  # A begin return is NOT ownership.
+            try:
+                owner = self.store.reserve(
+                    record.run_id,
+                    fingerprints,
+                    {
+                        "backend_url": self.origin,
+                        "job_id": self.job_id,
+                        "engagement_id": self.engagement_id,
+                        "job_type": "vardrgate_api_test",
+                        "tool": "vardrgate_api_test",
+                        "target_source": "case",
+                    },
+                )  # A begin return is NOT ownership.
+            except ClaimError as error:
+                if error.args == ("managed_claim_already_reserved",):
+                    try:
+                        from .reconciliation import retire_reserve_conflict
+
+                        retire_reserve_conflict(
+                            self.journal, record.run_id, self._invocation, self.origin, self.job_id
+                        )
+                    except Exception:
+                        pass  # Uncertain metadata stays held; no RPC has been attempted.
+                raise
             try:
                 self.journal.transition(record.run_id, Phase.VALIDATING)
                 self.journal.transition(record.run_id, Phase.TARGETS_RESOLVED)
@@ -450,6 +464,9 @@ class ManagedEntry:
             except Exception:
                 try:
                     self.store.hold(record.run_id, owner, "denied_before_rpc")
+                    from .reconciliation import retire_preclaim
+
+                    retire_preclaim(self.journal, record.run_id)
                 except Exception:
                     pass
                 raise ClaimError("local_claim_denied_before_rpc") from None
@@ -505,6 +522,7 @@ class ManagedEntry:
                     claim_anchor_utc=utc,
                     grant_snapshot=dict(policy.expected or {}),
                     grant_expiry=policy.expires_at,
+                    verified_lease=self._verified_lease,
                 )
                 handlers.check_gate_case(self.case, self.engagement_id)
                 gate.refresh()  # Full signed/owned/current validation before durable binding; consumes nothing.

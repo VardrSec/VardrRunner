@@ -127,7 +127,11 @@ def current() -> Control | None:
 
 
 def available() -> bool:
-    return os.name == "nt"
+    if os.name == "nt":
+        return True
+    from vardrrunner.worker_lifecycle import current as worker_owner
+
+    return worker_owner() is not None
 
 
 def require_permission(control: Control) -> None:
@@ -143,6 +147,13 @@ def run(
     require_permission(control)
     if not available():
         raise ExecutionStopped("controlled_process_tree_unsupported", True)
+    if os.name != "nt":
+        from vardrrunner.worker_lifecycle import current as worker_owner
+
+        owner = worker_owner()
+        if owner is None:
+            raise ExecutionStopped("controlled_process_tree_unsupported", True)
+        return owner.run(cmd, seconds, observer, control)
     from vardrrunner.windows_job import WindowsJob
 
     try:

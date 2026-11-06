@@ -1,7 +1,11 @@
 # ADR 0043 — Proposed Linux worker lifecycle owner
 
 Status: owner-approved for bounded implementation and testing, 2026-11-05;
-not implemented, enabled or accepted as a supported runtime.
+candidate implemented, default-disabled; platform/security acceptance pending.
+
+Implementation references: [lifecycle boundary](../worker-lifecycle.md) and
+[managed orchestration/recovery](../managed-worker.md). Build/unit evidence is
+separate from actual runtime acceptance; this status does not certify the worker.
 
 ## Owner authorization record
 

@@ -7,6 +7,15 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add the explicit managed-worker candidate over existing claim, contract, grant,
+  budget and receipt services. The worker-only PID-1 owner drops its three approved
+  bootstrap capabilities before work; live private-channel/kernel readiness is
+  required for Linux control. Initial scope is one attempt per admitted container.
+  Normal startup/manual/Mapless behavior stays unchanged; platform acceptance is open.
+- Add `audit reconcile-managed RUN_ID` for authenticated terminal observation and
+  exact local metadata retirement. Preserve artifacts, spent allowances and ACK
+  history; unresolved transport/database state stays held. Retire only proven
+  zero-RPC local denials and invocation-owned duplicate-claim placeholders.
 - Record the owner-reviewed worker-only PID-1 lifecycle and protected host
   stop-report design. Its bounded implementation/testing is authorized; no worker,
   privilege, protocol or startup behavior is enabled by this documentation.

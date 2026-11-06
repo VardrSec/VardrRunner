@@ -19,6 +19,7 @@ from vardrrunner.commands import audit, auth, engagements, identity, imports, jo
 from vardrrunner.commands import credentials as credentials_cmd
 from vardrrunner.commands import doctor as doctor_cmd
 from vardrrunner.commands import heartbeat as heartbeat_cmd
+from vardrrunner.commands import managed_recovery as managed_recovery_cmd
 from vardrrunner.commands import pipeline as pipeline_cmd
 from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
@@ -376,6 +377,14 @@ def audit_export(
 ):
     """Atomically export sanitized journal records."""
     audit.export_runs(output=output, since=since, limit=limit, engagement_id=engagement_id)
+
+
+@audit_app.command("reconcile-managed")
+def audit_reconcile_managed(
+    run_id: str = typer.Argument(..., help="Exact local managed journal run ID"),
+):
+    """Observe retained managed receipts and retire only exact local metadata."""
+    managed_recovery_cmd.reconcile_managed_run(run_id=run_id)
 
 
 @audit_app.command("export-run")

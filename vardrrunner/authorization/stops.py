@@ -22,6 +22,7 @@ FAIL_CAUSES = frozenset(
     }
 )
 CAUSES = CANCEL_CAUSES | FAIL_CAUSES
+RECEIPT_CAUSES = CAUSES | {"observed_exit"}
 
 
 def stop_hash(binding: dict, outcome: str, cause: str) -> str:

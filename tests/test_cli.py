@@ -19,6 +19,13 @@ from vardrrunner.commands import run as run_cmd
 runner = CliRunner()
 
 
+def test_audit_reconcile_managed_routes_only_exact_run_id():
+    with patch("vardrrunner.commands.managed_recovery.reconcile_managed_run") as reconcile:
+        result = runner.invoke(app, ["audit", "reconcile-managed", "a" * 32])
+    assert result.exit_code == 0, result.output
+    reconcile.assert_called_once_with(run_id="a" * 32)
+
+
 def test_workspace_gate_routes_only_existing_operator_inputs():
     with patch("vardrrunner.commands.workspace_gate.run") as run:
         args = ["workspace", "gate", "a" * 32]

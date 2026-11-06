@@ -128,8 +128,20 @@ def validate(reply: dict, root: dict, original_claim: dict) -> None:
             ),
             "original_claim_changed",
         )
+    stopped = reply["stop"]
+    retired_exit = (
+        type(stopped) is dict
+        and stopped.get("cause") == "observed_exit"
+        and stopped.get("outcome") == "failed"
+        and reply["execution_state"] == "failed"
+        and reply["capacity_reserved"] is False
+        and reply["result"] is None
+        and reply["completion"] is None
+    )
     require(
-        claim["consumed"] or all(reply[k] is None for k in ("result", "completion", "stop")),
+        claim["consumed"]
+        or all(reply[k] is None for k in ("result", "completion", "stop"))
+        or retired_exit,
         "inconsistent_observed_consumption",
     )
     association = binding(reply)
@@ -165,7 +177,9 @@ def validate(reply: dict, root: dict, original_claim: dict) -> None:
         )
     if stop is not None:
         require(
-            type(stop) is dict and type(stop.get("cause")) is str and stop["cause"] in stops.CAUSES,
+            type(stop) is dict
+            and type(stop.get("cause")) is str
+            and stop["cause"] in stops.RECEIPT_CAUSES,
             "invalid_observed_stop",
         )
         outcome = "cancelled" if stop["cause"] in stops.CANCEL_CAUSES else "failed"

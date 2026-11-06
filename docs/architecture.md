@@ -1,5 +1,13 @@
 # VardrRunner — Architecture
 
+The [explicit managed-worker candidate](managed-worker.md) composes the existing
+managed claim/Gate/result protocols with the separate
+[Linux lifecycle owner](worker-lifecycle.md). Actual verified owner context alone
+enables Linux controlled execution. Native Windows Job Objects and ordinary CLI
+behavior remain unchanged. Host-observed retirement is authenticated metadata;
+it does not recreate a native execution handle or consumption acknowledgement.
+Runtime acceptance remains open and default startup remains inert.
+
 Runner remains the single execution engine, with standalone workspaces and
 optional Map coordination. The native standalone Gate consumer is a development
 capability. Recon remains validation-only, rejected before reservation callbacks

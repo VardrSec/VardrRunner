@@ -1195,6 +1195,21 @@ legacy CLI option or behavior changes.
 
 ## Owned engagement capacity (local NM-2 increment)
 
+### Explicit managed metadata reconciliation
+
+`vardrrunner audit reconcile-managed RUN_ID` observes the original managed
+association using the configured original enrollment and existing Runner identity.
+It closes local metadata only for an exact authenticated terminal receipt, or a
+durable local marker proving no claim RPC was invoked. It preserves artifacts,
+spent counts, fences and consumption-ACK history. It performs no target work,
+uploads, PID action or execution-token recovery. Unknown state stays held and a
+nonzero exit reports remaining local holds. Normal `recover` keeps its existing
+managed-run deferral. See [managed worker and recovery](managed-worker.md).
+
+The managed worker is a separately enabled distribution capability; ordinary
+Runner startup, `jobs run` and direct/Mapless commands do not start it. Initial
+worker/profile limitations and platform proof are in [lifecycle](worker-lifecycle.md).
+
 For finite cumulative permission allocations, invoke
 `jobs run --controlled --duration-budget 30`. Requires Map `0035durationbudget`
 and explicit full-scope owner duration policy. Seconds are 1–86400. The window

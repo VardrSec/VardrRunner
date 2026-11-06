@@ -128,6 +128,90 @@ def test_terminal_metadata_without_local_native_proof_only_records_observation(e
     callback.assert_not_called()
 
 
+@pytest.mark.parametrize("consumed", [False, True])
+def test_host_observed_exit_receipt_never_creates_native_stop_right(entry_fixture, consumed):
+    f = entry_fixture
+    handle = f.make().acquire(f.directory)
+    reply = public_reply(f, handle.run_id, handle.gate)
+    reply["claim"]["consumed"] = consumed
+    association = observations.binding(reply)
+    reply["stop"] = {
+        "schema": "vardr.managed-stop-receipt/1",
+        **association,
+        "outcome": "failed",
+        "cause": "observed_exit",
+        "receipt_sha256": stops.stop_hash(association, "failed", "observed_exit"),
+        "capacity_reserved": False,
+    }
+    reply.update(execution_state="failed", capacity_reserved=False)
+    observations.observe(f.journal, handle.run_id, f.s.context.runner_id, lambda _: reply)
+    assert f.journal.get(handle.run_id).phase == Phase.CLAIMED
+    send = Mock()
+    with pytest.raises(AuthorizationError, match="known_native_stop_required"):
+        handle.report_stop(send)
+    send.assert_not_called()
+    with f.journal._connection() as con:
+        assert (
+            con.execute("SELECT consumption_acknowledged FROM managed_claim_intents").fetchone()[0]
+            == 0
+        )
+
+
+def test_lost_claim_reply_can_observe_retirement_without_reconstructing_claim(entry_fixture):
+    f = entry_fixture
+    facade = lost_claim(f)
+    reply = public_reply(f, facade.run_id)
+    association = observations.binding(reply)
+    reply["stop"] = {
+        "schema": "vardr.managed-stop-receipt/1",
+        **association,
+        "outcome": "failed",
+        "cause": "observed_exit",
+        "receipt_sha256": stops.stop_hash(association, "failed", "observed_exit"),
+        "capacity_reserved": False,
+    }
+    reply.update(execution_state="failed", capacity_reserved=False)
+    observations.observe(f.journal, facade.run_id, f.s.context.runner_id, lambda _: reply)
+    with f.journal._connection() as con:
+        claim = con.execute("SELECT * FROM managed_claim_intents").fetchone()
+    assert claim["contract"] is None and claim["consumption_acknowledged"] == 0
+    assert claim["state"] == "claim_unknown"
+    assert f.journal.get(facade.run_id).phase == Phase.CLAIMING
+    with pytest.raises(AuthorizationError, match="existing_invocation"):
+        f.make().acquire(f.directory)
+    assert len(f.rpc) == 1
+
+
+@pytest.mark.parametrize("change", ["cause", "outcome", "capacity", "execution", "result"])
+def test_unconsumed_terminal_observation_requires_exact_retired_host_failure(entry_fixture, change):
+    f = entry_fixture
+    handle = f.make().acquire(f.directory)
+    reply = public_reply(f, handle.run_id, handle.gate)
+    association = observations.binding(reply)
+    reply["stop"] = {
+        "schema": "vardr.managed-stop-receipt/1",
+        **association,
+        "outcome": "failed",
+        "cause": "observed_exit",
+        "receipt_sha256": stops.stop_hash(association, "failed", "observed_exit"),
+        "capacity_reserved": False,
+    }
+    reply.update(execution_state="failed", capacity_reserved=False)
+    if change == "cause":
+        reply["stop"]["cause"] = "tool_timeout"
+    elif change == "outcome":
+        reply["stop"]["outcome"] = "completed"
+    elif change == "capacity":
+        reply["capacity_reserved"] = True
+    elif change == "execution":
+        reply["execution_state"] = "active"
+    else:
+        reply["result"] = {}
+    with pytest.raises(AuthorizationError):
+        observations.observe(f.journal, handle.run_id, f.s.context.runner_id, lambda _: reply)
+    assert f.journal.get(handle.run_id).phase == Phase.CLAIMED
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

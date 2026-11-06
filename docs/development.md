@@ -1,5 +1,21 @@
 # VardrRunner — Development
 
+Managed-worker checks live in `test_managed_worker`, `test_worker_admission`,
+`test_worker_binding`, `test_worker_lifecycle` and `test_managed_reconciliation`.
+They cover explicit composition, durable send fences, authenticated observation,
+process/clock readbacks and conservative unknown-state holds. Run the repository's
+normal Ruff/format, mypy and complete 95%-coverage suite for the combined change.
+Python mocks do not certify native containment.
+
+`Dockerfile.worker` adds the small static lifecycle owner to an explicitly selected
+toolkit base. Keep build/source/image receipts and exercise the approved profile
+on actual Docker Desktop and Linux before accepting it. The ordinary Dockerfile
+and default CLI behavior are unchanged. The initial worker allows one attempt,
+32 explicitly declared credential environment names and no proxy environment;
+larger/proxy-dependent workflows remain unsupported by that candidate profile.
+See [lifecycle](worker-lifecycle.md) and [worker/recovery](managed-worker.md) for
+the exact entrypoint, privilege transition, fixed paths and remaining gates.
+
 Journal I/O checks include canonical symlink/WAL visibility and native Windows
 replacement attempts immediately before SQLite opens the pinned database.
 `tests/test_journal_io.py` also checks pin lifetime/error cleanup, actual-handle
