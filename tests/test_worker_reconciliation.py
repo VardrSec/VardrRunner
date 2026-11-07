@@ -16,16 +16,16 @@ from tests.test_worker_persistent_observations import specimen as specimen
 from tests.test_worker_persistent_observations import worker_fixture as worker_fixture
 from tests.test_worker_persistent_preclaim import queued_denial
 from tests.test_worker_state_audit import selection
-from vardrrunner import api, config
-from vardrrunner.authorization import observations
+from vardrrunner import api, config, execution_control, handlers, launch_guard
+from vardrrunner.authorization import observations, stops
 from vardrrunner.authorization import worker_inspection as inspection
 from vardrrunner.authorization import worker_reconciliation as worker
 from vardrrunner.authorization.codec import AuthorizationError, encoded
-from vardrrunner.authorization.reconciliation import reconcile_managed, retire_preclaim
+from vardrrunner.authorization.reconciliation import local_holds, reconcile_managed, retire_preclaim
 from vardrrunner.authorization.worker_binding import claim_association
 from vardrrunner.cli import app
 from vardrrunner.commands import worker_reconcile as command
-from vardrrunner.journal import Journal, JournalError, journal_path_identity
+from vardrrunner.journal import Journal, JournalError, Phase, journal_path_identity
 
 FIELDS = {
     "schema",
@@ -1188,3 +1188,70 @@ def test_preclaim_inspection_expiry_is_held_without_partial_zero_or_parent_write
     assert document["complete"] is False and document["remaining_local_holds"] is None
     assert send.call_count == (0 if phase == "before_post" else 1)
     assert parent_row(p)["retirement"] is None
+
+
+def test_native_cancelled_attempt_reconciles_its_physical_retirement(
+    persistent_worker, monkeypatch, tmp_path
+):
+    p = persistent_worker
+    worker = p.configure()
+    journal = p.t.f.journal
+    original_post = p.t.client.managed_post
+    receipts = []
+
+    def post(path, body):
+        if not path.endswith("/stopped"):
+            return original_post(path, body)
+        p.t.calls.append("stopped")
+        binding = {key: body[key] for key in stops.BINDING if key != "job_id"}
+        binding["job_id"] = p.t.f.s.context.job_id
+        receipt = {
+            "schema": "vardr.managed-stop-receipt/1",
+            **binding,
+            "outcome": body["outcome"],
+            "cause": body["cause"],
+            "receipt_sha256": stops.stop_hash(binding, body["outcome"], body["cause"]),
+            "capacity_reserved": False,
+        }
+        receipts.append(receipt)
+        return copy.deepcopy(receipt)
+
+    def stop(self, targets, directory, cfg, **kwargs):
+        with launch_guard.boundary():
+            pass
+        run = journal.list()[0]
+        journal.transition(run.run_id, Phase.EXECUTING, pid=600001)
+        journal.request_stop(run.run_id)
+        raise execution_control.ExecutionStopped("local_emergency_stop", True, pid=600001)
+
+    monkeypatch.setattr(p.t.client, "managed_post", post)
+    monkeypatch.setattr(handlers.VardrGateHandler, "execute", stop)
+    with pytest.raises(execution_control.ExecutionStopped):
+        worker.run()
+    assert len(receipts) == 1
+    terminal = receipts[0]
+    assert terminal["outcome"] == "cancelled" and terminal["cause"] == "local_emergency_stop"
+    run = journal.list()[0]
+    assert run.phase == Phase.STOP_WORK and journal.stop_requested(run.run_id)
+    with journal._connection() as con:
+        row = dict(con.execute("SELECT * FROM managed_persistent_attempts").fetchone())
+        link = claim_association(con, run.run_id)
+    reply = linked_reply(p, row, link, claimed=True)
+    reply["claim"]["consumed"] = True
+    reply.update(execution_state="cancelled", stop=terminal)
+    reply["runtime_retirement"]["attempt_receipt"] = terminal
+    rehash(reply)
+    assert local_holds(journal) > 0
+    selected = selection(p, tmp_path)
+    _, _, send = client_for(monkeypatch, p, reply)
+    outcome, result = invoke(selected)
+    assert outcome.exit_code == 0, result["reason"]
+    assert result["status"] == "reconciled"
+    assert result["reconciliation_state"] == "terminal_stop_receipt_observed"
+    assert result["retirement_receipt_sha256"] == reply["runtime_retirement"]["receipt_sha256"]
+    assert send.call_count == 1
+    assert local_holds(journal) == 0
+    retained = journal.get(run.run_id)
+    assert retained.phase == Phase.STOP_WORK and retained.pid == 600001
+    assert retained.failure_reason == "local_emergency_stop"
+    assert stops.StopStore(journal).get(run.run_id)["receipt_sha256"] == terminal["receipt_sha256"]

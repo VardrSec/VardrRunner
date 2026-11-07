@@ -6,6 +6,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
+- Reconcile physical worker retirement after a verified native stop while
+  preserving the stopped process's historical PID and terminal receipt.
+
 - Add explicit offline `worker-bootstrap-state` for an installed Runner journal.
   Reuse the original schema and full local-holds audit; missing storage remains
   incomplete and a prior worker history never qualifies as initial state.

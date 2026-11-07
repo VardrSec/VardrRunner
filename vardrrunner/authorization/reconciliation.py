@@ -195,10 +195,30 @@ def _sequence_retirement_metadata(con, run_id: str, reply: dict) -> None:
         and run is not None
         and observed is not None
         and observed["snapshot"] == encoded(reply).decode()
-        and run["pid"] is None
         and Phase(run["phase"]) in TERMINAL_PHASES,
         "worker_retirement_source_changed",
     )
+    terminal = reply["stop"]
+    native_stop = type(terminal) is dict and terminal.get("cause") in stops.CAUSES
+    if native_stop:
+        # A confirmed native stop can retain a historical PID in its audit record.
+        # Only the exact closed stop and original retirement can clear the hold.
+        stop = _row(con, "managed_stop_intents", run_id)
+        contracts = con.execute(
+            "SELECT * FROM authorization_contracts WHERE issuer=? AND contract=?",
+            (claim["issuer"], claim["contract"]),
+        )
+        require(
+            (run["pid"] is None or (type(run["pid"]) is int and run["pid"] > 0))
+            and stop is not None
+            and stop["state"] == "terminal"
+            and terminal.get("receipt_sha256") == stop["receipt_sha256"]
+            and reply["runtime_retirement"]["attempt_receipt"] == terminal
+            and _native_closed("managed_stop_intents", stop, claim, run, contracts),
+            "worker_retirement_source_changed",
+        )
+    else:
+        require(run["pid"] is None, "worker_retirement_source_changed")
     association = claim_association(con, run_id)
     require(
         association is not None
@@ -215,6 +235,16 @@ def _sequence_retirement_metadata(con, run_id: str, reply: dict) -> None:
     }
     observations.validate(reply, root, dict(claim), association)
     retire_incarnation_observation(con, run_id, reply["runtime_retirement"])
+    if native_stop and claim["state"] == "held_after_claim":
+        # The original consumption acknowledgement remains durable. Remove the
+        # temporary hold in the same transaction as physical retirement.
+        changed = con.execute(
+            """UPDATE managed_claim_intents SET state='consume_acknowledged'
+               WHERE run_id=? AND state='held_after_claim'
+                 AND consumption_sent=1 AND consumption_acknowledged=1""",
+            (run_id,),
+        ).rowcount
+        require(changed == 1, "worker_retirement_source_changed")
 
 
 def _unbound_source(con, run, claim, reply):

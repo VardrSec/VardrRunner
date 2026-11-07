@@ -12,3 +12,8 @@ physical retirement. Preclaim-only parent0 remains held and is an open NM-2 gap.
 No new endpoint, service, execution authority, startup behavior or history ceiling
 is added. Requires a new facade-bearing image;090/e8 lack this command. Full95%,
 platform acceptance and an implemented next-enable operator flow remain separate.
+
+An exact, confirmed native stop can now retire the original worker without
+discarding the historical PID or stop receipt. The transaction clears the
+temporary post-claim hold only after validating the original contract and
+the matching physical retirement receipt.

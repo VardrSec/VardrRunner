@@ -1408,6 +1408,11 @@ Exact association and pending/head priority are checked again before observation
 and local metadata transactions. Existing Windows name pins remain; POSIX keeps
 its observed-file checks, not a race-free open or OS sandbox guarantee.
 
+A native stop can retain the stopped process's PID as audit metadata. Worker
+retirement checks the exact terminal stop receipt, original contract, and
+physical retirement together. It keeps the historical PID and receipt and
+clears the temporary claim hold in the same transaction as retirement.
+
 The closed `vardr.worker-reconciliation/1` JSON contains fixed status/reason,
 complete flag, public binding, the one selected local run ID/sequence, reconciliation
 state, remaining global holds and retirement receipt digest. `reconciled` requires
