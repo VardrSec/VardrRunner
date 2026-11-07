@@ -505,3 +505,143 @@ def test_sql_progress_exhaustion_is_held_with_no_counts(persistent_worker, tmp_p
     document = inspection.inspect_worker_state(**selected)
     held(document)
     assert document["reason"] == "inspection_budget_exhausted"
+
+
+BOOTSTRAP_RUNNER = "33333333-3333-4333-8333-333333333333"
+BOOTSTRAP_FIELDS = {
+    "schema",
+    "status",
+    "reason",
+    "complete",
+    "runner_id",
+    "worker_history",
+    "global_holds",
+}
+
+
+def bootstrap_paths(directory, *, runner_id=BOOTSTRAP_RUNNER, journal=None):
+    journal = directory / "first-worker.sqlite3" if journal is None else journal
+    selected = directory / "first-worker-identity.json"
+    selected.write_text(
+        json.dumps(
+            {
+                "identity_schema_version": 1,
+                "runner_id": runner_id,
+                "name": "private-name-canary",
+                "hostname": "private-host-canary",
+            }
+        ),
+        encoding="utf-8",
+    )
+    selected.chmod(0o600)
+    return {"journal": str(journal), "identity": str(selected), "runner_id": runner_id}
+
+
+def test_bootstrap_audit_reads_existing_clear_journal_without_constructors(tmp_path):
+    selected = bootstrap_paths(tmp_path)
+    path = tmp_path / "first-worker.sqlite3"
+    Journal(path)
+    before = path.read_bytes()
+    with patch.object(Journal, "__init__", side_effect=AssertionError("no constructor")):
+        value = inspection.inspect_worker_bootstrap(**selected)
+    assert value == {
+        "schema": inspection.BOOTSTRAP_SCHEMA,
+        "status": "clear",
+        "reason": None,
+        "complete": True,
+        "runner_id": BOOTSTRAP_RUNNER,
+        "worker_history": False,
+        "global_holds": 0,
+    }
+    assert path.read_bytes() == before
+    assert "canary" not in json.dumps(value)
+
+
+def test_bootstrap_audit_missing_journal_has_no_count_claim_or_created_file(tmp_path):
+    selected = bootstrap_paths(tmp_path)
+    with patch.object(inspection, "journal_connection", side_effect=AssertionError("no open")):
+        value = inspection.inspect_worker_bootstrap(**selected)
+    assert set(value) == BOOTSTRAP_FIELDS and value["schema"] == inspection.BOOTSTRAP_SCHEMA
+    assert value["status"] == "held" and value["reason"] == "journal_not_initialized"
+    assert value["complete"] is False and value["global_holds"] is value["worker_history"] is None
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["first-worker-identity.json"]
+
+
+@pytest.mark.parametrize("suffix", ["-wal", "-shm", "-journal"])
+def test_bootstrap_audit_orphaned_sidecars_are_inconsistent_without_creation(tmp_path, suffix):
+    selected = bootstrap_paths(tmp_path)
+    sidecar = tmp_path / ("first-worker.sqlite3" + suffix)
+    sidecar.write_bytes(b"synthetic-sidecar")
+    value = inspection.inspect_worker_bootstrap(**selected)
+    assert value["status"] == "held" and value["reason"] == "state_inconsistent"
+    assert value["complete"] is False and value["global_holds"] is None
+    assert (
+        not (tmp_path / "first-worker.sqlite3").exists()
+        and sidecar.read_bytes() == b"synthetic-sidecar"
+    )
+
+
+def test_bootstrap_audit_existing_unrelated_hold_is_a_complete_hold(tmp_path):
+    selected = bootstrap_paths(tmp_path)
+    journal = Journal(tmp_path / "first-worker.sqlite3")
+    journal.begin(
+        job_id="fixture-hold",
+        backend_url="https://map.example.test",
+        engagement_id="fixture",
+        job_type="x",
+        tool="x",
+        target_source="x",
+    )
+    value = inspection.inspect_worker_bootstrap(**selected)
+    assert value["status"] == "held" and value["reason"] == "local_holds"
+    assert (
+        value["complete"] is True and value["worker_history"] is False and value["global_holds"] > 0
+    )
+
+
+def test_bootstrap_audit_idle_unissued_original_worker_is_existing_history(
+    persistent_worker, tmp_path
+):
+    original = selection(persistent_worker, tmp_path, reserve=True)
+    journal = persistent_worker.t.f.journal.path
+    selected = bootstrap_paths(journal.parent, runner_id=original["runner_id"], journal=journal)
+    value = inspection.inspect_worker_bootstrap(**selected)
+    assert value["status"] == "held" and value["reason"] == "worker_history_present"
+    assert (
+        value["complete"] is True and value["worker_history"] is True and value["global_holds"] == 0
+    )
+
+
+def test_bootstrap_audit_wrong_identity_unknown_schema_and_relative_paths_hold(tmp_path):
+    selected = bootstrap_paths(tmp_path)
+    journal = Journal(tmp_path / "first-worker.sqlite3")
+    wrong = {**selected, "runner_id": "44444444-4444-4444-8444-444444444444"}
+    assert inspection.inspect_worker_bootstrap(**wrong)["reason"] == "state_inconsistent"
+    invalid = {**selected, "identity": "relative.json"}
+    assert inspection.inspect_worker_bootstrap(**invalid)["reason"] == "selection_invalid"
+    with journal._connection() as con:
+        con.execute("CREATE TABLE managed_worker_unknown (fixture INTEGER)")
+    value = inspection.inspect_worker_bootstrap(**selected)
+    assert value["status"] == "held" and value["reason"] == "state_inconsistent"
+    assert value["complete"] is False and value["worker_history"] is None
+
+
+def test_bootstrap_audit_passes_original_file_identity_and_never_reports_partial_zero(
+    tmp_path, monkeypatch
+):
+    selected = bootstrap_paths(tmp_path)
+    path = tmp_path / "first-worker.sqlite3"
+    Journal(path)
+    info = path.lstat()
+    with patch.object(
+        inspection, "journal_connection", side_effect=OSError("synthetic replacement")
+    ) as connection:
+        value = inspection.inspect_worker_bootstrap(**selected)
+    connection.assert_called_once_with(
+        path, readonly=True, expected_identity=(info.st_dev, info.st_ino)
+    )
+    assert value["status"] == "held" and value["reason"] == "journal_unavailable"
+    assert value["complete"] is False and value["worker_history"] is value["global_holds"] is None
+    monkeypatch.setattr(inspection, "INSPECTION_SECONDS", 0)
+    value = inspection.inspect_worker_bootstrap(**selected)
+    assert value["reason"] == "inspection_budget_exhausted" and value["global_holds"] is None

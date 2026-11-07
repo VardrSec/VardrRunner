@@ -103,7 +103,7 @@ def _startup_cleanup(
     ),
 ) -> None:
     """Remove sensitive temp state left by a previously interrupted process."""
-    if ctx.invoked_subcommand not in {"worker-state", "worker-reconcile"}:
+    if ctx.invoked_subcommand not in {"worker-state", "worker-reconcile", "worker-bootstrap-state"}:
         process_runner.cleanup_sensitive_temp_dirs()
     if ctx.invoked_subcommand is not None:
         return
@@ -370,6 +370,18 @@ def worker_state(
         runtime_sha256=runtime_sha256,
         admission_sha256=admission_sha256,
     )
+
+
+@app.command("worker-bootstrap-state")
+def worker_bootstrap_state(
+    journal: str = typer.Option(..., "--journal", help="Explicit absolute execution journal path"),
+    identity: str = typer.Option(
+        ..., "--identity", help="Explicit absolute existing Runner identity"
+    ),
+    runner_id: str = typer.Option(..., "--runner-id", help="Expected canonical Runner UUID"),
+) -> None:
+    """Inspect an installed journal before the first managed worker, offline."""
+    worker_audit_cmd.worker_bootstrap_state(journal=journal, identity=identity, runner_id=runner_id)
 
 
 @app.command("worker-reconcile")

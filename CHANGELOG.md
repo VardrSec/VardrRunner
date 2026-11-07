@@ -6,6 +6,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
+- Add explicit offline `worker-bootstrap-state` for an installed Runner journal.
+  Reuse the original schema and full local-holds audit; missing storage remains
+  incomplete and a prior worker history never qualifies as initial state.
+
 - Add the narrowly certified closed-preclaim parent0 retirement branch using one
   original-key unbound last0 observation. Preserve every no-send tombstone and
   issued ancestry; update only the parent, retain real nonzero association counts

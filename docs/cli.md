@@ -1366,13 +1366,29 @@ when an old image lacks it; it must not assume e8 images support it or replace
 missing output with zero. Stop/re-enable remains an unimplemented, separate
 lifecycle candidate; this command enables no worker and closes no platform gate.
 
+### Offline first-worker state inspection (NM-2 candidate)
+
+`vardrrunner worker-bootstrap-state --journal PATH --identity PATH --runner-id UUID`
+reads explicit absolute paths in the same state directory. It uses the existing
+identity reader, read-only SQLite snapshot and full local-holds audit. The
+closed `vardr.worker-bootstrap-audit/1` JSON is `clear` only for a complete
+existing journal with zero global holds and no worker history. A missing
+journal is held as `journal_not_initialized`, with no history or hold claims.
+Incomplete or inconsistent state, and any prior worker history, remain held. No names,
+hostnames, database values, secrets or paths appear in the JSON.
+
+The helper skips startup cleanup, creates or migrates no database, and makes
+no HTTP or credential request. Normal SQLite read-only WAL sidecars still
+apply. Even `clear` is only a local fact; the distribution must independently
+verify the complete original installation and no previous lifecycle effects.
+
 ### Explicit original worker reconciliation (NM-2 candidate)
 
 `vardrrunner worker-reconcile --journal PATH --identity PATH --runner-id UUID
 --runtime-id UUID --runtime-sha256 SHA256 --admission-sha256 SHA256` requires the
 same six explicit selections as `worker-state`. It first performs that existing
 identity/schema/binding and full-holds audit in one read-only snapshot. It skips
-startup cleanup only for this new command and the existing `worker-state` command;
+startup cleanup for the explicit worker inspection and reconciliation commands;
 legacy commands keep their current startup behavior.
 
 For an unretired runtime it selects the unique pending original proposal, otherwise

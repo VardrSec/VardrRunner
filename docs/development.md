@@ -700,3 +700,9 @@ and unrelated global holds before/during/after commit. The latter must remain
 held with its original record intact. The legacy selected/head, true-empty0,
 count/idle/normal35 paths and all global-holds predicates must remain unchanged.
 Same-installation next-enable and actual lifecycle acceptance remain NM-2 gates.
+
+
+The first-worker inspection tests use explicit temporary journals and identities.
+Exercise a current clear journal, real worker history with no active holds,
+uninitialized state, orphaned sidecars, wrong identity and unknown worker schema.
+Keep this audit separate from actual first-installation and successor acceptance.

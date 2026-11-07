@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,7 @@ from .worker_admission import _uuid, hash_value
 from .worker_binding import claim_association
 
 SCHEMA = "vardr.worker-state-audit/1"
+BOOTSTRAP_SCHEMA = "vardr.worker-bootstrap-audit/1"
 INSPECTION_SECONDS = 30.0
 _PERSISTENT_COLUMNS = {
     "managed_persistent_incarnations": {
@@ -211,6 +214,16 @@ _ASSOCIATIONS = {
 }
 
 
+_BOOTSTRAP_HISTORY_SQL = {
+    "managed_runtime_bindings": "SELECT 1 FROM managed_runtime_bindings LIMIT 1",
+    "managed_worker_incarnations": "SELECT 1 FROM managed_worker_incarnations LIMIT 1",
+    "managed_worker_attempts": "SELECT 1 FROM managed_worker_attempts LIMIT 1",
+    "managed_persistent_incarnations": "SELECT 1 FROM managed_persistent_incarnations LIMIT 1",
+    "managed_persistent_attempts": "SELECT 1 FROM managed_persistent_attempts LIMIT 1",
+    "managed_persistent_selections": "SELECT 1 FROM managed_persistent_selections LIMIT 1",
+}
+
+
 class InspectionExpired(RuntimeError):
     """A cooperative inspection deadline was reached; no partial zero is usable."""
 
@@ -250,13 +263,13 @@ def _tables(con: sqlite3.Connection, budget: _Budget) -> set[str]:
     }
 
 
-def _schema(con: sqlite3.Connection, tables: set[str], budget: _Budget) -> None:
+def _journal_schema(con: sqlite3.Connection, tables: set[str], budget: _Budget) -> None:
     require(con.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION, "inspection_schema")
-    require({"runs", *_PERSISTENT_COLUMNS} <= tables, "inspection_schema")
+    require("runs" in tables, "inspection_schema")
     # Fixed source identifiers only; no caller-selected SQL or schema migration.
     expected = {
         "runs": _RUN_COLUMNS,
-        **_PERSISTENT_COLUMNS,
+        **{name: columns for name, columns in _PERSISTENT_COLUMNS.items() if name in tables},
         **{name: columns for name, columns in _OPTIONAL_COLUMNS.items() if name in tables},
     }
     for table, columns in expected.items():
@@ -265,6 +278,11 @@ def _schema(con: sqlite3.Connection, tables: set[str], budget: _Budget) -> None:
         }
         require(actual == columns, "inspection_schema")
     require(con.execute("PRAGMA foreign_key_check").fetchone() is None, "inspection_associations")
+
+
+def _schema(con: sqlite3.Connection, tables: set[str], budget: _Budget) -> None:
+    require({"runs", *_PERSISTENT_COLUMNS} <= tables, "inspection_schema")
+    _journal_schema(con, tables, budget)
 
 
 def _associations(
@@ -456,6 +474,21 @@ def _audit_document(con, binding, budget, runtime, admission, holds, counts, ids
     }
 
 
+@contextmanager
+def _read_snapshot(
+    path: Path, budget: _Budget, expected_identity: tuple[int, int] | None = None
+) -> Iterator[sqlite3.Connection]:
+    guard = {} if expected_identity is None else {"expected_identity": expected_identity}
+    with journal_connection(path, readonly=True, **guard) as con:
+        con.row_factory = sqlite3.Row
+        con.set_progress_handler(budget.progress, 1000)
+        con.execute("BEGIN")
+        try:
+            yield con
+        finally:
+            con.rollback()
+
+
 def inspect_worker_state(
     *,
     journal: str,
@@ -481,20 +514,9 @@ def inspect_worker_state(
         saved_identity = read_existing(Path(identity))
         require(saved_identity.runner_id == binding["runner_id"], "inspection_identity")
         budget.check()
-        journal_guard = (
-            {}
-            if expected_journal_identity is None
-            else {"expected_identity": expected_journal_identity}
-        )
-        with journal_connection(Path(journal), readonly=True, **journal_guard) as con:
-            con.row_factory = sqlite3.Row
-            con.set_progress_handler(budget.progress, 1000)
-            con.execute("BEGIN")
-            try:
-                snapshot = _worker_snapshot(con, binding, budget)
-                return _audit_document(con, binding, budget, *snapshot)
-            finally:
-                con.rollback()
+        with _read_snapshot(Path(journal), budget, expected_journal_identity) as con:
+            snapshot = _worker_snapshot(con, binding, budget)
+            return _audit_document(con, binding, budget, *snapshot)
     except InspectionExpired:
         return _held("inspection_budget_exhausted", binding)
     except IdentityError:
@@ -509,3 +531,110 @@ def inspect_worker_state(
         return _held(reason, binding)
     except (AuthorizationError, KeyError, TypeError, ValueError, OverflowError, RecursionError):
         return _held("state_inconsistent", binding)
+
+
+def _bootstrap_document(
+    runner_id: str | None,
+    reason: str | None,
+    *,
+    history: bool | None = None,
+    holds: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "schema": BOOTSTRAP_SCHEMA,
+        "status": "clear" if reason is None else "held",
+        "reason": reason,
+        "complete": history is not None and holds is not None,
+        "runner_id": runner_id,
+        "worker_history": history,
+        "global_holds": holds,
+    }
+
+
+def _exists_without_following(path: Path) -> bool:
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def inspect_worker_bootstrap(*, journal: str, identity: str, runner_id: str) -> dict[str, Any]:
+    """Read current installed state before a first worker; never infer a fresh install."""
+    try:
+        runner_id = _uuid(runner_id)
+        require(
+            all(
+                type(value) is str and 0 < len(value) <= 4096 and "\x00" not in value
+                for value in (journal, identity)
+            ),
+            "bootstrap_selection",
+        )
+        db, selected = Path(journal), Path(identity)
+        require(
+            db.is_absolute()
+            and selected.is_absolute()
+            and db.parent == selected.parent
+            and db != selected
+            and ".." not in db.parts
+            and ".." not in selected.parts,
+            "bootstrap_selection",
+        )
+    except (AuthorizationError, TypeError, ValueError):
+        return _bootstrap_document(None, "selection_invalid")
+
+    budget = _Budget()
+    try:
+        budget.check()
+        saved = read_existing(selected)
+        require(saved.runner_id == runner_id, "inspection_identity")
+        budget.check()
+        try:
+            info = db.lstat()
+        except FileNotFoundError:
+            sidecars = [db.with_name(db.name + suffix) for suffix in ("-wal", "-shm", "-journal")]
+            require(
+                not any(_exists_without_following(path) for path in sidecars), "bootstrap_sidecar"
+            )
+            require(
+                read_existing(selected) == saved
+                and not _exists_without_following(db)
+                and not any(_exists_without_following(path) for path in sidecars),
+                "bootstrap_changed",
+            )
+            budget.check()
+            return _bootstrap_document(runner_id, "journal_not_initialized")
+        original_identity = (info.st_dev, info.st_ino)
+        with _read_snapshot(db, budget, original_identity) as con:
+            tables = _tables(con, budget)
+            _journal_schema(con, tables, budget)
+            require(
+                not any(
+                    table.startswith(("managed_worker_", "managed_runtime_", "managed_persistent_"))
+                    for table in tables - _BOOTSTRAP_HISTORY_SQL.keys()
+                ),
+                "bootstrap_history_schema",
+            )
+            holds = local_holds_connection(con, checkpoint=budget.check, strict=True)
+            # Identifiers are from this fixed source allowlist, never CLI inputs.
+            history = any(
+                con.execute(_BOOTSTRAP_HISTORY_SQL[table]).fetchone() is not None
+                for table in sorted(_BOOTSTRAP_HISTORY_SQL.keys() & tables)
+            )
+            require(read_existing(selected) == saved, "bootstrap_identity_changed")
+            budget.check()
+        reason = "worker_history_present" if history else "local_holds" if holds else None
+        return _bootstrap_document(runner_id, reason, history=history, holds=holds)
+    except InspectionExpired:
+        return _bootstrap_document(runner_id, "inspection_budget_exhausted")
+    except IdentityError:
+        return _bootstrap_document(runner_id, "identity_unavailable")
+    except (JournalError, OSError, sqlite3.Error):
+        reason = (
+            "inspection_budget_exhausted"
+            if time.monotonic() >= budget.deadline
+            else "journal_unavailable"
+        )
+        return _bootstrap_document(runner_id, reason)
+    except (AuthorizationError, KeyError, TypeError, ValueError, OverflowError, RecursionError):
+        return _bootstrap_document(runner_id, "state_inconsistent")

@@ -623,3 +623,11 @@ actual nonzero associations remain visible. Global-holds engines are unchanged,
 and another runtime/run hold is never cleared or concealed by parent retirement. Distribution still owns physical stop and any
 future next-enable lifecycle; this component adds no service, Map endpoint,
 automatic reconciliation or activation.
+
+
+The separate `worker-bootstrap-state` reader shares the current journal schema,
+identity and bounded read-only snapshot with `worker-state`. It audits all
+existing local holds and fixed worker history tables without pretending there
+is an admitted worker parent. Absence of a journal is incomplete, not a zero
+ledger or fresh-installation assertion. Distribution still owns first and
+successor container lifecycle decisions; this helper grants no authority.

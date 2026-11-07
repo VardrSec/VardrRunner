@@ -6,7 +6,10 @@ import json
 
 import typer
 
-from vardrrunner.authorization.worker_inspection import inspect_worker_state
+from vardrrunner.authorization.worker_inspection import (
+    inspect_worker_bootstrap,
+    inspect_worker_state,
+)
 
 
 def worker_state(
@@ -28,4 +31,11 @@ def worker_state(
     )
     typer.echo(json.dumps(document, sort_keys=True, separators=(",", ":")))
     if document["status"] == "held":
+        raise typer.Exit(1)
+
+
+def worker_bootstrap_state(*, journal: str, identity: str, runner_id: str) -> None:
+    document = inspect_worker_bootstrap(journal=journal, identity=identity, runner_id=runner_id)
+    typer.echo(json.dumps(document, sort_keys=True, separators=(",", ":")))
+    if document["status"] != "clear":
         raise typer.Exit(1)
