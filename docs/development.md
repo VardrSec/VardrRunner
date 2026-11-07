@@ -708,8 +708,11 @@ uninitialized state, orphaned sidecars, wrong identity and unknown worker schema
 Keep this audit separate from actual first-installation and successor acceptance.
 
 
-The worker-state regression for a lost first claim reply uses a real isolated
-journal and original-association observation. It keeps local cursor zero and no
-attempt row while validating the exact server-issued retirement at sequence one.
-Its JSON CLI check is offline; synthetic fixtures do not qualify installed
-transport loss, physical exit, containment, or release.
+The worker-state regressions for a lost claim reply use real isolated journals
+and original-association observations. They cover the first claim and two healthy
+released jobs followed by a committed third claim whose reply is lost, including
+a retained closed preclaim tombstone before the healthy jobs. Inspection
+keeps the original local cursor and attempt count, preserves both released rows,
+and validates only the exact next server-issued retirement. The JSON CLI checks
+are offline; synthetic fixtures do not qualify installed transport loss, physical
+exit, containment, or release.

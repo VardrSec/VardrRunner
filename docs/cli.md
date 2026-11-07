@@ -1354,9 +1354,10 @@ output contains only the selected UUIDs/digests, parent/cursor, counts, retireme
 receipt digest and fixed status/reason fields. Identity labels/hostnames and raw
 journal documents never leave the inspection.
 
-For the first claim whose reply was lost, a validated original retirement may
-prove server sequence one while the unacknowledged local cursor stays zero.
-The audit creates no acknowledgement, attempt or history entry.
+For a claim whose reply was lost, a validated original retirement may
+prove server sequence N+1 while the local cursor stays N, including zero.
+The audit preserves validated released history and no-send tombstones; it creates
+no acknowledgement, attempt or history entry.
 
 The command has a cooperative30-second inspection budget, SQL progress checks and
 the existing5-second SQLite busy wait. It imposes no healthy-history/job ceiling

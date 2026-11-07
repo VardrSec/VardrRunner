@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Preserve validated released history when the next claim commits but its reply
+  is lost: inspection recognizes only that original selected-only retirement,
+  without advancing the local cursor or creating an attempt acknowledgement.
+
 - Recognize the original selected-only physical retirement after a lost first
   claim reply, preserving local cursor zero and refusing substituted observation
   bindings without creating an acknowledgement or local attempt.

@@ -765,3 +765,186 @@ def test_selected_only_retirement_still_requires_original_exact_observation(
                 "UPDATE managed_claim_observations SET snapshot=?", (encoded(poisoned).decode(),)
             )
     held(inspection.inspect_worker_state(**selected))
+
+
+def _retired_later_claim_reply_loss(p, tmp_path, *, prefix=False, monkeypatch=None):
+    """Two released jobs, then original third claim commits before reply loss."""
+    from vardrrunner.authorization.worker_binding import claim_association
+
+    p.settings["jobs"] = 3
+    worker = p.configure()
+    if prefix:
+        from tests.test_worker_persistent_preclaim import queued_denial
+
+        queued_denial(p, monkeypatch, late=True)
+    original_rpc = p.t.client.managed_post
+
+    def rpc(path, body):
+        reply = original_rpc(path, body)
+        if path.endswith("/claim") and p.state["released"] == 2:
+            raise api.ManagedTransportError("synthetic committed third claim reply lost")
+        return reply
+
+    p.t.client.managed_post = rpc
+    with pytest.raises(AuthorizationError, match="unknown"):
+        worker.run()
+    journal = p.t.f.journal
+    with journal._connection() as con:
+        row = dict(
+            con.execute(
+                "SELECT * FROM managed_persistent_selections WHERE runtime_sequence=3"
+            ).fetchone()
+        )
+        link = claim_association(con, row["run_id"])
+        history = [
+            dict(item)
+            for item in con.execute(
+                "SELECT * FROM managed_persistent_attempts ORDER BY runtime_sequence"
+            )
+        ]
+    assert [item["state"] for item in history] == ["released", "released"]
+    tombstone = None
+    if prefix:
+        with journal._connection() as con:
+            denied = con.execute("SELECT run_id FROM runs WHERE job_id='denied-first'").fetchone()[
+                0
+            ]
+            tombstone = {
+                table: dict(
+                    con.execute("SELECT * FROM " + table + " WHERE run_id=?", (denied,)).fetchone()
+                )
+                for table in ("runs", "managed_claim_intents", "managed_persistent_selections")
+            }
+        assert tombstone["managed_persistent_selections"]["state"] == "preclaim_retired"
+        assert tombstone["managed_claim_intents"]["consumption_sent"] == 0
+    reply = linked_reply(p, row, link, claimed=True)
+    observed = []
+
+    def original_observation(body):
+        assert body == {
+            key: link[key]
+            for key in (
+                "origin",
+                "runner_id",
+                "plan_sha256",
+                "case_sha256",
+                "association_sha256",
+                "runtime_id",
+                "runtime_sha256",
+                "admission_sha256",
+                "runtime_sequence",
+            )
+        }
+        observed.append(body)
+        return copy.deepcopy(reply)
+
+    assert (
+        reconcile_managed(journal, row["run_id"], link["runner_id"], original_observation)
+        == "terminal_host_exit_observed"
+    )
+    assert len(observed) == 1 and p.t.calls.count("claim") == 3
+    assert (
+        p.t.calls.count("consume")
+        == p.t.calls.count("runtime-bind")
+        == p.t.calls.count("native")
+        == 2
+    )
+    if tombstone is not None:
+        with journal._connection() as con:
+            assert {
+                table: dict(
+                    con.execute("SELECT * FROM " + table + " WHERE run_id=?", (denied,)).fetchone()
+                )
+                for table in tombstone
+            } == tombstone
+    return journal, row, reply, selection(p, tmp_path), history
+
+
+@pytest.mark.parametrize("prefix", [False, True])
+def test_committed_later_claim_reply_loss_preserves_released_history_cursor_and_cli(
+    persistent_worker, tmp_path, monkeypatch, prefix
+):
+    journal, row, reply, selected, history = _retired_later_claim_reply_loss(
+        persistent_worker, tmp_path, prefix=prefix, monkeypatch=monkeypatch
+    )
+    with journal._connection() as con:
+        before = {
+            table: [dict(item) for item in con.execute("SELECT * FROM " + table)]
+            for table in (
+                "managed_persistent_incarnations",
+                "managed_persistent_attempts",
+                "managed_persistent_selections",
+                "managed_claim_intents",
+            )
+        }
+    document = inspection.inspect_worker_state(**selected)
+    assert document["complete"] is True and document["status"] == "retired"
+    assert document["global_holds"] == 0
+    assert document["counts"] == dict(
+        attempts=2,
+        selections=3 + int(prefix),
+        associated_runs=3 + int(prefix),
+        associated_claims=3 + int(prefix),
+    )
+    assert document["parent"] == dict(
+        state="retired", last_sequence="2", head_sequence="2", active_sequence=None
+    )
+    assert document["retirement_receipt_sha256"] == reply["runtime_retirement"]["receipt_sha256"]
+    assert (
+        reply["runtime_retirement"]["last_sequence"] == "3" and reply["claim"]["consumed"] is False
+    )
+    assert before["managed_persistent_attempts"] == history
+    original = next(
+        item for item in before["managed_claim_intents"] if item["run_id"] == row["run_id"]
+    )
+    assert original["state"] == "host_exit_observed" and original["contract"] is None
+    assert original["consumption_sent"] == original["consumption_acknowledged"] == 0
+    arguments = ["worker-state"]
+    for key, value in selected.items():
+        arguments.extend(("--" + key.replace("_", "-"), value))
+    with (
+        patch.object(config, "load", side_effect=AssertionError("no defaults")),
+        patch.object(api.VardrMapClient, "managed_post", side_effect=AssertionError("offline")),
+    ):
+        result = CliRunner().invoke(app, arguments)
+    assert result.exit_code == 0 and json.loads(result.stdout) == document
+    with journal._connection() as con:
+        after = {
+            table: [dict(item) for item in con.execute("SELECT * FROM " + table)]
+            for table in before
+        }
+    assert after == before
+
+
+@pytest.mark.parametrize("change", ["sequence", "original_receipt", "released_history"])
+def test_later_selected_only_retirement_rejects_changed_next_or_prior_history(
+    persistent_worker, tmp_path, change
+):
+    from vardrrunner.authorization.codec import encoded
+
+    journal, row, reply, selected, _ = _retired_later_claim_reply_loss(persistent_worker, tmp_path)
+    with journal._connection() as con:
+        if change == "released_history":
+            con.execute(
+                "UPDATE managed_persistent_attempts SET release_ack=NULL WHERE runtime_sequence=1"
+            )
+        else:
+            poisoned = copy.deepcopy(reply)
+            if change == "sequence":
+                poisoned["runtime_retirement"]["last_sequence"] = "4"
+                poisoned["runtime_retirement"]["runtime_sequence"] = "4"
+            else:
+                poisoned["runtime_retirement"]["report_sha256"] = "e" * 64
+            rehash(poisoned)
+            retirement = encoded(poisoned["runtime_retirement"]).decode()
+            con.execute("UPDATE managed_persistent_incarnations SET retirement=?", (retirement,))
+            con.execute(
+                "UPDATE managed_persistent_selections SET retirement=? WHERE run_id=?",
+                (retirement, row["run_id"]),
+            )
+            if change == "sequence":
+                con.execute(
+                    "UPDATE managed_claim_observations SET snapshot=? WHERE run_id=?",
+                    (encoded(poisoned).decode(), row["run_id"]),
+                )
+    held(inspection.inspect_worker_state(**selected))
