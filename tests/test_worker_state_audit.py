@@ -645,3 +645,123 @@ def test_bootstrap_audit_passes_original_file_identity_and_never_reports_partial
     monkeypatch.setattr(inspection, "INSPECTION_SECONDS", 0)
     value = inspection.inspect_worker_bootstrap(**selected)
     assert value["reason"] == "inspection_budget_exhausted" and value["global_holds"] is None
+
+
+def _retired_claim_reply_loss(p, tmp_path):
+    """Original /4 observation retires a real durable unknown-send selection."""
+    row, link = prepare_unknown(p, fault="claim")
+    reply = linked_reply(p, row, link, claimed=True)
+    journal = p.t.f.journal
+    sent = []
+
+    def original_observation(body):
+        expected = {
+            key: link[key]
+            for key in (
+                "origin",
+                "runner_id",
+                "plan_sha256",
+                "case_sha256",
+                "association_sha256",
+                "runtime_id",
+                "runtime_sha256",
+                "admission_sha256",
+                "runtime_sequence",
+            )
+        }
+        assert body == expected
+        sent.append(body)
+        return copy.deepcopy(reply)
+
+    assert (
+        reconcile_managed(journal, row["run_id"], link["runner_id"], original_observation)
+        == "terminal_host_exit_observed"
+    )
+    assert len(sent) == 1 and p.t.calls.count("claim") == 1
+    assert "consume" not in p.t.calls and "runtime-bind" not in p.t.calls
+    assert "native" not in p.t.calls
+    return journal, row, link, reply, selection(p, tmp_path)
+
+
+def test_unacknowledged_issued_first_claim_retirement_keeps_cursor_zero_and_cli(
+    persistent_worker, tmp_path
+):
+    journal, row, link, reply, selected = _retired_claim_reply_loss(persistent_worker, tmp_path)
+    with journal._connection() as con:
+        before = {
+            table: [dict(item) for item in con.execute("SELECT * FROM " + table)]
+            for table in (
+                "managed_persistent_incarnations",
+                "managed_persistent_attempts",
+                "managed_persistent_selections",
+                "managed_claim_intents",
+            )
+        }
+    assert before["managed_persistent_attempts"] == []
+    parent = before["managed_persistent_incarnations"][0]
+    assert parent["last_sequence"] == 0 and parent["history_head"] is None
+    assert parent["active_sequence"] is None and parent["state"] == "retired"
+    claim = before["managed_claim_intents"][0]
+    assert claim["state"] == "host_exit_observed"
+    assert claim["contract"] is claim["attempt"] is claim["issuer"] is claim["fence"] is None
+    assert claim["consumption_sent"] == claim["consumption_acknowledged"] == 0
+    document = inspection.inspect_worker_state(**selected)
+    assert document["status"] == "retired" and document["complete"] is True
+    assert document["counts"] == dict(
+        attempts=0, selections=1, associated_runs=1, associated_claims=1
+    )
+    assert document["parent"] == dict(
+        state="retired", last_sequence="0", head_sequence=None, active_sequence=None
+    )
+    assert document["retirement_receipt_sha256"] == reply["runtime_retirement"]["receipt_sha256"]
+    assert document["global_holds"] == 0
+    arguments = ["worker-state"]
+    for key, value in selected.items():
+        arguments.extend(("--" + key.replace("_", "-"), value))
+    with (
+        patch("vardrrunner.cli.process_runner.cleanup_sensitive_temp_dirs") as cleanup,
+        patch.object(config, "load", side_effect=AssertionError("no defaults")),
+        patch.object(api.VardrMapClient, "managed_post", side_effect=AssertionError("offline")),
+    ):
+        result = CliRunner().invoke(app, arguments)
+    assert result.exit_code == 0 and json.loads(result.stdout) == document
+    cleanup.assert_not_called()
+    with journal._connection() as con:
+        after = {
+            table: [dict(item) for item in con.execute("SELECT * FROM " + table)]
+            for table in before
+        }
+    assert after == before
+
+
+@pytest.mark.parametrize("change", ["job", "sequence", "receipt", "origin", "binding", "consumed"])
+def test_selected_only_retirement_still_requires_original_exact_observation(
+    persistent_worker, tmp_path, change
+):
+    from vardrrunner.authorization.codec import encoded
+
+    journal, row, link, reply, selected = _retired_claim_reply_loss(persistent_worker, tmp_path)
+    poisoned = copy.deepcopy(reply)
+    retirement = poisoned["runtime_retirement"]
+    if change == "job":
+        retirement["binding"]["job_id"] = "different-job"
+    elif change == "sequence":
+        retirement["last_sequence"] = retirement["runtime_sequence"] = "2"
+    elif change == "receipt":
+        retirement["report_sha256"] = "f" * 64
+    elif change == "origin":
+        retirement["origin"] = "https://foreign.invalid/backend"
+    elif change == "binding":
+        retirement["binding"]["fence"] += 1
+    else:
+        poisoned["claim"]["consumed"] = True
+    rehash(poisoned)
+    with journal._connection() as con:
+        canonical = encoded(retirement).decode()
+        con.execute("UPDATE managed_persistent_incarnations SET retirement=?", (canonical,))
+        con.execute("UPDATE managed_persistent_selections SET retirement=?", (canonical,))
+        if change != "receipt":
+            con.execute(
+                "UPDATE managed_claim_observations SET snapshot=?", (encoded(poisoned).decode(),)
+            )
+    held(inspection.inspect_worker_state(**selected))

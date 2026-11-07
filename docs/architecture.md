@@ -578,6 +578,11 @@ Inspection validates current schema, exact admission/runtime/Runner binding,
 original association joins and canonical retirement provenance. Genuine parent0
 without any per-runtime association is `empty_unissued`, never fabricated local
 retirement. A retired nonempty runtime keeps earlier released rows unchanged.
+If the first claim committed remotely but its reply was lost, the exact original
+observation can anchor retirement with server sequence one while the local
+unacknowledged cursor remains zero. Inspection requires the single retired
+selection, no local attempt, no consumption, and the original validated snapshot;
+it creates no claim acknowledgement or history entry.
 Incomplete facts are held with null counts; valid unretired state or nonzero
 global holds may report complete facts while remaining held. The closed public
 schema contains no raw rows, tokens, token hashes, identity labels or response

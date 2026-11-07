@@ -6,6 +6,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
+
+- Recognize the original selected-only physical retirement after a lost first
+  claim reply, preserving local cursor zero and refusing substituted observation
+  bindings without creating an acknowledgement or local attempt.
 - Reconcile physical worker retirement after a verified native stop while
   preserving the stopped process's historical PID and terminal receipt.
 

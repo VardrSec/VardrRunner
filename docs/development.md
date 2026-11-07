@@ -706,3 +706,10 @@ The first-worker inspection tests use explicit temporary journals and identities
 Exercise a current clear journal, real worker history with no active holds,
 uninitialized state, orphaned sidecars, wrong identity and unknown worker schema.
 Keep this audit separate from actual first-installation and successor acceptance.
+
+
+The worker-state regression for a lost first claim reply uses a real isolated
+journal and original-association observation. It keeps local cursor zero and no
+attempt row while validating the exact server-issued retirement at sequence one.
+Its JSON CLI check is offline; synthetic fixtures do not qualify installed
+transport loss, physical exit, containment, or release.

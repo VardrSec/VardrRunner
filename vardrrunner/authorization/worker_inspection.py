@@ -362,9 +362,8 @@ def _retirement(
         ),
         "inspection_retirement",
     )
-    require(
-        sequence64(receipt["last_sequence"]) == runtime["last_sequence"], "inspection_retirement"
-    )
+    retired_last = sequence64(receipt["last_sequence"])
+    unacknowledged_first_claim = False
     hash_value(receipt["report_sha256"])
     expected = digest(
         encoded({key: value for key, value in receipt.items() if key != "receipt_sha256"})
@@ -379,8 +378,28 @@ def _retirement(
             link = claim_association(con, run_id)
             require(link is not None, "inspection_retirement")
             assert link is not None
-            worker_persistent.retirement_snapshot(con, run_id, link, receipt)
+            snapshot = worker_persistent.retirement_snapshot(con, run_id, link, receipt)
             anchored = True
+            # A lost first claim reply leaves a selection, never a local ACK/attempt.
+            # The original /4 observation proves Map issued that exact claim.
+            if (
+                len(ids) == 1
+                and runtime["last_sequence"] == 0
+                and runtime["history_head"] is runtime["active_sequence"] is None
+                and selection["state"] == "physical_retirement_observed"
+                and selection["retired_from_state"] == "selected"
+                and selection["runtime_sequence"] == 1
+                and link["runtime_sequence"] == receipt["runtime_sequence"] == "1"
+                and retired_last == 1
+                and snapshot["claim"] is not None
+                and snapshot["claim"]["consumed"] is False
+                and con.execute(
+                    "SELECT 1 FROM managed_persistent_attempts WHERE runtime_id=? LIMIT 1",
+                    (runtime["runtime_id"],),
+                ).fetchone()
+                is None
+            ):
+                unacknowledged_first_claim = True
         elif selection["state"] == "preclaim_retired" and selection["retirement"] is None:
             observed = con.execute(
                 "SELECT snapshot FROM managed_claim_observations WHERE run_id=?", (run_id,)
@@ -392,7 +411,10 @@ def _retirement(
                 ) == encoded(receipt):
                     worker_persistent.preclaim_parent_retirement_snapshot(con, run_id, receipt)
                     anchored = True
-    require(anchored, "inspection_retirement")
+    require(
+        anchored and (retired_last == runtime["last_sequence"] or unacknowledged_first_claim),
+        "inspection_retirement",
+    )
     return expected
 
 
