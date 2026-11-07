@@ -11,6 +11,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
   fails before launch. Preserve the original exception and existing cleanup-error
   handling. See [launch cleanup note](changelog/unreleased-gate-launch-cleanup.md).
 
+- Verify that unsupported signed authorization, approval and envelope versions
+  are refused before consuming a contract; a subsequent valid contract remains usable.
+  See [the NM-1 regression note](changelog/unreleased-nm1-contract-version-regressions.md).
+
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.
 
