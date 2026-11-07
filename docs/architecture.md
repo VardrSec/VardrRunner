@@ -584,3 +584,34 @@ schema contains no raw rows, tokens, token hashes, identity labels or response
 values. Logical read-only WAL semantics do not promise zero filesystem writes.
 See [ADR0043](adr/0043-proposed-linux-worker-lifecycle-owner.md#offline-existing-state-inspection-amendment)
 and [the CLI contract](cli.md#offline-worker-state-inspection-nm-2-candidate).
+
+### Original worker reconciliation selector
+
+`authorization/worker_reconciliation.py` and the top-level `worker-reconcile`
+command reuse the same six-selection validators, complete read snapshot and closed
+`worker-state/1` audit builder. The audit contract is unchanged. A unique pending
+selection takes priority over the exact issued history head; ambiguity and absent
+original associations are held rather than guessed from a generic bounded list.
+No job/history count limit is added.
+
+Only a validated actionable original association reaches credential resolution and
+the existing original-key managed observation route. One response is retained for
+existing result/stop/retirement reconciliation; it cannot authorize another RPC or
+execution. Optional exact-association guards apply before observation and receipt
+metadata writes, including result/stop ACK/close transactions. Legacy callers keep
+the original default predicates and behavior. A final fresh audit must establish
+original-key-linked retirement and zero global holds before success is reported.
+
+The explicit writer uses `Journal.open_existing` without the ordinary constructor.
+It binds every `mode=rw` connection to the DB dev/inode observed at original
+selection and refuses missing/replaced/current-schema mismatches. It reuses the
+same transaction and existing SQL methods, including ordinary evidence-table
+creation during authenticated observation, not a second SQL recovery engine.
+Normal WAL sidecars remain supported. Existing Windows path pins and POSIX
+observed-file limitations remain; this is not an OS sandbox or content freeze.
+
+Already-retired state and truly empty parent0 return offline without credentials.
+Parent0 with closed preclaim associations remains held under the existing early
+return and is an open NM-2 gate. Distribution still owns physical stop and any
+future next-enable lifecycle; this component adds no service, Map endpoint,
+automatic reconciliation or activation.

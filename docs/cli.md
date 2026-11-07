@@ -1365,3 +1365,45 @@ This command is a new image capability. A lifecycle caller must explicitly hold
 when an old image lacks it; it must not assume e8 images support it or replace
 missing output with zero. Stop/re-enable remains an unimplemented, separate
 lifecycle candidate; this command enables no worker and closes no platform gate.
+
+### Explicit original worker reconciliation (NM-2 candidate)
+
+`vardrrunner worker-reconcile --journal PATH --identity PATH --runner-id UUID
+--runtime-id UUID --runtime-sha256 SHA256 --admission-sha256 SHA256` requires the
+same six explicit selections as `worker-state`. It first performs that existing
+identity/schema/binding and full-holds audit in one read-only snapshot. It skips
+startup cleanup only for this new command and the existing `worker-state` command;
+legacy commands keep their current startup behavior.
+
+For an unretired runtime it selects the unique pending original proposal, otherwise
+the exact issued history head. Ambiguous, missing or inconsistent associations are
+held; it does not guess from a limited audit list or require the operator to recover
+a local run ID from logs. The configured API origin must match the original run.
+Existing environment/keychain/explicit plaintext credential policy applies only
+after selection succeeds. At most one original-key authenticated
+`POST /jobs/{job_id}/managed/observation` is made through the existing API transport.
+There is no claim, consumption, upload, replay, grant change or execution.
+
+Local writes reuse existing receipt reconciliation. A noncreating repository opens
+the originally selected DB identity with SQLite `mode=rw`, checks current schema on
+every connection and retains normal WAL handling. Missing/replaced DBs are held;
+no identity/journal constructor, migration, repair or immutable fallback runs.
+Exact association and pending/head priority are checked again before observation
+and local metadata transactions. Existing Windows name pins remain; POSIX keeps
+its observed-file checks, not a race-free open or OS sandbox guarantee.
+
+The closed `vardr.worker-reconciliation/1` JSON contains fixed status/reason,
+complete flag, public binding, the one selected local run ID/sequence, reconciliation
+state, remaining global holds and retirement receipt digest. `reconciled` requires
+a fresh complete retired audit with zero global holds. `already_retired` and genuine
+`empty_unissued` need no credentials or network. The latter is offline N/A, not
+physical retirement evidence. These three states exit0; `held` exits1. Incomplete
+facts have null holds/receipt. Raw rows, keys, token hashes and response bodies are
+not output.
+
+A parent0 with only preclaim-retired associations remains explicitly held: the
+existing original-run reconcile path returns before physical observation. This is
+an open NM-2 lifecycle gap, not an accepted capability or a zero-association case.
+This new command is a separate immutable-image capability;090/e8 images do not
+provide it. Missing support must be held. Stop/re-enable and Linux/Desktop lifecycle
+acceptance remain separate, unclosed gates; nothing is enabled automatically.

@@ -528,3 +528,39 @@ not an implemented or supported command. Actual first/next lifecycle trials must
 both use a facade-bearing immutable Runner image; an old image without this
 contract is explicitly unsupported/held. This amendment authorizes implementation
 and isolated testing only and waives no existing acceptance or release gate.
+
+## Original worker reconciliation amendment
+
+Owner-authorized isolated implementation/testing adds an explicit top-level
+`worker-reconcile` facade alongside offline `worker-state`. Both require existing
+identity/journal paths and exact Runner/runtime/admission selectors. Only these
+two new top-level commands bypass startup cleanup; existing commands are unchanged.
+
+One complete read snapshot reuses the existing full audit and validates original
+associations. For an actionable runtime, select the unique pending proposal or the
+exact issued history head; ambiguity and incomplete state are held. Existing
+credential policy and exact original API origin apply. Make at most one existing
+original-key managed observation POST, then reuse its reply through existing local
+reconciliation. No claim, execution, consumption, replay, upload, grant mutation,
+new endpoint, service or automatic action is added.
+
+The writer is explicitly noncreating and bound to the originally observed DB
+file identity, with `mode=rw`, current-schema checks and existing Windows pins.
+It performs no ordinary Journal construction, migration, repair or immutable
+read. Existing authenticated observation may create its ordinary additive evidence
+table. Recheck the exact candidate before observation and metadata transactions;
+do not freeze ordinary WAL content or cap healthy history. Existing POSIX observed
+path checks remain weaker than a race-free open. Final success requires a new
+complete audit proving canonical original-key-linked retirement and global holds0.
+
+Already-retired state and truly zero-associated unissued parent0 require no
+credentials or network. Empty N/A is not a local retirement receipt. Parent0 with
+only closed preclaim associations stays held because the existing original-run
+path returns before physical observation. That unresolved case remains a required
+NM-2 gate; this increment neither waives it nor invents a run or retirement.
+
+This is a new image capability, not present in090/e8. Future first/next lifecycle
+acceptance must use a qualified image containing it; absent support is held.
+The proposed next-enable wrapper remains unimplemented. This amendment authorizes
+private component implementation/testing only and grants no acceptance, release,
+deployment, default activation or extra authority.

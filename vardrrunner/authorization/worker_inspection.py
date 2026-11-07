@@ -367,6 +367,84 @@ def _retirement(
     return expected
 
 
+def _selection(
+    journal: str,
+    identity: str,
+    runner_id: str,
+    runtime_id: str,
+    runtime_sha256: str,
+    admission_sha256: str,
+) -> dict[str, str]:
+    """The existing six explicit selection validators; no storage/defaults."""
+    binding = {
+        "runner_id": _uuid(runner_id),
+        "runtime_id": _uuid(runtime_id),
+        "runtime_sha256": hash_value(runtime_sha256),
+        "admission_sha256": hash_value(admission_sha256),
+    }
+    require(
+        all(
+            type(value) is str and 0 < len(value) <= 4096 and "\x00" not in value
+            for value in (journal, identity)
+        ),
+        "inspection_selection",
+    )
+    return binding
+
+
+def _worker_snapshot(con: sqlite3.Connection, binding: dict, budget: _Budget):
+    """Reuse the complete same-connection worker audit for two explicit callers."""
+    tables = _tables(con, budget)
+    _schema(con, tables, budget)
+    runtime = worker_persistent.parent(con, binding["runtime_id"])
+    admission = worker_persistent._admission(runtime["admission_snapshot"])
+    require(
+        all(getattr(admission, key) == value for key, value in binding.items()),
+        "inspection_binding",
+    )
+    holds = local_holds_connection(con, checkpoint=budget.check, strict=True)
+    counts, ids = _associations(con, tables, binding, budget)
+    return runtime, admission, holds, counts, ids
+
+
+def _audit_document(con, binding, budget, runtime, admission, holds, counts, ids):
+    """Build the unchanged closed worker-state/1 document from its snapshot."""
+    retired = runtime["state"] == "retired"
+    retirement = _retirement(con, runtime, admission, ids, budget) if retired else None
+    empty = (
+        runtime["state"] == "idle"
+        and runtime["last_sequence"] == 0
+        and runtime["history_head"] is None
+        and runtime["active_sequence"] is None
+        and runtime["retirement"] is None
+        and not any(counts.values())
+    )
+    if retired:
+        require(runtime["active_sequence"] is None, "inspection_retirement")
+    budget.check()
+    success = holds == 0 and (retired or empty)
+    return {
+        "schema": SCHEMA,
+        "status": ("retired" if retired else "empty_unissued") if success else "held",
+        "reason": None if success else ("local_holds" if holds else "runtime_unretired"),
+        "complete": True,
+        "binding": binding,
+        "parent": {
+            "state": runtime["state"],
+            "last_sequence": str(runtime["last_sequence"]),
+            "head_sequence": str(runtime["history_head"])
+            if runtime["history_head"] is not None
+            else None,
+            "active_sequence": str(runtime["active_sequence"])
+            if runtime["active_sequence"] is not None
+            else None,
+        },
+        "counts": counts,
+        "retirement_receipt_sha256": retirement,
+        "global_holds": holds,
+    }
+
+
 def inspect_worker_state(
     *,
     journal: str,
@@ -375,22 +453,13 @@ def inspect_worker_state(
     runtime_id: str,
     runtime_sha256: str,
     admission_sha256: str,
+    expected_journal_identity: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Inspect explicit existing state in one read-only transaction, with fixed output."""
     binding = None
     try:
-        binding = {
-            "runner_id": _uuid(runner_id),
-            "runtime_id": _uuid(runtime_id),
-            "runtime_sha256": hash_value(runtime_sha256),
-            "admission_sha256": hash_value(admission_sha256),
-        }
-        require(
-            all(
-                type(value) is str and 0 < len(value) <= 4096 and "\x00" not in value
-                for value in (journal, identity)
-            ),
-            "inspection_selection",
+        binding = _selection(
+            journal, identity, runner_id, runtime_id, runtime_sha256, admission_sha256
         )
     except (AuthorizationError, TypeError, ValueError):
         return _held("selection_invalid")
@@ -401,57 +470,18 @@ def inspect_worker_state(
         saved_identity = read_existing(Path(identity))
         require(saved_identity.runner_id == binding["runner_id"], "inspection_identity")
         budget.check()
-        with journal_connection(Path(journal), readonly=True) as con:
+        journal_guard = (
+            {}
+            if expected_journal_identity is None
+            else {"expected_identity": expected_journal_identity}
+        )
+        with journal_connection(Path(journal), readonly=True, **journal_guard) as con:
             con.row_factory = sqlite3.Row
             con.set_progress_handler(budget.progress, 1000)
             con.execute("BEGIN")
             try:
-                tables = _tables(con, budget)
-                _schema(con, tables, budget)
-                runtime = worker_persistent.parent(con, binding["runtime_id"])
-                admission = worker_persistent._admission(runtime["admission_snapshot"])
-                require(
-                    all(getattr(admission, key) == value for key, value in binding.items()),
-                    "inspection_binding",
-                )
-                holds = local_holds_connection(con, checkpoint=budget.check, strict=True)
-                counts, ids = _associations(con, tables, binding, budget)
-                retired = runtime["state"] == "retired"
-                retirement = _retirement(con, runtime, admission, ids, budget) if retired else None
-                empty = (
-                    runtime["state"] == "idle"
-                    and runtime["last_sequence"] == 0
-                    and runtime["history_head"] is None
-                    and runtime["active_sequence"] is None
-                    and runtime["retirement"] is None
-                    and not any(counts.values())
-                )
-                if retired:
-                    require(runtime["active_sequence"] is None, "inspection_retirement")
-                budget.check()
-                success = holds == 0 and (retired or empty)
-                return {
-                    "schema": SCHEMA,
-                    "status": ("retired" if retired else "empty_unissued") if success else "held",
-                    "reason": None
-                    if success
-                    else ("local_holds" if holds else "runtime_unretired"),
-                    "complete": True,
-                    "binding": binding,
-                    "parent": {
-                        "state": runtime["state"],
-                        "last_sequence": str(runtime["last_sequence"]),
-                        "head_sequence": str(runtime["history_head"])
-                        if runtime["history_head"] is not None
-                        else None,
-                        "active_sequence": str(runtime["active_sequence"])
-                        if runtime["active_sequence"] is not None
-                        else None,
-                    },
-                    "counts": counts,
-                    "retirement_receipt_sha256": retirement,
-                    "global_holds": holds,
-                }
+                snapshot = _worker_snapshot(con, binding, budget)
+                return _audit_document(con, binding, budget, *snapshot)
             finally:
                 con.rollback()
     except InspectionExpired:

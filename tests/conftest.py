@@ -22,7 +22,10 @@ def isolated_journal(tmp_path, monkeypatch, request):
     # Never resolve, install, or delete the operator's real managed tools either.
     monkeypatch.setattr(config, "TOOLS_DIR", tmp_path / "tools")
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
-    if request.module.__name__.rsplit(".", 1)[-1] == "test_worker_state_audit":
+    if request.module.__name__.rsplit(".", 1)[-1] in {
+        "test_worker_state_audit",
+        "test_worker_reconciliation",
+    }:
         # Resolve every fixture default before any Journal/Store fixture runs.
         monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
         monkeypatch.setattr(config, "RUNS_DIR", tmp_path / "runs")

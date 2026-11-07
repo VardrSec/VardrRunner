@@ -226,9 +226,15 @@ class ResultStore:
             )
         return self.get(handle.run_id)
 
-    def result_ack(self, run_id: str, *, observed: bool = False) -> None:
+    def result_ack(
+        self, run_id: str, *, observed: bool = False, expected_association: bytes | None = None
+    ) -> None:
         with self.journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
+            if expected_association is not None:
+                from .observations import require_worker_association
+
+                require_worker_association(con, run_id, expected_association)
             row = con.execute(
                 "SELECT state FROM managed_result_intents WHERE run_id=?", (run_id,)
             ).fetchone()
@@ -253,10 +259,16 @@ class ResultStore:
             ).rowcount
             require(count == 1, "managed_finish_already_attempted")
 
-    def close(self, run_id: str, expected: dict) -> None:
+    def close(
+        self, run_id: str, expected: dict, *, expected_association: bytes | None = None
+    ) -> None:
         binding = json.loads(expected["binding"])
         with self.journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
+            if expected_association is not None:
+                from .observations import require_worker_association
+
+                require_worker_association(con, run_id, expected_association)
             row = con.execute(
                 "SELECT * FROM managed_result_intents WHERE run_id=?", (run_id,)
             ).fetchone()
@@ -406,7 +418,13 @@ def finalize(handle, submit: Callable[[dict], dict], finish: Callable[[dict], di
     return decoded(encoded(reply))  # Only the validated, durably accepted canonical ACK.
 
 
-def reconcile(journal: Journal, run_id: str, inspect: Callable[[dict], dict]) -> str:
+def reconcile(
+    journal: Journal,
+    run_id: str,
+    inspect: Callable[[dict], dict],
+    *,
+    expected_association: bytes | None = None,
+) -> str:
     """Explicit authenticated observation; the callback supplies its own capability.
 
     Only public binding is sent. No capability, execution proof or retry right is
@@ -444,12 +462,18 @@ def reconcile(journal: Journal, run_id: str, inspect: Callable[[dict], dict]) ->
     if reply["completion"] is None:
         require(record["state"] != "terminal", "terminal_receipt_missing")
         if record["state"] != "terminal":
-            store.result_ack(run_id, observed=True)
+            if expected_association is None:
+                store.result_ack(run_id, observed=True)
+            else:
+                store.result_ack(run_id, observed=True, expected_association=expected_association)
         return "held_result_observed"
     check_completion(reply["completion"], record)
     require(
         reply["capacity_reserved"] is False and reply["execution_state"] == record["outcome"],
         "managed_reconciliation_binding",
     )
-    store.close(run_id, record)
+    if expected_association is None:
+        store.close(run_id, record)
+    else:
+        store.close(run_id, record, expected_association=expected_association)
     return "terminal_receipt_observed"

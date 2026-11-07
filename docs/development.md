@@ -669,3 +669,27 @@ incarnations must use an image containing the new inspection contract; unsupport
 old images remain held. Full validation/95% coverage and Linux/Desktop lifecycle
 acceptance remain separate gates. Inspection's30-second cooperative budget is not
 an execution or startup budget and must not truncate history into a false zero.
+
+### Original worker reconciliation validation
+
+`tests/test_worker_reconciliation.py` uses isolated persistent-worker models,
+temporary identity/journal files and an inert original-key client. All config,
+grant, journal, identity and tool paths are scoped before dependent fixtures.
+The fixed-error contract also runs against unchanged090 for a clean-red proof.
+
+Required vectors cover pending-versus-history-head priority, more-than32 healthy
+jobs without a ceiling, ambiguous proposals, genuine empty parent0, already-retired
+offline behavior, preclaim-only parent0 held, wrong binding/origin, unavailable or
+nonretiring observations and the one-request guard. Missing, replaced or changed
+schema after selection must not create/migrate a journal or issue an observation.
+Candidate drift before POST/after reply/before record and wrong association at
+result/stop writes must retain holds and original history. Ordinary WAL updates
+must remain compatible with the original file identity.
+
+Run these with the existing worker-state, managed observation/reconciliation,
+persistent sequence, result/stop, journal, identity and CLI regressions, then the
+unchanged full-suite95% floor and static checks. Permanent focused guard evidence
+does not replace full quality or physical Linux/Desktop acceptance. First and next
+actual lifecycle trials need an image containing both inspection and reconciliation
+contracts; unsupported older images are held. Preclaim-only parent0 recovery and
+same-installation next-enable remain explicit NM-2 gaps.

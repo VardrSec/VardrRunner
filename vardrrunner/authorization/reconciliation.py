@@ -53,10 +53,13 @@ def _row(con, table: str, run_id: str):
     return con.execute(_ROW_SQL[table], (run_id,)).fetchone()
 
 
-def retire_preclaim(journal: Journal, run_id: str) -> str:
+def retire_preclaim(
+    journal: Journal, run_id: str, *, expected_association: bytes | None = None
+) -> str:
     """Only the durable marker written before invoking any claim RPC qualifies."""
     with journal._connection() as con:
         con.execute("BEGIN IMMEDIATE")
+        observations.require_worker_association(con, run_id, expected_association)
         claim = _row(con, "managed_claim_intents", run_id)
         run = _row(con, "runs", run_id)
         require(
@@ -257,9 +260,12 @@ def _unbound_source(con, run, claim, reply):
     return association
 
 
-def _retire_unbound_runtime(journal, run_id, root, source, before, reply):
+def _retire_unbound_runtime(
+    journal, run_id, root, source, before, reply, *, expected_association=None
+):
     with journal._connection() as con:
         con.execute("BEGIN IMMEDIATE")
+        observations.require_worker_association(con, run_id, expected_association)
         claim = _row(con, "managed_claim_intents", run_id)
         run = _row(con, "runs", run_id)
         observed = _row(con, "managed_claim_observations", run_id)
@@ -384,7 +390,9 @@ def _native_closed(table, intent, claim, run, contracts, *, checkpoint=None) -> 
     )
 
 
-def _retire_observed_terminal(journal, run_id, root, source, before, reply):
+def _retire_observed_terminal(
+    journal, run_id, root, source, before, reply, *, expected_association=None
+):
     failed_result = _failed_completion(reply)
     require(_host_exit(reply) or failed_result, "host_retirement_receipt_required")
     state = "failed_completion_observed" if failed_result else "host_exit_observed"
@@ -394,6 +402,7 @@ def _retire_observed_terminal(journal, run_id, root, source, before, reply):
     retired = "server_retired" if failed_result else "host_retired"
     with journal._connection() as con:
         con.execute("BEGIN IMMEDIATE")
+        observations.require_worker_association(con, run_id, expected_association)
         claim = _row(con, "managed_claim_intents", run_id)
         run = _row(con, "runs", run_id)
         observed = _row(con, "managed_claim_observations", run_id)
@@ -493,12 +502,20 @@ def _retire_observed_terminal(journal, run_id, root, source, before, reply):
 
 
 def reconcile_managed(
-    journal: Journal, run_id: str, runner_id: str, inspect: Callable[[dict], dict]
+    journal: Journal,
+    run_id: str,
+    runner_id: str,
+    inspect: Callable[[dict], dict],
+    *,
+    expected_association: bytes | None = None,
 ) -> str:
-    root, source = observations.original(journal, run_id, runner_id)
+    worker_guard = (
+        {} if expected_association is None else {"expected_association": expected_association}
+    )
+    root, source = observations.original(journal, run_id, runner_id, **worker_guard)
     before = journal.get(run_id)
     if source["state"] in {"denied_before_rpc", "preclaim_retired"}:
-        status = retire_preclaim(journal, run_id)
+        status = retire_preclaim(journal, run_id, **worker_guard)
         with journal._connection() as con:
             association = claim_association(con, run_id)
             selection = (
@@ -521,13 +538,14 @@ def reconcile_managed(
         )
         # A restart cannot recover the caller's lost "epoch never entered"
         # knowledge. Only a new original-key physical observation closes it.
-        root, source = observations.original(journal, run_id, runner_id)
+        root, source = observations.original(journal, run_id, runner_id, **worker_guard)
         before = journal.get(run_id)
-        reply = observations.observe(journal, run_id, runner_id, inspect)
+        reply = observations.observe(journal, run_id, runner_id, inspect, **worker_guard)
         if reply["runtime_retirement"] is None:
             return "held_no_retirement_receipt"
         with journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
+            observations.require_worker_association(con, run_id, expected_association)
             claim = _row(con, "managed_claim_intents", run_id)
             run = _row(con, "runs", run_id)
             observed = _row(con, "managed_claim_observations", run_id)
@@ -542,20 +560,34 @@ def reconcile_managed(
             )
             _sequence_retirement_metadata(con, run_id, reply)
         return "terminal_runtime_preclaim_retired"
-    reply = observations.observe(journal, run_id, runner_id, inspect)
+    reply = observations.observe(journal, run_id, runner_id, inspect, **worker_guard)
     if _unbound_runtime(reply):
-        return _retire_unbound_runtime(journal, run_id, root, source, before, reply)
+        return _retire_unbound_runtime(journal, run_id, root, source, before, reply, **worker_guard)
     if _host_exit(reply):
-        return _retire_observed_terminal(journal, run_id, root, source, before, reply)
+        return _retire_observed_terminal(
+            journal, run_id, root, source, before, reply, **worker_guard
+        )
     if reply["stop"] is not None:
-        status = observations.reconcile_stop(journal, run_id, runner_id, lambda _: reply)
+        status = observations.reconcile_stop(
+            journal, run_id, runner_id, lambda _: reply, **worker_guard
+        )
     elif reply["result"] is not None:
         if (
             _failed_completion(reply)
             and results.ResultStore(journal).get(run_id)["outcome"] == "completed"
         ):
-            return _retire_observed_terminal(journal, run_id, root, source, before, reply)
-        status = observations.reconcile_result(journal, run_id, runner_id, lambda _: reply)
+            return _retire_observed_terminal(
+                journal,
+                run_id,
+                root,
+                source,
+                before,
+                reply,
+                **worker_guard,
+            )
+        status = observations.reconcile_result(
+            journal, run_id, runner_id, lambda _: reply, **worker_guard
+        )
     else:
         return "held_no_terminal_receipt"
     if (
@@ -566,6 +598,7 @@ def reconcile_managed(
     ):
         with journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
+            observations.require_worker_association(con, run_id, expected_association)
             _sequence_retirement_metadata(con, run_id, reply)
     return status
 

@@ -73,25 +73,49 @@ def journal_path_present(path: Path) -> bool:
     return _journal_path_info(path) is not None
 
 
+def journal_path_identity(path: Path) -> tuple[int, int]:
+    """Require the existing ordinary DB identity; WAL updates do not replace it."""
+    observed = _journal_path_info(path)
+    if observed is None or observed.st_ino <= 0:
+        raise JournalError("Existing journal identity unavailable")
+    return observed.st_dev, observed.st_ino
+
+
 @contextmanager
-def journal_connection(path: Path, *, readonly: bool = False) -> Iterator[sqlite3.Connection]:
+def journal_connection(
+    path: Path, *, readonly: bool = False, expected_identity: tuple[int, int] | None = None
+) -> Iterator[sqlite3.Connection]:
     """Use one canonical DB/WAL identity; keep Windows names pinned until close.
 
     POSIX retains the existing observed-file check, not a race-safe open promise.
     Read-only SQLite connections can still create or change WAL sidecars.
     """
     observed = _journal_path_info(path)
+    must_exist = readonly or expected_identity is not None
+    if expected_identity is not None and (
+        observed is None or (observed.st_dev, observed.st_ino) != expected_identity
+    ):
+        raise JournalError("Original journal identity changed")
     try:
-        canonical = path.resolve(strict=readonly)
+        canonical = path.resolve(strict=must_exist)
         guard = (
-            WindowsJournalPin(canonical, create=not readonly, observed=observed)
+            WindowsJournalPin(canonical, create=not must_exist, observed=observed)
             if os.name == "nt"
             else nullcontext()
         )
         with guard:
-            target = canonical.as_uri() + "?mode=ro" if readonly else canonical
-            con = sqlite3.connect(target, uri=readonly, timeout=5.0)
+            target = (
+                canonical.as_uri() + ("?mode=ro" if readonly else "?mode=rw")
+                if must_exist
+                else canonical
+            )
+            con = sqlite3.connect(target, uri=must_exist, timeout=5.0)
             try:
+                if (
+                    expected_identity is not None
+                    and journal_path_identity(path) != expected_identity
+                ):
+                    raise JournalError("Original journal identity changed")
                 yield con
             finally:
                 con.close()
@@ -217,6 +241,11 @@ class Journal:
             self._migrate()
         except (OSError, sqlite3.Error) as exc:
             raise JournalError(f"cannot open execution journal: {exc}") from exc
+
+    @classmethod
+    def open_existing(cls, path: Path, *, expected_identity: tuple[int, int]) -> Journal:
+        """Open the selected current DB without creation, migration or repair."""
+        return _ExistingJournal(path, expected_identity)
 
     @classmethod
     def read_existing(cls, path: Path, run_id: str) -> RunRecord | None:
@@ -634,3 +663,23 @@ class Journal:
             warnings=warnings,
             updated_at=row["updated_at"],
         )
+
+
+class _ExistingJournal(Journal):
+    """Only the explicit reconciliation facade uses this noncreating repository."""
+
+    def __init__(self, path: Path, expected_identity: tuple[int, int]):
+        self.path = Path(path)
+        self._expected_identity = expected_identity
+        with self._connect():
+            pass
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        with journal_connection(self.path, expected_identity=self._expected_identity) as con:
+            con.row_factory = sqlite3.Row
+            con.execute("PRAGMA foreign_keys = ON")
+            con.execute("PRAGMA busy_timeout = 5000")
+            if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+                raise JournalError("unsupported existing journal schema")
+            yield con

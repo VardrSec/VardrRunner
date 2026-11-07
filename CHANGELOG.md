@@ -6,6 +6,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
+- Add explicit `worker-reconcile` selection of one original persistent-worker
+  proposal/history head, reusing one original-key observation and existing local
+  receipt reconciliation. Preserve `worker-state/1`; bind the noncreating writer
+  to the originally selected DB identity and recheck candidate association before
+  RPC/metadata writes. Already-retired and genuinely empty state stay offline.
+  Preclaim-only parent0 and actual stop/re-enable remain open NM-2 gates; this new
+  command requires a matching qualified image and enables no work automatically.
+
 - Add explicit offline `worker-state` inspection for an existing persistent-worker
   identity/journal and exact Runner/runtime/admission binding. Reuse the full audit
   in one read-only WAL snapshot; incomplete facts are held with null counts.

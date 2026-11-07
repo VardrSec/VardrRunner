@@ -118,10 +118,16 @@ class StopStore:
             )
         return self.get(handle.run_id)
 
-    def close(self, run_id: str, expected: dict) -> None:
+    def close(
+        self, run_id: str, expected: dict, *, expected_association: bytes | None = None
+    ) -> None:
         binding = json.loads(expected["binding"])
         with self.journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
+            if expected_association is not None:
+                from .observations import require_worker_association
+
+                require_worker_association(con, run_id, expected_association)
             row = con.execute(
                 "SELECT * FROM managed_stop_intents WHERE run_id=?", (run_id,)
             ).fetchone()
@@ -210,7 +216,13 @@ def report(handle, send: Callable[[dict], dict]) -> None:
     store.close(handle.run_id, expected)
 
 
-def reconcile(journal: Journal, run_id: str, inspect: Callable[[dict], dict]) -> str:
+def reconcile(
+    journal: Journal,
+    run_id: str,
+    inspect: Callable[[dict], dict],
+    *,
+    expected_association: bytes | None = None,
+) -> str:
     store = StopStore(journal)
     expected = store.get(run_id)
     binding = json.loads(expected["binding"])
@@ -238,5 +250,8 @@ def reconcile(journal: Journal, run_id: str, inspect: Callable[[dict], dict]) ->
         reply["execution_state"] == expected["outcome"] and reply["capacity_reserved"] is False,
         "managed_stop_observation_binding",
     )
-    store.close(run_id, expected)
+    if expected_association is None:
+        store.close(run_id, expected)
+    else:
+        store.close(run_id, expected, expected_association=expected_association)
     return "terminal_stop_receipt_observed"

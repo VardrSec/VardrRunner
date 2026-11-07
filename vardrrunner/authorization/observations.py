@@ -85,7 +85,46 @@ def hash_value(value) -> str:
     return value
 
 
-def original(journal: Journal, run_id: str, runner_id: str) -> tuple[dict, dict]:
+def require_worker_association(con, run_id: str, expected: bytes | None) -> None:
+    """An explicit worker caller cannot retarget an original local association."""
+    if expected is None:
+        return
+    require(type(expected) is bytes and 0 < len(expected) <= 8192, "original_worker_required")
+    actual = claim_association(con, run_id)
+    require(
+        actual is not None
+        and actual["schema"] == "vardr.worker-claim-association/3"
+        and encoded(actual) == expected,
+        "original_worker_association_required",
+    )
+    from . import worker_persistent
+
+    assert actual is not None
+    selected = con.execute(
+        "SELECT * FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+    ).fetchone()
+    require(selected is not None, "original_worker_selection_required")
+    worker_persistent._validate_selection(con, selected)
+    runtime = worker_persistent.parent(con, actual["runtime_id"])
+    require(runtime["state"] != "retired", "original_worker_already_retired")
+    other = con.execute(
+        "SELECT 1 FROM managed_persistent_selections WHERE runtime_id=? AND state='selected' AND run_id<>?",
+        (actual["runtime_id"], run_id),
+    ).fetchone()
+    require(other is None, "original_worker_candidate_changed")
+    require(
+        selected["state"] == "selected"
+        or (
+            selected["state"] == "promoted"
+            and runtime["last_sequence"] == selected["runtime_sequence"]
+        ),
+        "original_worker_candidate_changed",
+    )
+
+
+def original(
+    journal: Journal, run_id: str, runner_id: str, *, expected_association: bytes | None = None
+) -> tuple[dict, dict]:
     try:
         identifier(runner_id)
     except AuthorizationError:
@@ -96,6 +135,7 @@ def original(journal: Journal, run_id: str, runner_id: str) -> tuple[dict, dict]
                 "SELECT * FROM managed_claim_intents WHERE run_id=?", (run_id,)
             ).fetchone()
             run = con.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
+            require_worker_association(con, run_id, expected_association)
     except sqlite3.Error:
         raise AuthorizationError("claim_observation_state_unavailable") from None
     require(
@@ -409,17 +449,35 @@ def validate(
 
 
 class ObservationStore:
-    def __init__(self, journal: Journal):
+    def __init__(
+        self,
+        journal: Journal,
+        *,
+        run_id: str | None = None,
+        expected_association: bytes | None = None,
+    ):
         self.journal = journal
         with journal._connection() as con:
+            if expected_association is not None:
+                require(run_id is not None, "original_worker_required")
+                assert run_id is not None
+                con.execute("BEGIN IMMEDIATE")
+                require_worker_association(con, run_id, expected_association)
             con.execute("""CREATE TABLE IF NOT EXISTS managed_claim_observations (
                 run_id TEXT PRIMARY KEY, snapshot TEXT NOT NULL, observed_at TEXT NOT NULL)""")
 
     def record(
-        self, run_id: str, root: dict, reply: dict, runtime_association: dict | None = None
+        self,
+        run_id: str,
+        root: dict,
+        reply: dict,
+        runtime_association: dict | None = None,
+        *,
+        expected_association: bytes | None = None,
     ) -> None:
         with self.journal._connection() as con:
             con.execute("BEGIN IMMEDIATE")
+            require_worker_association(con, run_id, expected_association)
             claim = con.execute(
                 "SELECT * FROM managed_claim_intents WHERE run_id=?", (run_id,)
             ).fetchone()
@@ -540,11 +598,22 @@ class ObservationStore:
             )
 
 
-def observe(journal: Journal, run_id: str, runner_id: str, inspect: Callable[[dict], dict]) -> dict:
+def observe(
+    journal: Journal,
+    run_id: str,
+    runner_id: str,
+    inspect: Callable[[dict], dict],
+    *,
+    expected_association: bytes | None = None,
+) -> dict:
     """Explicit observation only; absence or unconsumed state never permits a retry."""
-    root, claim = original(journal, run_id, runner_id)
+    worker_guard = (
+        {} if expected_association is None else {"expected_association": expected_association}
+    )
+    root, claim = original(journal, run_id, runner_id, **worker_guard)
     with journal._connection() as con:
         association = claim_association(con, run_id)
+        require_worker_association(con, run_id, expected_association)
     request = {k: v for k, v in root.items() if k != "job_id"}
     if association is not None:
         if association["schema"] == "vardr.worker-claim-association/3":
@@ -560,16 +629,35 @@ def observe(journal: Journal, run_id: str, runner_id: str, inspect: Callable[[di
     except Exception:
         raise AuthorizationError("claim_observation_unavailable") from None
     validate(reply, root, claim, association)
-    ObservationStore(journal).record(run_id, root, reply, association)
+    if expected_association is not None:
+        with journal._connection() as con:
+            require_worker_association(con, run_id, expected_association)
+    store = (
+        ObservationStore(journal)
+        if expected_association is None
+        else ObservationStore(journal, run_id=run_id, **worker_guard)
+    )
+    if expected_association is None:
+        store.record(run_id, root, reply, association)
+    else:
+        store.record(run_id, root, reply, association, **worker_guard)
     return reply
 
 
 def reconcile_result(
-    journal: Journal, run_id: str, runner_id: str, inspect: Callable[[dict], dict]
+    journal: Journal,
+    run_id: str,
+    runner_id: str,
+    inspect: Callable[[dict], dict],
+    *,
+    expected_association: bytes | None = None,
 ) -> str:
+    worker_guard = (
+        {} if expected_association is None else {"expected_association": expected_association}
+    )
     expected = results.ResultStore(journal).get(run_id)
     require(json.loads(expected["binding"])["runner_id"] == runner_id, "original_runner_required")
-    reply = observe(journal, run_id, runner_id, inspect)
+    reply = observe(journal, run_id, runner_id, inspect, **worker_guard)
     association = binding(reply)
     adapted = {
         "schema": "vardr.managed-reconciliation/1",
@@ -580,15 +668,25 @@ def reconcile_result(
         "result": reply["result"],
         "completion": reply["completion"],
     }
-    return results.reconcile(journal, run_id, lambda _: adapted)
+    if expected_association is None:
+        return results.reconcile(journal, run_id, lambda _: adapted)
+    return results.reconcile(journal, run_id, lambda _: adapted, **worker_guard)
 
 
 def reconcile_stop(
-    journal: Journal, run_id: str, runner_id: str, inspect: Callable[[dict], dict]
+    journal: Journal,
+    run_id: str,
+    runner_id: str,
+    inspect: Callable[[dict], dict],
+    *,
+    expected_association: bytes | None = None,
 ) -> str:
+    worker_guard = (
+        {} if expected_association is None else {"expected_association": expected_association}
+    )
     expected = stops.StopStore(journal).get(run_id)
     require(json.loads(expected["binding"])["runner_id"] == runner_id, "original_runner_required")
-    reply = observe(journal, run_id, runner_id, inspect)
+    reply = observe(journal, run_id, runner_id, inspect, **worker_guard)
     association = binding(reply)
     adapted = {
         "schema": "vardr.managed-stop-observation/1",
@@ -598,4 +696,6 @@ def reconcile_stop(
         "capacity_reserved": reply["capacity_reserved"],
         "stop": reply["stop"],
     }
-    return stops.reconcile(journal, run_id, lambda _: adapted)
+    if expected_association is None:
+        return stops.reconcile(journal, run_id, lambda _: adapted)
+    return stops.reconcile(journal, run_id, lambda _: adapted, **worker_guard)
