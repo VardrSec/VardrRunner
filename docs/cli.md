@@ -1401,9 +1401,15 @@ physical retirement evidence. These three states exit0; `held` exits1. Incomplet
 facts have null holds/receipt. Raw rows, keys, token hashes and response bodies are
 not output.
 
-A parent0 with only preclaim-retired associations remains explicitly held: the
-existing original-run reconcile path returns before physical observation. This is
-an open NM-2 lifecycle gap, not an accepted capability or a zero-association case.
+A nonempty parent0 cohort made entirely of validated no-send preclaim tombstones
+uses the canonical lowest original run UUID as its one observation anchor. The
+parent can retire only after exact original-key /4 claimNone, unbound last0 proof.
+All original run/claim/selection rows stay unchanged; public counts stay nonzero.
+This is never `empty_unissued` or an invented issued head. Cohort membership is
+rechecked before POST and the parent transaction; any drift is held. Global holds
+must be0 before parent retirement and in the final fresh audit. Unknown, mixed or
+malformed state cannot enter this branch. Existing selected/head recovery retains
+its original behavior. Missing original auth/receipt stays held without fallback.
 This new command is a separate immutable-image capability;090/e8 images do not
 provide it. Missing support must be held. Stop/re-enable and Linux/Desktop lifecycle
 acceptance remain separate, unclosed gates; nothing is enabled automatically.

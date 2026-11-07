@@ -1236,3 +1236,113 @@ def persistent_holds(
             # All identifiers and predicates are fixed source constants.
             generic += con.execute(query).fetchone()[0]
     return len(held) + generic
+
+
+def preclaim_parent_anchor(
+    con: sqlite3.Connection, runtime_id: str, *, checkpoint: Callable[[], None] | None = None
+) -> tuple[str, list[str]]:
+    """Choose one original observation anchor in a complete no-send parent0 cohort."""
+    runtime = parent(con, runtime_id)
+    require(
+        runtime["state"] == "idle"
+        and runtime["last_sequence"] == 0
+        and runtime["history_head"] is None
+        and runtime["active_sequence"] is None
+        and runtime["retirement"] is None,
+        "preclaim_parent0_required",
+    )
+    require(
+        con.execute(
+            "SELECT 1 FROM managed_persistent_attempts WHERE runtime_id=?", (runtime_id,)
+        ).fetchone()
+        is None,
+        "preclaim_parent0_issued",
+    )
+    ids = []
+    for selected in audit_rows(
+        con.execute(
+            "SELECT * FROM managed_persistent_selections WHERE runtime_id=? ORDER BY run_id",
+            (runtime_id,),
+        ),
+        checkpoint,
+    ):
+        run_id = selected["run_id"]
+        require(
+            type(run_id) is str
+            and len(run_id) == 32
+            and all(char in "0123456789abcdef" for char in run_id)
+            and selected["state"] == "preclaim_retired"
+            and selected["runtime_sequence"] == 1,
+            "preclaim_parent0_cohort",
+        )
+        _preclaim_selection(con, selected)
+        ids.append(run_id)
+    require(bool(ids), "preclaim_parent0_cohort")
+    return ids[0], ids
+
+
+def preclaim_parent_retirement_snapshot(
+    con: sqlite3.Connection, run_id: str, receipt: dict
+) -> dict:
+    """A closed tombstone can anchor physical parent0 proof without changing ancestry."""
+    require(type(receipt) is dict, "preclaim_parent0_retirement")
+    selected = con.execute(
+        "SELECT * FROM managed_persistent_selections WHERE run_id=?", (run_id,)
+    ).fetchone()
+    require(
+        selected is not None and selected["state"] == "preclaim_retired", "preclaim_parent0_cohort"
+    )
+    _preclaim_selection(con, selected)
+    link = association(con, run_id)
+    require(link is not None and link["runtime_sequence"] == "1", "preclaim_parent0_cohort")
+    assert link is not None
+    runtime = parent(con, link["runtime_id"])
+    require(
+        runtime["last_sequence"] == 0
+        and runtime["history_head"] is None
+        and runtime["active_sequence"] is None
+        and runtime["state"] in {"idle", "retired"}
+        and con.execute(
+            "SELECT 1 FROM managed_persistent_attempts WHERE runtime_id=?", (link["runtime_id"],)
+        ).fetchone()
+        is None,
+        "preclaim_parent0_required",
+    )
+    snapshot = retirement_snapshot(con, run_id, link, receipt)
+    require(
+        snapshot["claim"] is None
+        and receipt["last_sequence"] == "0"
+        and receipt["runtime_sequence"] is None
+        and receipt["binding"] is None
+        and receipt["attempt_receipt"] is None
+        and (runtime["retirement"] is None or runtime["retirement"] == encoded(receipt).decode()),
+        "preclaim_parent0_retirement",
+    )
+    return snapshot
+
+
+def retire_preclaim_parent_observation(
+    con: sqlite3.Connection,
+    run_id: str,
+    receipt: dict,
+    *,
+    checkpoint: Callable[[], None] | None = None,
+) -> None:
+    """Update only the parent after exact original-key proof; tombstones stay unchanged."""
+    require(con.in_transaction, "worker_retirement_transaction_required")
+    link = association(con, run_id)
+    require(link is not None, "preclaim_parent0_cohort")
+    assert link is not None
+    anchor, _ = preclaim_parent_anchor(con, link["runtime_id"], checkpoint=checkpoint)
+    require(anchor == run_id, "preclaim_parent0_anchor_changed")
+    preclaim_parent_retirement_snapshot(con, run_id, receipt)
+    changed = con.execute(
+        "UPDATE managed_persistent_incarnations SET state='retired',retirement=? WHERE runtime_id=? AND runtime_sha256=? AND admission_sha256=? AND state='idle' AND last_sequence=0 AND history_head IS NULL AND active_sequence IS NULL AND retirement IS NULL",
+        (
+            encoded(receipt).decode(),
+            link["runtime_id"],
+            link["runtime_sha256"],
+            link["admission_sha256"],
+        ),
+    ).rowcount
+    require(changed == 1, "preclaim_parent0_changed")

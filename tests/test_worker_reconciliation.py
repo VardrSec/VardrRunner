@@ -351,7 +351,7 @@ def test_two_valid_pending_associations_are_held_without_list_guessing_or_auth(
     constructor.assert_not_called()
 
 
-def test_closed_preclaim_only_parent0_is_explicit_gap_not_empty_or_retirement(
+def test_closed_preclaim_parent0_needs_original_observation_not_empty_or_fake_retirement(
     persistent_worker, tmp_path, monkeypatch
 ):
     p = persistent_worker
@@ -386,10 +386,10 @@ def test_closed_preclaim_only_parent0_is_explicit_gap_not_empty_or_retirement(
     selected = selection(p, tmp_path)
     auth, constructor = deny_auth(monkeypatch)
     result, document = invoke(selected)
-    assert result.exit_code == 1 and document["reason"] == "preclaim_only_runtime_unretired"
-    assert document["remaining_local_holds"] == 0 and document["selected_run_id"] is None
+    assert result.exit_code == 1 and document["reason"] == "original_reconciliation_unavailable"
+    assert document["remaining_local_holds"] is None and document["selected_run_id"] is None
     assert inspection.inspect_worker_state(**selected)["status"] == "held"
-    auth.assert_not_called()
+    auth.assert_called_once_with()
     constructor.assert_not_called()
 
 
@@ -692,3 +692,499 @@ def test_post_write_replaced_same_binding_db_cannot_supply_final_retirement_audi
     assert len(observed) == 1 and observed[0]["status"] == "held"
     assert document["status"] == "held" and document["complete"] is False
     assert document["remaining_local_holds"] is document["retirement_receipt_sha256"] is None
+
+
+def closed_preclaim_cohort(p, monkeypatch, count):
+    """Use the actual persistent model's late-grant denial, never fabricated runs."""
+    from tests.test_worker_persistent_preclaim import approve, revoke
+    from vardrrunner.authorization.claim import ClaimStore
+
+    p.configure()
+    original_post = p.t.client.managed_post
+    original_prepare = ClaimStore.prepare_send
+    pending = 0
+    paths = []
+
+    def prepare_then_revoke(store, run_id, *args, **kwargs):
+        original_prepare(store, run_id, *args, **kwargs)
+        if store.journal.get(run_id).job_id.startswith("closed-denied-"):
+            revoke(p)
+
+    def pending_denied(path, body):
+        nonlocal pending
+        paths.append(path)
+        if path.endswith("/pending"):
+            approve(p)
+        reply = original_post(path, body)
+        if path.endswith("/pending"):
+            pending += 1
+            if pending <= count:
+                assert reply["jobs"]
+                job = copy.deepcopy(reply["jobs"][0])
+                job["id"] = f"closed-denied-{pending:03d}"
+                reply["jobs"], reply["next_after"] = [job], job["id"]
+            else:
+                reply["jobs"] = []
+                reply["availability"]["state"] = "stopped"
+        return reply
+
+    monkeypatch.setattr(ClaimStore, "prepare_send", prepare_then_revoke)
+    p.t.client.managed_post = pending_denied
+    with pytest.raises(AuthorizationError, match="worker_availability_held"):
+        p.worker.run()
+    assert p.epochs == [] and "native" not in p.t.calls
+    p.t.owner.begin_attempt.assert_not_called()
+    assert not any(path.endswith("/claim") for path in paths)
+    with p.t.f.journal._connection() as con:
+        rows = [
+            dict(row)
+            for row in con.execute("SELECT * FROM managed_persistent_selections ORDER BY run_id")
+        ]
+        assert len(rows) == count and all(row["state"] == "preclaim_retired" for row in rows)
+        assert con.execute("SELECT count(*) FROM managed_persistent_attempts").fetchone()[0] == 0
+        link = claim_association(con, rows[0]["run_id"])
+    return rows, link
+
+
+def tombstone_rows(p):
+    with p.t.f.journal._connection() as con:
+        return {
+            table: [dict(row) for row in con.execute(f"SELECT * FROM {table} ORDER BY run_id")]
+            for table in ("runs", "managed_claim_intents", "managed_persistent_selections")
+        }
+
+
+def parent_row(p):
+    with p.t.f.journal._connection() as con:
+        return dict(con.execute("SELECT * FROM managed_persistent_incarnations").fetchone())
+
+
+@pytest.mark.parametrize("count", [1, 2, 33])
+def test_preclaim_parent0_original_receipt_retires_only_parent_and_keeps_all_tombstones(
+    persistent_worker, tmp_path, monkeypatch, count
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, count)
+    selected = selection(p, tmp_path)
+    before = tombstone_rows(p)
+    reply = linked_reply(p, rows[0], link)
+    _, _, send = client_for(monkeypatch, p, reply)
+    result, document = invoke(selected)
+    assert result.exit_code == 0 and document["status"] == "reconciled"
+    assert document["reconciliation_state"] == "terminal_preclaim_parent_retired"
+    assert document["selected_run_id"] == min(row["run_id"] for row in rows)
+    assert document["selected_sequence"] == "1" and send.call_count == 1
+    assert document["retirement_receipt_sha256"] == reply["runtime_retirement"]["receipt_sha256"]
+    assert tombstone_rows(p) == before
+    audit = inspection.inspect_worker_state(**selected)
+    assert audit["status"] == "retired" and audit["global_holds"] == 0
+    assert audit["parent"] == {
+        "state": "retired",
+        "last_sequence": "0",
+        "head_sequence": None,
+        "active_sequence": None,
+    }
+    assert audit["counts"] == {
+        "attempts": 0,
+        "selections": count,
+        "associated_runs": count,
+        "associated_claims": count,
+    }
+    auth, constructor = deny_auth(monkeypatch)
+    result, document = invoke(selected)
+    assert result.exit_code == 0 and document["status"] == "already_retired"
+    auth.assert_not_called()
+    constructor.assert_not_called()
+    assert tombstone_rows(p) == before
+
+
+@pytest.mark.parametrize(
+    "change", ["unknown_claim", "pid", "wrong_admission", "wrong_plan", "issued_row"]
+)
+def test_malformed_preclaim_cohort_never_reaches_credentials_or_parent_retirement(
+    persistent_worker, tmp_path, monkeypatch, change
+):
+    p = persistent_worker
+    rows, _ = closed_preclaim_cohort(p, monkeypatch, 2)
+    selected = selection(p, tmp_path)
+    with p.t.f.journal._connection() as con:
+        run_id = rows[-1]["run_id"]
+        if change == "unknown_claim":
+            con.execute(
+                "UPDATE managed_claim_intents SET state='claim_unknown' WHERE run_id=?", (run_id,)
+            )
+        elif change == "pid":
+            con.execute("UPDATE runs SET pid=123 WHERE run_id=?", (run_id,))
+        elif change == "wrong_admission":
+            con.execute(
+                "UPDATE managed_persistent_selections SET admission_sha256=? WHERE run_id=?",
+                ("e" * 64, run_id),
+            )
+        elif change == "wrong_plan":
+            con.execute(
+                "UPDATE managed_claim_intents SET plan_sha256=? WHERE run_id=?", ("e" * 64, run_id)
+            )
+        else:
+            row = rows[-1]
+            con.execute(
+                "INSERT INTO managed_persistent_attempts(runtime_id,runtime_sequence,previous_sequence,runtime_sha256,admission_sha256,run_id,claim_link,state) VALUES(?,1,NULL,?,?,?,?, 'claim_prepared')",
+                (
+                    row["runtime_id"],
+                    row["runtime_sha256"],
+                    row["admission_sha256"],
+                    run_id,
+                    row["claim_link"],
+                ),
+            )
+    auth, constructor = deny_auth(monkeypatch)
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held"
+    assert parent_row(p)["state"] == "idle" and parent_row(p)["retirement"] is None
+    auth.assert_not_called()
+    constructor.assert_not_called()
+
+
+def test_mixed_selected_row_cannot_be_classified_as_closed_preclaim_parent0(
+    persistent_worker, monkeypatch
+):
+    from vardrrunner.authorization.worker_persistent import preclaim_parent_anchor
+
+    p = persistent_worker
+    rows, _ = closed_preclaim_cohort(p, monkeypatch, 2)
+    with p.t.f.journal._connection() as con:
+        con.execute(
+            "UPDATE managed_persistent_selections SET state='selected' WHERE run_id=?",
+            (rows[-1]["run_id"],),
+        )
+    with p.t.f.journal._connection() as con:
+        with pytest.raises(AuthorizationError, match="preclaim_parent0_cohort"):
+            preclaim_parent_anchor(con, p.worker.admission.runtime_id)
+
+
+@pytest.mark.parametrize(
+    "change", ["missing", "plan", "admission", "last", "bound", "claim", "digest", "transport"]
+)
+def test_preclaim_parent0_requires_exact_positive_original_retirement(
+    persistent_worker, tmp_path, monkeypatch, change
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 1)
+    selected = selection(p, tmp_path)
+    before = tombstone_rows(p)
+    reply = linked_reply(p, rows[0], link)
+    if change == "missing":
+        reply["runtime_retirement"] = None
+    elif change == "plan":
+        reply["plan_sha256"] = "e" * 64
+    elif change == "admission":
+        reply["runtime_retirement"]["admission_sha256"] = "e" * 64
+        rehash(reply)
+    elif change == "last":
+        reply["runtime_retirement"]["last_sequence"] = "1"
+        rehash(reply)
+    elif change == "bound":
+        reply["runtime_retirement"]["runtime_sequence"] = "1"
+        rehash(reply)
+    elif change == "claim":
+        reply["claim"] = {}
+    elif change == "digest":
+        reply["runtime_retirement"]["receipt_sha256"] = "e" * 64
+    _, _, send = client_for(monkeypatch, p, reply)
+    if change == "transport":
+        send.side_effect = api.ManagedTransportError("original-key-canary-unavailable")
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held" and send.call_count == 1
+    assert parent_row(p)["retirement"] is None and tombstone_rows(p) == before
+
+
+@pytest.mark.parametrize("when", ["before_post", "after_post"])
+def test_preclaim_cohort_drift_does_not_retire_parent(
+    persistent_worker, tmp_path, monkeypatch, when
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 2)
+    selected = selection(p, tmp_path)
+    reply = linked_reply(p, rows[0], link)
+    _, _, send = client_for(monkeypatch, p, reply)
+
+    def drift():
+        with p.t.f.journal._connection() as con:
+            con.execute(
+                "UPDATE managed_persistent_selections SET state='selected' WHERE run_id=?",
+                (rows[-1]["run_id"],),
+            )
+
+    if when == "before_post":
+
+        def changed_auth():
+            drift()
+            return p.worker.admission.origin, "private-key-canary"
+
+        monkeypatch.setattr(config, "require_auth", changed_auth)
+    else:
+
+        def changed_reply(*_):
+            drift()
+            return copy.deepcopy(reply)
+
+        send.side_effect = changed_reply
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held"
+    assert send.call_count == (0 if when == "before_post" else 1)
+    assert parent_row(p)["retirement"] is None
+
+
+@pytest.mark.parametrize("when", ["before_post", "after_post"])
+def test_even_valid_closed_cohort_membership_addition_is_not_silently_adopted(
+    persistent_worker, tmp_path, monkeypatch, when
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 3)
+    # Temporarily withhold, then restore, an actual model-created third tombstone.
+    # No RunRecord/claim/selection is fabricated to obtain the positive proof.
+    run_id = rows[-1]["run_id"]
+    saved = {}
+    with p.t.f.journal._connection() as con:
+        for table in ("runs", "managed_claim_intents", "managed_persistent_selections"):
+            saved[table] = dict(
+                con.execute(f"SELECT * FROM {table} WHERE run_id=?", (run_id,)).fetchone()
+            )
+        for table in ("managed_persistent_selections", "managed_claim_intents", "runs"):
+            con.execute(f"DELETE FROM {table} WHERE run_id=?", (run_id,))
+    selected = selection(p, tmp_path)
+    reply = linked_reply(p, rows[0], link)
+    _, _, send = client_for(monkeypatch, p, reply)
+
+    def restore():
+        with p.t.f.journal._connection() as con:
+            for table, data in saved.items():
+                columns = list(data)
+                con.execute(
+                    f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                    list(data.values()),
+                )
+
+    if when == "before_post":
+
+        def changed_auth():
+            restore()
+            return p.worker.admission.origin, "private-key-canary"
+
+        monkeypatch.setattr(config, "require_auth", changed_auth)
+    else:
+
+        def changed_reply(*_):
+            restore()
+            return copy.deepcopy(reply)
+
+        send.side_effect = changed_reply
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held"
+    assert send.call_count == (0 if when == "before_post" else 1)
+    assert parent_row(p)["retirement"] is None
+
+
+def unrelated_hold(p):
+    return p.t.f.journal.begin(
+        job_id="unrelated-held",
+        backend_url=p.worker.admission.origin,
+        engagement_id="eng-1",
+        job_type="x",
+        tool="x",
+        target_source="x",
+    )
+
+
+@pytest.mark.parametrize("when", ["before", "during_post", "after_commit"])
+def test_preclaim_retirement_never_clears_or_conceals_unrelated_global_hold(
+    persistent_worker, tmp_path, monkeypatch, when
+):
+    from vardrrunner.authorization.reconciliation import local_holds
+
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 1)
+    selected = selection(p, tmp_path)
+    reply = linked_reply(p, rows[0], link)
+    _, _, send = client_for(monkeypatch, p, reply)
+    held = []
+    if when == "before":
+        held.append(unrelated_hold(p))
+    elif when == "during_post":
+
+        def changed_reply(*_):
+            held.append(unrelated_hold(p))
+            return copy.deepcopy(reply)
+
+        send.side_effect = changed_reply
+    else:
+        original = command.inspect_worker_state
+
+        def changed_final(**kwargs):
+            held.append(unrelated_hold(p))
+            return original(**kwargs)
+
+        monkeypatch.setattr(command, "inspect_worker_state", changed_final)
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held"
+    assert send.call_count == (0 if when == "before" else 1)
+    assert len(held) == 1 and p.t.f.journal.get(held[0].run_id) == held[0]
+    assert local_holds(p.t.f.journal) > 0
+    assert (parent_row(p)["state"] == "retired") == (when == "after_commit")
+    if when == "after_commit":
+        audit = inspection.inspect_worker_state(**selected)
+        assert audit["complete"] is True and audit["global_holds"] > 0 and audit["status"] == "held"
+        auth, constructor = deny_auth(monkeypatch)
+        result, document = invoke(selected)
+        assert result.exit_code == 1 and document["reason"] == "global_holds_remain"
+        auth.assert_not_called()
+        constructor.assert_not_called()
+
+
+def test_closed_tombstone_ancestry_constraint_stays_intact_after_parent_retirement(
+    persistent_worker, tmp_path, monkeypatch
+):
+    from vardrrunner.authorization.worker_persistent import retire_incarnation_observation
+
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 1)
+    selected = selection(p, tmp_path)
+    reply = linked_reply(p, rows[0], link)
+    client_for(monkeypatch, p, reply)
+    assert invoke(selected)[0].exit_code == 0
+    before = tombstone_rows(p)
+    with pytest.raises(AuthorizationError, match="worker_selection_issued_changed"):
+        with p.t.f.journal._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            retire_incarnation_observation(con, rows[0]["run_id"], reply["runtime_retirement"])
+    assert tombstone_rows(p) == before
+
+
+@pytest.mark.parametrize("change", ["delete_observation", "wrong_original_plan", "changed_receipt"])
+def test_retired_preclaim_parent_requires_retained_exact_original_anchor(
+    persistent_worker, tmp_path, monkeypatch, change
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 1)
+    selected = selection(p, tmp_path)
+    reply = linked_reply(p, rows[0], link)
+    client_for(monkeypatch, p, reply)
+    assert invoke(selected)[0].exit_code == 0
+    before = tombstone_rows(p)
+    with p.t.f.journal._connection() as con:
+        if change == "delete_observation":
+            con.execute(
+                "DELETE FROM managed_claim_observations WHERE run_id=?", (rows[0]["run_id"],)
+            )
+        else:
+            bad = copy.deepcopy(reply)
+            if change == "wrong_original_plan":
+                bad["plan_sha256"] = "e" * 64
+            else:
+                bad["runtime_retirement"]["report_sha256"] = "e" * 64
+                rehash(bad)
+            con.execute(
+                "UPDATE managed_claim_observations SET snapshot=? WHERE run_id=?",
+                (encoded(bad).decode(), rows[0]["run_id"]),
+            )
+    audit = inspection.inspect_worker_state(**selected)
+    assert audit["status"] == "held" and audit["complete"] is False and audit["counts"] is None
+    assert tombstone_rows(p) == before
+
+
+def test_preclaim_original_observation_regression_cannot_retire_parent(
+    persistent_worker, tmp_path, monkeypatch
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 1)
+    selected = selection(p, tmp_path)
+    first = linked_reply(p, rows[0], link)
+    observations.observe(
+        p.t.f.journal, rows[0]["run_id"], p.worker.runner_id, lambda _: copy.deepcopy(first)
+    )
+    before = tombstone_rows(p)
+    changed = copy.deepcopy(first)
+    changed["runtime_retirement"]["report_sha256"] = "e" * 64
+    rehash(changed)
+    _, _, send = client_for(monkeypatch, p, changed)
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held" and send.call_count == 1
+    assert parent_row(p)["retirement"] is None and tombstone_rows(p) == before
+
+
+def test_preclaim_wrong_configured_origin_never_posts_or_retires_parent(
+    persistent_worker, tmp_path, monkeypatch
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 1)
+    selected = selection(p, tmp_path)
+    before = tombstone_rows(p)
+    _, factory, send = client_for(monkeypatch, p, linked_reply(p, rows[0], link))
+    factory.return_value.base = "https://wrong.example.test"
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held"
+    send.assert_not_called()
+    assert parent_row(p)["retirement"] is None and tombstone_rows(p) == before
+
+
+@pytest.mark.parametrize("when", ["before_post", "after_post"])
+def test_preclaim_replaced_selected_db_is_never_adopted(
+    persistent_worker, tmp_path, monkeypatch, when
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 1)
+    selected = selection(p, tmp_path)
+    reply = linked_reply(p, rows[0], link)
+    _, _, send = client_for(monkeypatch, p, reply)
+
+    def replace():
+        path = p.t.f.journal.path
+        old = journal_path_identity(path)
+        data = path.read_bytes()
+        path.rename(path.with_suffix(".original"))
+        path.write_bytes(data)
+        assert journal_path_identity(path) != old
+
+    if when == "before_post":
+
+        def changed_auth():
+            replace()
+            return p.worker.admission.origin, "private-key-canary"
+
+        monkeypatch.setattr(config, "require_auth", changed_auth)
+    else:
+
+        def changed_reply(*_):
+            replace()
+            return copy.deepcopy(reply)
+
+        send.side_effect = changed_reply
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held"
+    assert send.call_count == (0 if when == "before_post" else 1)
+    assert parent_row(p)["retirement"] is None
+
+
+@pytest.mark.parametrize("phase", ["before_post", "before_parent_write"])
+def test_preclaim_inspection_expiry_is_held_without_partial_zero_or_parent_write(
+    persistent_worker, tmp_path, monkeypatch, phase
+):
+    p = persistent_worker
+    rows, link = closed_preclaim_cohort(p, monkeypatch, 1)
+    selected = selection(p, tmp_path)
+    _, _, send = client_for(monkeypatch, p, linked_reply(p, rows[0], link))
+    real_budget = inspection._Budget
+    made = []
+
+    def budget():
+        item = real_budget()
+        made.append(item)
+        if len(made) == (2 if phase == "before_post" else 3):
+            item.deadline = float("-inf")
+        return item
+
+    monkeypatch.setattr(inspection, "_Budget", budget)
+    result, document = invoke(selected)
+    assert result.exit_code == 1 and document["status"] == "held"
+    assert document["complete"] is False and document["remaining_local_holds"] is None
+    assert send.call_count == (0 if phase == "before_post" else 1)
+    assert parent_row(p)["retirement"] is None

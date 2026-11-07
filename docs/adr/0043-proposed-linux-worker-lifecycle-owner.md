@@ -564,3 +564,36 @@ acceptance must use a qualified image containing it; absent support is held.
 The proposed next-enable wrapper remains unimplemented. This amendment authorizes
 private component implementation/testing only and grants no acceptance, release,
 deployment, default activation or extra authority.
+
+## Closed-preclaim parent0 retirement amendment
+
+Private implementation/testing adds a separate narrow branch for a complete
+nonempty cohort of existing valid no-send preclaim-retired proposals on the exact
+idle0 parent with no head, active sequence or issued attempt. Choose the canonical
+lowest original local run UUID as one observation anchor, not an issued head;
+retain the complete private cohort tuple without a row/history cap. Existing
+selected/head reconciliation and physical selection ancestry remain unchanged.
+
+Recheck the complete full-holds audit, same parent/cohort and exact original
+association/body before the one existing original-key observation POST, then again
+inside the parent transaction. Reuse ObservationStore's exact original-source and
+snapshot-nonregression RECORD checks: that evidence insertion releases no hold.
+The writer requires the recorded /4 claimNone and canonical unbound retirement/3
+with last0, no binding/attempt receipt and exact admission/report provenance.
+It updates only parent state/retirement. Every existing no-send RunRecord, claim
+and selection stays byte-unchanged; no fake run, epoch, ACK or issued ancestry is
+introduced. No schema migration, new API/service or privilege is needed.
+
+Inspection can anchor the parent receipt to that retained original-key snapshot
+while still reporting all real nonzero tombstone counts. It never relabels this
+case empty_unissued. Existing global-holds engines stay unchanged. Require holds0
+before parent UPDATE and after the fresh original-file audit; a different runtime
+or run becoming held remains held, even if this parent is already correctly
+retired. Missing auth/proof, mixed/unknown state, source/cohort/DB drift or incomplete
+cooperative inspection is held. No fallback job selection or automatic retry runs.
+
+This extends the preceding explicitly held preclaim-only case only with that
+positive original authority/provenance. Component red/green/full95 and separate
+qualified-image/Linux/Desktop lifecycle tests are required. Ordinary true-empty0,
+normal35, count/idle behavior, default-off operation and all remaining gates stay
+unchanged. No release, deployment or automatic next-enable is authorized.

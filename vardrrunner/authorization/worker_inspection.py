@@ -363,6 +363,17 @@ def _retirement(
             assert link is not None
             worker_persistent.retirement_snapshot(con, run_id, link, receipt)
             anchored = True
+        elif selection["state"] == "preclaim_retired" and selection["retirement"] is None:
+            observed = con.execute(
+                "SELECT snapshot FROM managed_claim_observations WHERE run_id=?", (run_id,)
+            ).fetchone()
+            if observed is not None:
+                snapshot = worker_persistent._document(observed["snapshot"], 16384)
+                if snapshot.get("runtime_retirement") is not None and encoded(
+                    snapshot["runtime_retirement"]
+                ) == encoded(receipt):
+                    worker_persistent.preclaim_parent_retirement_snapshot(con, run_id, receipt)
+                    anchored = True
     require(anchored, "inspection_retirement")
     return expected
 

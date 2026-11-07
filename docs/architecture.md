@@ -611,7 +611,15 @@ Normal WAL sidecars remain supported. Existing Windows path pins and POSIX
 observed-file limitations remain; this is not an OS sandbox or content freeze.
 
 Already-retired state and truly empty parent0 return offline without credentials.
-Parent0 with closed preclaim associations remains held under the existing early
-return and is an open NM-2 gate. Distribution still owns physical stop and any
+A fully certified closed-preclaim parent0 cohort has a separate parent-only
+retirement branch. It preserves the existing early-return and physical selection
+ancestry paths. Reuse the original observation RECORD transaction, which validates
+its exact source and stores only evidence. Then a new full same-connection audit
+and retained original-key claimNone/unbound last0 snapshot permit updating only
+the exact parent. No tombstone, issued attempt, ACK or grant is created/rewritten.
+The full private cohort UUID tuple detects membership drift without a count cap.
+Inspection recognizes that original-key snapshot on its unchanged tombstone;
+actual nonzero associations remain visible. Global-holds engines are unchanged,
+and another runtime/run hold is never cleared or concealed by parent retirement. Distribution still owns physical stop and any
 future next-enable lifecycle; this component adds no service, Map endpoint,
 automatic reconciliation or activation.

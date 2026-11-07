@@ -691,5 +691,12 @@ persistent sequence, result/stop, journal, identity and CLI regressions, then th
 unchanged full-suite95% floor and static checks. Permanent focused guard evidence
 does not replace full quality or physical Linux/Desktop acceptance. First and next
 actual lifecycle trials need an image containing both inspection and reconciliation
-contracts; unsupported older images are held. Preclaim-only parent0 recovery and
-same-installation next-enable remain explicit NM-2 gaps.
+contracts; unsupported older images are held. The closed-preclaim parent0 tests require1/2/33 genuine model-produced denial
+tombstones, positive original last0 retirement, exact unchanged tombstone bytes,
+real nonzero public counts and offline repeat. Negative cases cover malformed or
+mixed cohorts, membership/state drift before/after POST, wrong origin/original
+reply, changed database identity, stale evidence, inspection budget exhaustion
+and unrelated global holds before/during/after commit. The latter must remain
+held with its original record intact. The legacy selected/head, true-empty0,
+count/idle/normal35 paths and all global-holds predicates must remain unchanged.
+Same-installation next-enable and actual lifecycle acceptance remain NM-2 gates.

@@ -19,6 +19,7 @@ from vardrrunner.journal import (
     journal_path_identity,
 )
 
+from . import observations, worker_persistent
 from . import worker_inspection as inspection
 from .codec import AuthorizationError, decoded, encoded, identifier, require
 from .persistent_codec import wire_sequence64
@@ -30,6 +31,7 @@ _STATES = frozenset(
     {
         "terminal_runtime_unbound_retired",
         "terminal_runtime_preclaim_retired",
+        "terminal_preclaim_parent_retired",
         "terminal_host_exit_observed",
         "terminal_failed_completion_observed",
         "terminal_receipt_observed",
@@ -54,6 +56,7 @@ class Candidate:
     origin: str = field(repr=False)
     job_id: str
     journal_identity: tuple[int, int] = field(repr=False)
+    preclaim_cohort: tuple[str, ...] | None = field(default=None, repr=False)
 
 
 def document(
@@ -80,6 +83,44 @@ def document(
         if complete and audit is not None
         else None,
     }
+
+
+def _preclaim_anchor(con, snapshot, budget) -> tuple[str, tuple[str, ...]]:
+    runtime, _, holds, counts, ids = snapshot
+    require(holds == 0, "preclaim_parent0_global_holds")
+    anchor, cohort = worker_persistent.preclaim_parent_anchor(
+        con, runtime["runtime_id"], checkpoint=budget.check
+    )
+    require(
+        ids == cohort
+        and counts
+        == {
+            "attempts": 0,
+            "selections": len(cohort),
+            "associated_runs": len(cohort),
+            "associated_claims": len(cohort),
+        },
+        "preclaim_parent0_associations",
+    )
+    return anchor, tuple(cohort)
+
+
+def _check_preclaim_candidate(con, candidate: Candidate, link: dict, budget) -> None:
+    con.set_progress_handler(budget.progress, 1000)
+    binding = {
+        key: link[key] for key in ("runner_id", "runtime_id", "runtime_sha256", "admission_sha256")
+    }
+    snapshot = inspection._worker_snapshot(con, binding, budget)
+    anchor, cohort = _preclaim_anchor(con, snapshot, budget)
+    require(
+        anchor == candidate.run_id and cohort == candidate.preclaim_cohort,
+        "preclaim_parent0_anchor_changed",
+    )
+    require(
+        encoded(claim_association(con, candidate.run_id)) == candidate.association,
+        "original_worker_association_required",
+    )
+    budget.check()
 
 
 def select_candidate(
@@ -160,6 +201,7 @@ def select_candidate(
                         None,
                         audit,
                     )
+                preclaim_cohort = None
                 if pending:
                     selected = pending[0]
                 elif runtime["last_sequence"] > 0:
@@ -169,19 +211,11 @@ def select_candidate(
                     ).fetchone()
                     require(selected is not None, "worker_persistent_history_changed")
                 else:
-                    # Closed preclaim selections are not an empty-unissued runtime.
-                    # Existing reconciliation returns before physical observation.
-                    return (
-                        document(
-                            "held",
-                            reason="preclaim_only_runtime_unretired",
-                            complete=True,
-                            binding=binding,
-                            audit=audit,
-                        ),
-                        None,
-                        audit,
-                    )
+                    anchor, preclaim_cohort = _preclaim_anchor(con, snapshot, budget)
+                    selected = con.execute(
+                        "SELECT * FROM managed_persistent_selections WHERE run_id=?", (anchor,)
+                    ).fetchone()
+                    require(selected is not None, "preclaim_parent0_anchor_changed")
                 run_id = selected["run_id"]
                 require(
                     type(run_id) is str and re.fullmatch(r"[0-9a-f]{32}", run_id) is not None,
@@ -210,6 +244,7 @@ def select_candidate(
                     link["origin"],
                     link["job_id"],
                     original_identity,
+                    preclaim_cohort=preclaim_cohort,
                 )
                 budget.check()
                 return (
@@ -248,6 +283,7 @@ def reconcile_candidate(
     link = decoded(candidate.association, 8192)
     require(type(link) is dict and link["runner_id"] == runner_id, "original_runner_required")
     calls = 0
+    preclaim_parent = candidate.preclaim_cohort is not None
 
     def original_observation(body: dict) -> dict:
         nonlocal calls
@@ -267,8 +303,34 @@ def reconcile_candidate(
         }
         require(encoded(body) == encoded(expected), "original_worker_association_required")
         require(calls == 0, "worker_observation_already_attempted")
+        if preclaim_parent:
+            budget = inspection._Budget()
+            with journal._connection() as con:
+                con.execute("BEGIN")
+                _check_preclaim_candidate(con, candidate, link, budget)
         calls += 1
         return inspect(body)
+
+    if preclaim_parent:
+        # Existing observation RECORD rechecks its original source and never
+        # releases a hold. Only the following full transaction may retire parent0.
+        reply = observations.observe(journal, candidate.run_id, runner_id, original_observation)
+        budget = inspection._Budget()
+        with journal._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            _check_preclaim_candidate(con, candidate, link, budget)
+            observed = con.execute(
+                "SELECT snapshot FROM managed_claim_observations WHERE run_id=?",
+                (candidate.run_id,),
+            ).fetchone()
+            require(
+                observed is not None and observed["snapshot"] == encoded(reply).decode(),
+                "preclaim_parent0_observation_changed",
+            )
+            worker_persistent.retire_preclaim_parent_observation(
+                con, candidate.run_id, reply["runtime_retirement"], checkpoint=budget.check
+            )
+        return "terminal_preclaim_parent_retired"
 
     state = reconcile_managed(
         journal,
