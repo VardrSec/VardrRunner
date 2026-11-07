@@ -1,7 +1,7 @@
-"""Tests for the CLI entry point â€” ensures every command route is wired correctly.
+"""Tests for the CLI entry point — ensures every command route is wired correctly.
 
 Uses typer.testing.CliRunner to invoke commands with mocked underlying functions.
-This covers cli.py which is otherwise 0% â€” the logic lives in the command modules
+This covers cli.py which is otherwise 0% — the logic lives in the command modules
 (tested elsewhere); here we only verify the wiring.
 """
 
@@ -193,7 +193,7 @@ class TestVersionOption:
         with patch("vardrrunner.cli.updates.cached", return_value=newer):
             result = invoke("--version")
         assert result.exit_code == 0
-        assert "Update available: 0.1.0 â†’ 9.9.9" in result.stdout
+        assert "Update available: 0.1.0 → 9.9.9" in result.stdout
         assert "vardrrunner update" in result.stdout
 
     def test_up_to_date_cache_adds_nothing(self):
@@ -718,7 +718,7 @@ class TestRunCommands:
         mock.assert_called_once()
 
     # The guardrail shipped in v0.22.1 but the option reached cli.py only in
-    # v0.28.0 â€” the tests above assert call count, not kwargs, so they passed
+    # v0.28.0 — the tests above assert call count, not kwargs, so they passed
     # throughout. These assert the wiring itself.
     @pytest.mark.parametrize(
         "tool,target",
@@ -1078,7 +1078,7 @@ class TestManualInvocationOnly:
         result = invoke("--help")
         assert result.exit_code == 0
         # A command row is a name followed by two or more spaces and its help, whatever
-        # border (`â”‚`, `|`, `â”ƒ`, none) Rich draws.
+        # border (`│`, `|`, `┃`, none) Rich draws.
         listed = set(
             re.findall(r"^[^\w\n]*([a-z][\w-]*)\s{2,}\S", plain(result.output), re.MULTILINE)
         )
