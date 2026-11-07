@@ -316,6 +316,58 @@ def test_envelope_tampering_denies(specimen, mutation):
         check(specimen, envelope=envelope)
 
 
+@pytest.mark.parametrize(
+    ("document", "schema", "reason"),
+    [
+        ("envelope", "vardr.authorization-envelope/2", "envelope_version_or_purpose"),
+        ("contract", "vardr.authorization/2", "unsupported_schema"),
+        ("approval", "vardr.execution-approval/2", "unsupported_schema"),
+    ],
+)
+def test_unsupported_contract_versions_deny_before_consumption(specimen, document, schema, reason):
+    s = specimen
+    envelope, approval = copy.deepcopy(s["contract"]), copy.deepcopy(s["approval"])
+    if document == "envelope":
+        envelope["format"] = schema
+    elif document == "contract":
+        payload = decoded(unb64(envelope["payload"]))
+        payload["schema"] = schema
+        envelope = sign(payload, SEED, "contract")
+    else:
+        receipt = decoded(unb64(approval["payload"]))
+        receipt["schema"] = schema
+        approval = sign(receipt, SEED, "approval")
+        payload = decoded(unb64(envelope["payload"]))
+        payload["approval_sha256"] = digest(encoded(approval))
+        envelope = sign(payload, SEED, "contract")
+    with pytest.raises(AuthorizationError, match=reason):
+        s["ledger"].consume(
+            envelope,
+            approval,
+            s["plan"],
+            s["case"],
+            s["execution"],
+            (s["anchor"],),
+            s["runtime"],
+        )
+    with s["ledger"].journal._connection() as con:
+        rows = con.execute("SELECT consumed FROM authorization_contracts").fetchall()
+    assert len(rows) == 1 and rows[0]["consumed"] == 0
+    completed = s["ledger"].consume(
+        s["contract"],
+        s["approval"],
+        s["plan"],
+        s["case"],
+        s["execution"],
+        (s["anchor"],),
+        s["runtime"],
+    )
+    assert completed["execution_index"] == 1
+    with s["ledger"].journal._connection() as con:
+        rows = con.execute("SELECT consumed FROM authorization_contracts").fetchall()
+    assert len(rows) == 1 and rows[0]["consumed"] == 1
+
+
 @pytest.mark.parametrize("anchor", [None, "revoked", "purpose", "origin", "bad_key"])
 def test_only_enrolled_purpose_specific_trust(specimen, anchor):
     a = specimen["anchor"]
