@@ -1305,6 +1305,12 @@ Managed result finalization and receipt reconciliation remain explicit library
 operations only. No existing recovery command reconstructs a capability or retries
 managed work. See [ADR 0035](adr/0035-managed-result-finalization.md).
 
+A guarded Gate `execution_in_progress` artifact is a local checkpoint. Normal
+return rejects it as unfinished. Only trusted native confirmed stop may retain
+its genuine observations in a separate cancelled copy bound to the reviewed case;
+the original checkpoint bytes remain unchanged. This adds no publication retry,
+stop proof, grace period or execution time.
+
 Managed known-stop reporting remains an explicit library operation. No CLI or
 automatic recovery path infers termination from a PID or retries a stop report.
 See [ADR 0036](adr/0036-managed-known-stop-receipts.md).

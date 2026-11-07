@@ -53,6 +53,54 @@ def _artifact_bytes(path: Path, maximum: int) -> bytes:
         raise AuthorizationError("managed_partial_unavailable") from None
 
 
+def _cancel_checkpoint(raw: dict, case: dict) -> None:
+    """Promote only an already-read checkpoint inside the confirmed-stop lane."""
+    identities = [identity["id"] for identity in case["identities"]]
+    expected = {row["identity_id"]: row["decision"] for row in case["expected_access"]}
+    require(
+        raw["findings"] == []
+        and [row.get("identity_id") for row in raw["executions"]] == identities
+        and [row.get("identity_id") for row in raw["assessments"]] == identities,
+        "managed_checkpoint_binding",
+    )
+    for index, (execution, assessment) in enumerate(
+        zip(raw["executions"], raw["assessments"], strict=True)
+    ):
+        require(
+            type(assessment.get("execution_index")) is int
+            and assessment["execution_index"] == index
+            and assessment.get("expected_access") == expected.get(identities[index]),
+            "managed_checkpoint_binding",
+        )
+        if execution.get("error") == "execution_in_progress":
+            require(
+                type(execution.get("status_code")) is int
+                and execution["status_code"] == 0
+                and execution.get("observed_outcome") == "error"
+                and assessment.get("source") == "none"
+                and (
+                    assessment.get("decision") == "inconclusive"
+                    and assessment.get("reason") == "execution_in_progress"
+                    or assessment.get("decision") == "skipped"
+                    and expected.get(identities[index]) in {None, "skip"}
+                    and assessment.get("reason") in {"no_expectation", "explicit_skip"}
+                ),
+                "managed_checkpoint_pending",
+            )
+            execution["error"] = "execution_cancelled"
+        if assessment.get("reason") == "execution_in_progress":
+            require(
+                assessment.get("decision") == "inconclusive" and assessment.get("source") == "none",
+                "managed_checkpoint_pending",
+            )
+            assessment["reason"] = (
+                "execution_error"
+                if execution.get("error") == "execution_cancelled"
+                else "execution_cancelled"
+            )
+    raw["error"] = "execution_cancelled"
+
+
 def retain_stopped_artifact(handle, directory: Path) -> None:
     """Stage existing Gate bytes only after the trusted native confirmed-stop path."""
     from .stops import CAUSES
@@ -70,7 +118,8 @@ def retain_stopped_artifact(handle, directory: Path) -> None:
     require(
         type(raw) is dict
         and raw.get("test_case_id") == handle.gate.case["id"]
-        and raw.get("error") == "execution_cancelled"
+        and type(raw.get("error")) is str
+        and raw["error"] in {"execution_cancelled", "execution_in_progress"}
         and set(raw)
         <= {"test_case_id", "executions", "findings", "assessments", "preflight", "error"}
         and all(
@@ -86,6 +135,8 @@ def retain_stopped_artifact(handle, directory: Path) -> None:
         ),
         "managed_partial_result",
     )
+    if raw["error"] == "execution_in_progress":
+        _cancel_checkpoint(raw, handle.gate.case)
     raw["case_hash"] = handle.gate.plan["case_hash"]
     data = encoded(raw)
     require(len(data) <= maximum, "managed_artifact_size")
@@ -375,6 +426,7 @@ def finalize(handle, submit: Callable[[dict], dict], finish: Callable[[dict], di
         type(raw) is dict and raw.get("case_hash") == handle.gate.plan["case_hash"],
         "result_case_binding",
     )
+    require(raw.get("error") != "execution_in_progress", "managed_checkpoint_not_final")
     preflight = raw.get("preflight") or []
     require(
         type(preflight) is list and all(type(p) is dict for p in preflight),

@@ -1,5 +1,12 @@
 # VardrRunner — Development
 
+The focused managed-checkpoint tests use real private files and inert Runner
+dispatch/HTTP. They verify confirmed-stop-only promotion, unchanged source bytes,
+reviewed role/index binding, malformed-checkpoint refusal and no publication on a
+normal return with stale progress. Gate's matching component test reads its real
+atomic checkpoint during ordinary HTTP execution. These tests provide no installed
+Windows/Linux termination or C01 acceptance credit.
+
 Managed-worker checks live in `test_managed_worker`, `test_worker_admission`,
 `test_worker_binding`, `test_worker_lifecycle` and `test_managed_reconciliation`.
 They cover explicit composition, durable send fences, authenticated observation,

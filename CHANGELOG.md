@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Promote a case-bound guarded Gate progress checkpoint only after trusted native
+  confirmed stop, retaining original bytes and failed-only publication. Reject a
+  stale progress checkpoint on normal return; deadlines and stop authority stay
+  unchanged.
+
 - Preserve validated released history when the next claim commits but its reply
   is lost: inspection recognizes only that original selected-only retirement,
   without advancing the local cursor or creating an attempt acknowledgement.

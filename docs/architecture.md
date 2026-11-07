@@ -1,5 +1,11 @@
 # VardrRunner — Architecture
 
+Guarded Gate `execution_in_progress` files are local checkpoints. Only an existing
+trusted native confirmed stop may promote their case-bound pending rows into a
+separate cancelled result; the original bytes remain unchanged. Normal return
+rejects a stale checkpoint before result publication. No checkpoint grants stop
+proof, healthy reuse, a retry or additional time.
+
 The [explicit managed-worker candidate](managed-worker.md) composes the existing
 managed claim/Gate/result protocols with the separate
 [Linux lifecycle owner](worker-lifecycle.md). Actual verified owner context alone
