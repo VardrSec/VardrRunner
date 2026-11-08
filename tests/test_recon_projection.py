@@ -16,8 +16,11 @@ from vardrrunner.authorization.recon_plan import (
     DNSX_SHA256,
     HTTPX_SHA256,
     PROFILE,
+    RUNTIME_PROFILE,
     compile_recon_plan,
+    compile_recon_runtime_plan,
     select_candidates,
+    select_runtime_candidates,
 )
 from vardrrunner.authorization.runtime import execute_gate
 
@@ -51,8 +54,13 @@ def compile_projection(case, execution):
     return compile_recon_plan(case, execution, tool_sha256=HTTPX_SHA256, dnsx_sha256=DNSX_SHA256)
 
 
-def authorize(s, case, execution, **changes):
-    plan = compile_projection(case, execution)
+def authorize(s, case, execution, runtime_profile=False, runtime_hashes=None, **changes):
+    httpx_hash, dnsx_hash = runtime_hashes or ("a" * 64, "b" * 64)
+    plan = (
+        compile_recon_runtime_plan(case, execution, tool_sha256=httpx_hash, dnsx_sha256=dnsx_hash)
+        if runtime_profile
+        else compile_projection(case, execution)
+    )
     context = copy.deepcopy(s["context"])
     context.update(
         job_id="recon-job",
@@ -82,9 +90,9 @@ def authorize(s, case, execution, **changes):
     runtime = replace(
         s["runtime"],
         job_id="recon-job",
-        tool_sha256=HTTPX_SHA256,
-        dnsx_sha256=DNSX_SHA256,
-        capabilities=frozenset({PROFILE}),
+        tool_sha256=httpx_hash if runtime_profile else HTTPX_SHA256,
+        dnsx_sha256=dnsx_hash if runtime_profile else DNSX_SHA256,
+        capabilities=frozenset({RUNTIME_PROFILE if runtime_profile else PROFILE}),
     )
     contract = s["ledger"].issue(
         receipt,
@@ -372,3 +380,156 @@ def test_separate_recon_schema_preserves_gate_schema(specimen, projection):
     plan["schema"] = specimen["plan"]["schema"]
     with pytest.raises(AuthorizationError, match="execution_plan_changed"):
         select_candidates(plan, [])
+
+
+def test_runtime_projection_preserves_v1_and_checks_all_answers(projection):
+    case, execution = projection
+    original = encoded(compile_projection(case, execution))
+    case["destination_cidrs"] = ["127.0.0.0/24"]
+    plan = compile_recon_runtime_plan(case, execution, tool_sha256="a" * 64, dnsx_sha256="b" * 64)
+    assert (
+        plan["schema"],
+        plan["runtime"],
+        plan["max_dns_queries"],
+        plan["max_http_dispatches"],
+    ) == ("vardr.finite-recon-plan/2", "contained-tools/1", 4, 8)
+    assert plan["tool_sha256"] == "a" * 64 and plan["tools"]["dnsx_sha256"] == "b" * 64
+    answer = {"hostname": case["hostnames"][0], "addresses": ["127.0.0.20", "127.0.0.3"]}
+    assert select_runtime_candidates(plan, [answer]) == [
+        {**case["candidates"][0], "address": "127.0.0.3"}
+    ]
+    answer["addresses"].append("127.0.1.1")
+    with pytest.raises(AuthorizationError, match="recon_destination_denied"):
+        select_runtime_candidates(plan, [answer])
+    plan["options"]["transport"]["http_stage_dns"] = True
+    with pytest.raises(AuthorizationError, match="execution_plan_changed"):
+        select_runtime_candidates(plan, [])
+    case["destination_cidrs"] = ["127.0.0.1/32"]
+    assert encoded(compile_projection(case, execution)) == original
+
+
+def test_runtime_signed_binding_requires_explicit_capability_and_both_hashes(specimen, projection):
+    case, execution = projection
+    contract, receipt, plan, runtime = authorize(specimen, case, execution, runtime_profile=True)
+    args = (contract, receipt, plan, case, execution, (specimen["anchor"],))
+    assert validate(*args, runtime)["execution_index"] == 1
+    for changes in (
+        {"capabilities": frozenset({PROFILE})},
+        {"tool_sha256": "c" * 64},
+        {"dnsx_sha256": None},
+        {"dnsx_sha256": "c" * 64},
+    ):
+        with pytest.raises(AuthorizationError):
+            validate(*args, replace(runtime, **changes))
+    claimed = specimen["ledger"].consume(*args, runtime)
+    with pytest.raises(AuthorizationError):
+        specimen["ledger"].consume(*args, runtime)
+    specimen["ledger"].finish(claimed)
+
+
+@pytest.mark.parametrize("outcome", ["success", "outside", "tool_error", "timeout"])
+def test_runtime_two_tool_handoff_and_fail_closed(
+    specimen, projection, monkeypatch, tmp_path, outcome
+):
+    import time
+    from datetime import datetime
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from vardrrunner import config, execution_control, launch_guard, toolchain, worker_lifecycle
+    from vardrrunner.authorization import recon_runtime as runtime_module
+
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    paths = {name: tools / name for name in ("dnsx", "httpx")}
+    for name, path in paths.items():
+        path.write_bytes(name.encode("ascii"))
+    hashes = {name: digest(path.read_bytes()) for name, path in paths.items()}
+    monkeypatch.setattr(config, "TOOLS_DIR", tools)
+    toolchain._write_lock({name: {"binary": name, "binary_sha256": hashes[name]} for name in paths})
+    monkeypatch.setattr(runtime_module, "qualified_tools", lambda: (paths, hashes))
+    monkeypatch.setenv("VARDRRUNNER_ALLOW_PRIVATE_TARGETS", "1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://untrusted.invalid")
+    case, execution = projection
+    contract, receipt, plan, context = authorize(
+        specimen,
+        case,
+        execution,
+        runtime_profile=True,
+        runtime_hashes=(hashes["httpx"], hashes["dnsx"]),
+    )
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return context.now
+
+    monkeypatch.setattr(runtime_module, "datetime", FixedDatetime)
+    baseline = time.monotonic()
+    ticks = [0.0]
+    monkeypatch.setattr(
+        runtime_module, "time", SimpleNamespace(monotonic=lambda: baseline + ticks[0])
+    )
+    owner = Mock(spec=worker_lifecycle.SequentialWorkerOwner)
+    monkeypatch.setattr(worker_lifecycle, "current", lambda: owner)
+    calls, ceilings = [], []
+    output = tmp_path / "recon-output"
+    output.mkdir()
+
+    def tool(command, temporary, name, timeout):
+        calls.append((name, command, timeout))
+        ceilings.append(launch_guard._MONOTONIC.get())
+        environment = config.tool_environment()
+        assert environment["HOME"] == str(output / "tool-home")
+        assert not any("proxy" in key.lower() for key in environment)
+        assert (Path(environment["HOME"]) / "config").is_dir()
+        destination = Path(command[command.index("-o") + 1])
+        if name == "dnsx":
+            assert command[command.index("-timeout") + 1] == "1s"
+            address = "127.0.0.2" if outcome == "outside" else "127.0.0.1"
+            destination.write_text(
+                json.dumps({"host": case["hostnames"][0], "a": [address]}) + "\n"
+            )
+            ticks[0] = 31.0 if outcome == "timeout" else 5.0
+        else:
+            assert command[command.index("-u") + 1] == "https://127.0.0.1:443/"
+            assert command[command.index("-sni-name") + 1] == case["hostnames"][0]
+            assert command[command.index("-H") + 1] == "Host: one.example.test:443"
+            assert "-no-fallback-scheme" in command and "-follow-redirects" not in command
+            assert timeout <= 25
+            if outcome == "tool_error":
+                raise runtime_module.runner.ToolError("synthetic tool failure")
+            destination.write_text(
+                json.dumps({"url": "https://127.0.0.1:443/", "status_code": 200}) + "\n"
+            )
+            ticks[0] = 10.0
+
+    monkeypatch.setattr(runtime_module.runner, "_run_tool", tool)
+    finish = Mock(wraps=specimen["ledger"].finish)
+    monkeypatch.setattr(specimen["ledger"], "finish", finish)
+    args = (contract, receipt, plan, case, execution, (specimen["anchor"],), context)
+    control = execution_control.Control(
+        lambda: {"action": "continue", "lease_seconds": 10},
+        {},
+        10,
+        started=baseline,
+        local_stop=lambda: False,
+    )
+    with execution_control.controlled(control):
+        if outcome == "success":
+            artifact = runtime_module.execute_recon(specimen["ledger"], *args, output)
+            document = json.loads(artifact.read_text())
+            assert document["http"][0]["logical_url"] == "https://one.example.test:443/"
+            assert document["handoff"]["execution_authority"] is False
+            assert document["handoff"]["requires_new_review"] is True
+            assert finish.call_count == 1
+        else:
+            with pytest.raises((AuthorizationError, runtime_module.runner.ToolError)):
+                runtime_module.execute_recon(specimen["ledger"], *args, output)
+            finish.assert_not_called()
+    assert [name for name, _, _ in calls] == (
+        ["dnsx", "httpx"] if outcome in {"success", "tool_error"} else ["dnsx"]
+    )
+    assert ceilings == [baseline + execution["timeout_seconds"]] * len(calls)
+    with pytest.raises(AuthorizationError):
+        specimen["ledger"].consume(*args)

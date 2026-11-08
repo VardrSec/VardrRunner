@@ -179,8 +179,9 @@ class AuthorizationLedger:
         # The signed dormant journey may end before the outer approval window.
         # Recheck elapsed preparation/lock time at the same reservation boundary.
         from .recon_plan import PROFILE as RECON_PROFILE
+        from .recon_plan import RUNTIME_PROFILE as RECON_RUNTIME_PROFILE
 
-        if plan["profile"] == RECON_PROFILE:
+        if plan["profile"] in {RECON_PROFILE, RECON_RUNTIME_PROFILE}:
             require(
                 current.now < timestamp(plan["execution"]["deadline"]),
                 "recon_deadline_denied",

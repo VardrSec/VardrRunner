@@ -196,3 +196,62 @@ def test_v2_ack_is_exact_and_old_protocol_never_downgrades(monkeypatch, owner, f
     else:
         with pytest.raises(life.LifecycleUnavailable):
             exchange(life._LEASE, 1, 4, 5, b"a" * 32)
+
+
+def tool_handoff(owner):
+    epoch = owner.begin_attempt(1)
+    epoch.verified_lease(BINDING, 105.0, 120.0)
+    binding = {k: v for k, v in BINDING.items() if k != "contract_sha256"}
+    binding.update(authority_revision=1, authority_sha256="12" * 32)
+    control = SimpleNamespace(binding=binding, stop_reason=lambda: "")
+    epoch._control = control
+    owner._launched = owner._drained = owner._normal_return = True
+    return epoch, control
+
+
+def test_next_tool_preserves_epoch_binding_and_deadlines_and_cannot_repeat(owner):
+    epoch, control = tool_handoff(owner)
+    before = (
+        owner._binding,
+        owner._lease,
+        owner._hard,
+        owner._work_end,
+        owner._sequence,
+        owner._exchange_v2.call_count,
+    )
+    owner.prepare_next_tool(control)
+    assert owner._epoch is epoch
+    assert not owner._launched and not owner._drained and not owner._normal_return
+    assert (
+        owner._binding,
+        owner._lease,
+        owner._hard,
+        owner._work_end,
+        owner._sequence,
+        owner._exchange_v2.call_count,
+    ) == before
+    with pytest.raises(life.LifecycleUnavailable):
+        owner.prepare_next_tool(control)
+
+
+@pytest.mark.parametrize(
+    "condition", ["stale", "uncertain", "expired", "stopped", "sealed", "abnormal"]
+)
+def test_next_tool_refuses_unproven_or_expired_handoff(monkeypatch, owner, condition):
+    epoch, control = tool_handoff(owner)
+    if condition == "stale":
+        control = SimpleNamespace(binding=control.binding, stop_reason=lambda: "")
+    elif condition == "uncertain":
+        monkeypatch.setattr(owner, "_empty_children", lambda: False)
+    elif condition == "expired":
+        monkeypatch.setattr(life.time, "clock_gettime_ns", lambda clock: owner._lease)
+    elif condition == "stopped":
+        control.stop_reason = lambda: "local_emergency_stop"
+    elif condition == "sealed":
+        epoch.seal()
+    else:
+        owner._normal_return = False
+    before = (owner._binding, owner._lease, owner._hard, owner._launched, owner._drained)
+    with pytest.raises(life.LifecycleUnavailable):
+        owner.prepare_next_tool(control)
+    assert (owner._binding, owner._lease, owner._hard, owner._launched, owner._drained) == before

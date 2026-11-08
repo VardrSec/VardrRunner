@@ -10,6 +10,7 @@ from typing import cast
 from .codec import AuthorizationError, digest, encoded, fields, integer, require
 
 PROFILE = "finite-dns-http/1"
+RUNTIME_PROFILE = "finite-dns-http/2"
 # These exact Linux release ELFs are the only artifacts covered by the request model.
 DNSX_SHA256 = "5fca43ddfe95922d8d88a859c1fcc59fee327bf39ae574db66d391c6675b8ba3"
 HTTPX_SHA256 = "6d78b83b4da452a7e0bd3613c4fae04cbf523209f083904b563f4d4406a680b0"
@@ -211,3 +212,56 @@ def select_candidates(plan: dict, answers: list) -> list[dict]:
             )
         selected.add(host)
     return copy.deepcopy([c for c in plan["input"]["candidates"] if c["hostname"] in selected])
+
+
+def compile_recon_runtime_plan(
+    case: dict, execution: dict, *, tool_sha256: str, dnsx_sha256: str | None
+) -> dict:
+    """Bind a finite managed-tool journey without changing the dormant projection."""
+    for artifact in (tool_sha256, dnsx_sha256):
+        require(
+            isinstance(artifact, str) and re.fullmatch(r"[a-f0-9]{64}", artifact) is not None,
+            "invalid_recon_artifact",
+        )
+    plan = compile_recon_plan(case, execution, tool_sha256=HTTPX_SHA256, dnsx_sha256=DNSX_SHA256)
+    plan.update(
+        schema="vardr.finite-recon-plan/2",
+        profile=RUNTIME_PROFILE,
+        runtime="contained-tools/1",
+        platform_model="verified-managed-tools/1",
+        tool_sha256=tool_sha256,
+        tools={"httpx_sha256": tool_sha256, "dnsx_sha256": dnsx_sha256},
+        max_dns_queries=2 * len(case["hostnames"]),
+    )
+    plan["options"]["transport"] = {
+        "http_destination": "validated_literal_ipv4",
+        "address_selection": "lowest_numeric_ipv4_per_hostname",
+        "http_host": "original_hostname:443",
+        "tls_sni": "original_hostname",
+        "http_stage_dns": False,
+    }
+    return plan
+
+
+def select_runtime_candidates(plan: dict, answers: list) -> list[dict]:
+    """Validate every answer and bind original candidates to one numeric address."""
+    require(isinstance(plan, dict), "invalid_recon_plan")
+    try:
+        expected = compile_recon_runtime_plan(
+            plan["input"],
+            plan["execution"],
+            tool_sha256=plan["tools"]["httpx_sha256"],
+            dnsx_sha256=plan["tools"]["dnsx_sha256"],
+        )
+    except (KeyError, TypeError) as exc:
+        raise AuthorizationError("invalid_recon_plan") from exc
+    require(encoded(plan) == encoded(expected), "execution_plan_changed")
+    projection = compile_recon_plan(
+        plan["input"], plan["execution"], tool_sha256=HTTPX_SHA256, dnsx_sha256=DNSX_SHA256
+    )
+    candidates = select_candidates(projection, answers)
+    addresses = {
+        answer["hostname"]: str(min(ipaddress.IPv4Address(value) for value in answer["addresses"]))
+        for answer in answers
+    }
+    return [{**candidate, "address": addresses[candidate["hostname"]]} for candidate in candidates]

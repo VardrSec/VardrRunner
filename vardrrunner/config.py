@@ -10,6 +10,8 @@ keychain when one is available, falling back to the config file otherwise.
 import json
 import os
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -86,6 +88,23 @@ _TOOL_ENV_NAMES = frozenset(
     }
 )
 _TOOL_ENV_PREFIXES = ("LC_", "XDG_")
+_ISOLATED_TOOL_HOME: ContextVar[Path | None] = ContextVar("isolated_tool_home", default=None)
+
+
+@contextmanager
+def isolated_tool_environment(home: Path):
+    """An explicit finite Recon invocation cannot inherit tool config or proxies."""
+    if not home.is_absolute() or not home.is_dir() or home.is_symlink():
+        raise ValueError("Private tool home unavailable")
+    token = _ISOLATED_TOOL_HOME.set(home)
+    try:
+        yield
+    finally:
+        _ISOLATED_TOOL_HOME.reset(token)
+
+
+def isolated_tools_active() -> bool:
+    return _ISOLATED_TOOL_HOME.get() is not None
 
 
 class InvalidApiUrl(ValueError):
@@ -121,6 +140,16 @@ def tool_environment() -> dict[str, str]:
     references from the environment it inherits; a full copy would let a job
     name the runner's own secrets.
     """
+    home = _ISOLATED_TOOL_HOME.get()
+    if home is not None:
+        retained = {"PATH", "SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "PATHEXT", "LANG", "TZ"}
+        return {
+            **{k: v for k, v in os.environ.items() if k.upper() in retained},
+            **{k: str(home) for k in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA")},
+            **{k: str(home / "tmp") for k in ("TMP", "TEMP", "TMPDIR")},
+            "XDG_CONFIG_HOME": str(home / "config"),
+            "XDG_CACHE_HOME": str(home / "cache"),
+        }
     return {
         name: value
         for name, value in os.environ.items()

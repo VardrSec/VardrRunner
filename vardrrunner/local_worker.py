@@ -30,6 +30,8 @@ from vardrrunner.authorization.documents import read_anchors, read_bytes, read_d
 from vardrrunner.authorization.ledger import AuthorizationLedger
 from vardrrunner.authorization.local_admission import LocalAdmission
 from vardrrunner.authorization.plan import PROFILE, origin
+from vardrrunner.authorization.recon_plan import RUNTIME_PROFILE
+from vardrrunner.authorization.recon_runtime import execute_recon, qualified_tools
 from vardrrunner.authorization.runtime import execute_gate
 from vardrrunner.commands.audit import export_run
 from vardrrunner.commands.workspace_authority import _check_authority_binding
@@ -57,6 +59,12 @@ def _inputs():
     )
     plan_bytes = read_bytes(BUNDLE / "plan.json")
     plan = read_document(BUNDLE / "plan.json")
+    require(plan.get("profile") in {PROFILE, RUNTIME_PROFILE}, "unsupported_enforcement")
+    recon = plan["profile"] == RUNTIME_PROFILE
+    tool_sha256, dnsx_sha256 = plan["tool_sha256"], None
+    if recon:
+        _, hashes = qualified_tools()
+        tool_sha256, dnsx_sha256 = hashes["httpx"], hashes["dnsx"]
     require(plan_bytes == encoded(plan), "plan_bytes_changed")
     case, execution = (read_document(BUNDLE / name) for name in ("case.json", "execution.json"))
     payload, permission = (
@@ -74,8 +82,9 @@ def _inputs():
         now=datetime.now(timezone.utc),
         authority_revision=permission["authority_revision"],
         authority_sha256=permission["authority_sha256"],
-        tool_sha256=plan["tool_sha256"],
-        capabilities=frozenset({PROFILE}),
+        tool_sha256=tool_sha256,
+        dnsx_sha256=dnsx_sha256,
+        capabilities=frozenset({plan["profile"]}),
     )
     validate(envelope, approval, plan, case, execution, anchors, context)
     _check_authority_binding(payload, permission, anchors)
@@ -84,6 +93,9 @@ def _inputs():
 
 def run() -> dict:
     envelope, approval, plan, case, execution, anchors, context, payload, permission = _inputs()
+    recon = plan["profile"] == RUNTIME_PROFILE
+    sites = sorted({origin(d["request"]["url"]) for d in plan["dispatches"]})
+    references = [] if recon else handlers.credential_references(case)
     journal = Journal(config.journal_file())
     ledger = AuthorizationLedger(journal, clock=lambda: datetime.now(timezone.utc))
     require(Workspaces(journal).get(context.engagement_id) is not None, "unknown_workspace")
@@ -103,11 +115,11 @@ def run() -> dict:
                 job_id="standalone:" + uuid.uuid4().hex,
                 backend_url="",
                 engagement_id=context.engagement_id,
-                job_type="vardrgate_api_test",
-                tool="vardrgate_api_test",
+                job_type="recon" if recon else "vardrgate_api_test",
+                tool="recon" if recon else "vardrgate_api_test",
                 target_source="explicit",
                 command_profile={
-                    "standalone_profile": PROFILE,
+                    "standalone_profile": plan["profile"],
                     "origin": "standalone",
                     "controlled": True,
                     "local_worker": True,
@@ -116,7 +128,7 @@ def run() -> dict:
                     "signed_job_id": payload["job_id"],
                     "attempt_id": payload["attempt_id"],
                     "fence": payload["fence"],
-                    "grant_policy": "expiring/1",
+                    "grant_policy": "none/1" if recon else "expiring/1",
                 },
             )
             run_id = record.run_id
@@ -126,13 +138,16 @@ def run() -> dict:
             journal.transition(
                 run_id,
                 Phase.TARGETS_RESOLVED,
-                target_count=len({origin(d["request"]["url"]) for d in plan["dispatches"]}),
+                target_count=len(case["hostnames"]) if recon else len(sites),
             )
             journal.transition(run_id, Phase.CLAIMING)
             entered, anchor = time.monotonic(), datetime.now(timezone.utc)
             with ExitStack() as stack:
                 policy = stack.enter_context(credential_grants.required("standalone"))
-                handlers.check_gate_case(case, context.engagement_id)
+                if recon:
+                    policy.check(context.engagement_id, sites, [])
+                else:
+                    handlers.check_gate_case(case, context.engagement_id)
                 # The inherited native ceiling and every renewal only shorten this cap.
                 work_until = min(
                     admission.expires_at
@@ -144,6 +159,10 @@ def run() -> dict:
                         )
                     ),
                 )
+                if recon:
+                    from vardrrunner.authorization.contracts import timestamp
+
+                    work_until = min(work_until, timestamp(execution["deadline"]))
                 hard_end = entered + max(0.0, (work_until - anchor).total_seconds())
                 if policy.expires_at is not None:
                     hard_end = min(hard_end, entered + (policy.expires_at - anchor).total_seconds())
@@ -180,8 +199,8 @@ def run() -> dict:
                     if grants:
                         policy.check(
                             context.engagement_id,
-                            handlers._case_origins(case),
-                            handlers.credential_references(case),
+                            sites,
+                            references,
                         )
                     require(not journal.stop_requested(run_id), "local_emergency_stop")
                     end = min(time.monotonic() + 9, hard_end)
@@ -227,7 +246,7 @@ def run() -> dict:
                     launch_guard.revalidation(lambda: current(grants=False)),
                     runner.observe_process(observed),
                 ):
-                    artifact = execute_gate(
+                    artifact = (execute_recon if recon else execute_gate)(
                         ledger,
                         envelope,
                         approval,

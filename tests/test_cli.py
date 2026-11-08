@@ -1346,3 +1346,35 @@ def test_workspace_authorize_refuses_out_of_range_lifetime(ttl):
         )
     assert result.exit_code != 0
     authorize.assert_not_called()
+
+
+def test_workspace_authorize_recon_requires_explicit_profile_route():
+    with patch("vardrrunner.commands.workspace_authority.authorize") as authorize:
+        result = runner.invoke(
+            app,
+            [
+                "workspace",
+                "authorize",
+                "a" * 32,
+                "--authority",
+                "issuer",
+                "--case",
+                "case.json",
+                "--execution",
+                "options.json",
+                "--output",
+                "bundle",
+                "--profile",
+                "recon",
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    authorize.assert_called_once_with(
+        "a" * 32,
+        authority=Path("issuer"),
+        case=Path("case.json"),
+        execution=Path("options.json"),
+        output=Path("bundle"),
+        expires_in=900,
+        profile="recon",
+    )
