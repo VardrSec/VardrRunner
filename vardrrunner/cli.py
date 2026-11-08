@@ -338,7 +338,7 @@ def workspace_authority_init(
 def workspace_authorize(
     workspace_id: str = typer.Argument(..., help="Existing local workspace ID"),
     authority: Path = typer.Option(..., "--authority", help="Private operator issuer directory"),
-    case: Path = typer.Option(..., "--case", help="Reviewed unresolved Gate case"),
+    case: Path = typer.Option(..., "--case", help="Reviewed Gate case or finite Recon inputs"),
     execution: Path | None = typer.Option(
         None, "--execution", help="Reviewed Gate options; defaults to bounded options"
     ),
@@ -349,6 +349,9 @@ def workspace_authorize(
         min=1,
         max=86400,
         help="Approval and reference grant lifetime in seconds",
+    ),
+    profile: str = typer.Option(
+        "gate", "--profile", help="Explicit plan: gate or recon (finite DNS/HTTPS)"
     ),
 ):
     """Interactively approve one exact plan and its expiring credential references."""
@@ -361,6 +364,7 @@ def workspace_authorize(
         execution=execution,
         output=output,
         expires_in=expires_in,
+        **({"profile": profile} if profile != "gate" else {}),
     )
 
 

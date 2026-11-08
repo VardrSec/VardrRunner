@@ -297,11 +297,12 @@ def validate(
         "plan_digest_mismatch",
     )
     from .recon_plan import PROFILE as RECON_PROFILE
-    from .recon_plan import compile_recon_plan
+    from .recon_plan import RUNTIME_PROFILE as RECON_RUNTIME_PROFILE
+    from .recon_plan import compile_recon_plan, compile_recon_runtime_plan
 
-    recon = isinstance(plan, dict) and plan.get("profile") == RECON_PROFILE
+    recon = isinstance(plan, dict) and plan.get("profile") in {RECON_PROFILE, RECON_RUNTIME_PROFILE}
     if recon:
-        require(RECON_PROFILE in context.capabilities, "unsupported_enforcement")
+        require(plan["profile"] in context.capabilities, "unsupported_enforcement")
         require(
             permission["mode"] == "strict"
             and permission["control"] == "local_offline"
@@ -309,7 +310,12 @@ def validate(
             and not permission["credential_grants"],
             "unsupported_recon_authority",
         )
-        expected = compile_recon_plan(
+        compiler = (
+            compile_recon_runtime_plan
+            if plan["profile"] == RECON_RUNTIME_PROFILE
+            else compile_recon_plan
+        )
+        expected = compiler(
             case, execution, tool_sha256=context.tool_sha256, dnsx_sha256=context.dnsx_sha256
         )
         require(

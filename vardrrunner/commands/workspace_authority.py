@@ -183,11 +183,13 @@ def authorize(
     execution: Path | None,
     output: Path,
     expires_in: int = 900,
+    profile: str = "gate",
 ) -> None:
     """Review one exact plan, approve its reference grants, and issue one execution."""
     try:
         require(sys.stdin.isatty(), "interactive_operator_required")
         require(type(expires_in) is int and 1 <= expires_in <= 86400, "invalid_window")
+        require(profile in {"gate", "recon"}, "unsupported_enforcement")
         journal = _workspace(workspace_id)
         metadata, key, anchors = _authority(workspace_id, authority)
         destination = output.expanduser().resolve()
@@ -197,9 +199,29 @@ def authorize(
         )
         case_input = read_document(case)
         options = {} if execution is None else read_document(execution)
-        binary = runner.program("vardrgate_api_test")
-        tool = Path(shutil.which(binary) or binary)
-        compiled = compile_gate_plan(case_input, options, tool_sha256=digest(tool.read_bytes()))
+        dnsx_sha256 = None
+        if profile == "recon":
+            from vardrrunner.authorization.recon_plan import compile_recon_runtime_plan
+            from vardrrunner.authorization.recon_runtime import qualified_tools
+
+            _, hashes = qualified_tools()
+            dnsx_sha256 = hashes["dnsx"]
+            options = {
+                "deadline": (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"
+                ),
+                "timeout_seconds": min(300, expires_in),
+                "max_artifact_bytes": min(resources.load_limits().max_artifact_bytes, 64 * 1024**2),
+                "allow_private_targets": False,
+                **options,
+            }
+            compiled = compile_recon_runtime_plan(
+                case_input, options, tool_sha256=hashes["httpx"], dnsx_sha256=dnsx_sha256
+            )
+        else:
+            binary = runner.program("vardrgate_api_test")
+            tool = Path(shutil.which(binary) or binary)
+            compiled = compile_gate_plan(case_input, options, tool_sha256=digest(tool.read_bytes()))
         scopes = sorted(
             {
                 (
@@ -213,6 +235,16 @@ def authorize(
         console.print(f"Workspace: {workspace_id}")
         console.print(f"Plan SHA-256: {digest(encoded(compiled))}")
         console.print(f"One execution; HTTP dispatch ceiling: {compiled['max_http_dispatches']}")
+        if profile == "recon":
+            console.print(f"DNS question ceiling: {compiled['max_dns_queries']}")
+            for name in case_input["hostnames"]:
+                console.print(f"DNS A seed: {name}", markup=False)
+            for resolver in case_input["resolvers"]:
+                console.print(f"Resolver: {resolver['address']}:{resolver['port']}", markup=False)
+            for network in case_input["destination_cidrs"]:
+                console.print(f"HTTP destination CIDR: {network}", markup=False)
+            console.print(f"HTTPx SHA-256: {compiled['tool_sha256']}")
+            console.print(f"DNSx SHA-256: {dnsx_sha256}")
         for site, path, method in scopes:
             console.print(f"{method} {site}{path}", markup=False)
         for ref in compiled["credential_references"]:
@@ -239,6 +271,8 @@ def authorize(
             authority_revision=metadata["authority_revision"],
             authority_sha256=metadata["authority_sha256"],
             tool_sha256=compiled["tool_sha256"],
+            dnsx_sha256=dnsx_sha256,
+            capabilities=frozenset({compiled["profile"]}),
         )
         permission = {
             "runner_id": context.runner_id,
@@ -374,6 +408,15 @@ def execute(
     except Exception:
         console.print("[red]Public authorization bundle unavailable.[/red]")
         raise typer.Exit(1) from None
-    finished = workspace_gate.run(workspace_id, **paths, output=output, provisioned_issuer=True)
+    from vardrrunner.authorization.recon_plan import RUNTIME_PROFILE
+
+    recon = read_document(paths["plan"]).get("profile") == RUNTIME_PROFILE
+    finished = workspace_gate.run(
+        workspace_id,
+        **paths,
+        output=output,
+        provisioned_issuer=True,
+        allow_recon=recon,
+    )
     if export is not None:
         audit.export_run(finished.run_id, export)

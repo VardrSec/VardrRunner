@@ -11,6 +11,12 @@ Per-version detail notes live in [`changelog/`](changelog/).
   credentials or API calls. Combine with `--offline` to skip release discovery;
   retain ordinary Full checks and refuse the incompatible platform combination.
 
+- Add explicit finite Recon authorization/execution using existing managed DNSx
+  and HTTPx, one signed ledger ordinal, a shared monotonic deadline and the
+  existing owner/journal/export. Validate every DNS address and preserve original
+  Host/SNI over a fixed permitted IPv4 transport. Keep Gate defaults, dormant
+  Recon /1, legacy commands, privileges and default-off startup unchanged.
+
 - Add an explicit one-shot local Gate worker in the existing toolkit image, using
   the worker-only native owner and signed standalone ledger. Require native DONE
   before completion; preserve successful runs when optional evidence export is held.

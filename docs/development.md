@@ -1,5 +1,15 @@
 # VardrRunner — Development
 
+Finite Recon production uses the existing tool launcher, native epoch, ledger
+and export. The focused existing Recon/owner/CLI cases cover explicit capability,
+both binary hashes, all-answer CIDR rejection, fixed-address/original-host handoff,
+unchanged authority across tools, aggregate timeout and no replay. They are inert
+checks, not installed-tool or physical containment evidence. The existing DNSx
+opt-in smoke remains parser-level only. Installed qualification needs one bounded
+reviewed DNS/HTTPS journey at the selected cohort; reuse verified Gate and
+Full/Mapless evidence rather than restarting a fault campaign.
+See [ADR 0045](adr/0045-finite-recon-execution.md).
+
 The focused managed-checkpoint tests use real private files and inert Runner
 dispatch/HTTP. They verify confirmed-stop-only promotion, unchanged source bytes,
 reviewed role/index binding, malformed-checkpoint refusal and no publication on a
