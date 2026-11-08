@@ -1266,3 +1266,83 @@ def test_worker_reconcile_routes_only_six_explicit_strings_without_cleanup():
     assert result.exit_code == 0, result.output
     reconcile.assert_called_once_with(**selected)
     cleanup.assert_not_called()
+
+
+def test_workspace_operator_authorization_routes_exact_inputs():
+    with patch("vardrrunner.commands.workspace_authority.authority_init") as initialize:
+        result = runner.invoke(app, ["workspace", "authority-init", "a" * 32, "--output", "issuer"])
+    assert result.exit_code == 0, result.output
+    initialize.assert_called_once_with("a" * 32, output=Path("issuer"))
+    with patch("vardrrunner.commands.workspace_authority.authorize") as authorize:
+        result = runner.invoke(
+            app,
+            [
+                "workspace",
+                "authorize",
+                "a" * 32,
+                "--authority",
+                "issuer",
+                "--case",
+                "case.json",
+                "--execution",
+                "options.json",
+                "--output",
+                "bundle",
+                "--expires-in",
+                "300",
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    authorize.assert_called_once_with(
+        "a" * 32,
+        authority=Path("issuer"),
+        case=Path("case.json"),
+        execution=Path("options.json"),
+        output=Path("bundle"),
+        expires_in=300,
+    )
+
+
+def test_workspace_execute_routes_public_bundle_and_optional_export():
+    with patch("vardrrunner.commands.workspace_authority.execute") as execute:
+        result = runner.invoke(
+            app,
+            [
+                "workspace",
+                "execute",
+                "a" * 32,
+                "--authorization",
+                "bundle",
+                "--output",
+                "evidence",
+                "--export",
+                "share",
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    execute.assert_called_once_with(
+        "a" * 32, authorization=Path("bundle"), output=Path("evidence"), export=Path("share")
+    )
+
+
+@pytest.mark.parametrize("ttl", ["0", "86401"])
+def test_workspace_authorize_refuses_out_of_range_lifetime(ttl):
+    with patch("vardrrunner.commands.workspace_authority.authorize") as authorize:
+        result = runner.invoke(
+            app,
+            [
+                "workspace",
+                "authorize",
+                "a" * 32,
+                "--authority",
+                "issuer",
+                "--case",
+                "case.json",
+                "--output",
+                "bundle",
+                "--expires-in",
+                ttl,
+            ],
+        )
+    assert result.exit_code != 0
+    authorize.assert_not_called()

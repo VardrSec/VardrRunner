@@ -7,6 +7,16 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add an explicit one-shot local Gate worker in the existing toolkit image, using
+  the worker-only native owner and signed standalone ledger. Require native DONE
+  before completion; preserve successful runs when optional evidence export is held.
+
+- Add explicit workspace issuer provisioning, terminal-reviewed single-use Gate
+  authorization and public-bundle execution with optional existing redacted export.
+  Keep private signing custody separate from execution state and bind public
+  issuer keys to the provisioned authority hash. Preserve existing file contracts,
+  control requirements, grants and legacy commands.
+
 - Promote a case-bound guarded Gate progress checkpoint only after trusted native
   confirmed stop, retaining original bytes and failed-only publication. Reject a
   stale progress checkpoint on normal return; deadlines and stop authority stay

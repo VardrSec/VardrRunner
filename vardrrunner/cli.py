@@ -312,6 +312,68 @@ def workspace_show(workspace_id: str = typer.Argument(..., help="Full local work
     workspace_cmd.show(workspace_id)
 
 
+@workspace_app.command("authority-init")
+def workspace_authority_init(
+    workspace_id: str = typer.Argument(..., help="Existing local workspace ID"),
+    output: Path = typer.Option(
+        ..., "--output", help="New private issuer directory outside execution state"
+    ),
+):
+    """Provision an operator-only issuer; never mount it into a tool worker."""
+    from vardrrunner.commands import workspace_authority
+
+    workspace_authority.authority_init(workspace_id, output=output)
+
+
+@workspace_app.command("authorize")
+def workspace_authorize(
+    workspace_id: str = typer.Argument(..., help="Existing local workspace ID"),
+    authority: Path = typer.Option(..., "--authority", help="Private operator issuer directory"),
+    case: Path = typer.Option(..., "--case", help="Reviewed unresolved Gate case"),
+    execution: Path | None = typer.Option(
+        None, "--execution", help="Reviewed Gate options; defaults to bounded options"
+    ),
+    output: Path = typer.Option(..., "--output", help="New public signed bundle directory"),
+    expires_in: int = typer.Option(
+        900,
+        "--expires-in",
+        min=1,
+        max=86400,
+        help="Approval and reference grant lifetime in seconds",
+    ),
+):
+    """Interactively approve one exact plan and its expiring credential references."""
+    from vardrrunner.commands import workspace_authority
+
+    workspace_authority.authorize(
+        workspace_id,
+        authority=authority,
+        case=case,
+        execution=execution,
+        output=output,
+        expires_in=expires_in,
+    )
+
+
+@workspace_app.command("execute")
+def workspace_execute(
+    workspace_id: str = typer.Argument(..., help="Workspace bound by the signed bundle"),
+    authorization: Path = typer.Option(
+        ..., "--authorization", help="Existing public signed bundle directory"
+    ),
+    output: Path = typer.Option(..., "--output", help="New exclusive evidence directory"),
+    export: Path | None = typer.Option(
+        None, "--export", help="Optional new redacted terminal-run export directory"
+    ),
+):
+    """Execute one approved native job, retain evidence, and optionally export it."""
+    from vardrrunner.commands import workspace_authority
+
+    workspace_authority.execute(
+        workspace_id, authorization=authorization, output=output, export=export
+    )
+
+
 @workspace_app.command("gate")
 def workspace_gate(
     workspace_id: str = typer.Argument(..., help="Local workspace bound by the signed approval"),

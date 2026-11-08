@@ -19,7 +19,7 @@ from vardrrunner.authorization.documents import read_anchors, read_bytes, read_d
 from vardrrunner.authorization.ledger import AuthorizationLedger
 from vardrrunner.authorization.plan import PROFILE, origin
 from vardrrunner.authorization.runtime import execute_gate
-from vardrrunner.journal import Journal, Phase, utc_now
+from vardrrunner.journal import Journal, Phase, RunRecord, utc_now
 from vardrrunner.workspaces import Workspaces, validate_id
 
 console = Console()
@@ -35,7 +35,8 @@ def run(
     execution: Path,
     trust: Path,
     output: Path,
-) -> None:
+    provisioned_issuer: bool = False,
+) -> RunRecord:
     """Use existing signed permission; never issue or elevate it."""
     record = None
     journal = None
@@ -71,6 +72,10 @@ def run(
             capabilities=frozenset({PROFILE}),
         )
         validate(envelope, receipt, compiled, case_input, options, anchors, current)
+        if provisioned_issuer:
+            from vardrrunner.commands.workspace_authority import _check_authority_binding
+
+            _check_authority_binding(signed, permission, anchors)
         # No trusted capabilities, time, identity or managed status come from a context file.
         require(not output.exists() and not output.is_symlink(), "exclusive_output_required")
         resources.ensure_free_space(output.parent, resources.load_limits().min_free_disk_bytes)
@@ -166,6 +171,7 @@ def run(
                 }
             )
         )
+        return finished
     except execution_control.ExecutionStopped as stopped:
         if journal is not None and record is not None:
             _retain_pid(journal, record.run_id, stopped.pid)

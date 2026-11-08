@@ -117,7 +117,16 @@ ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum
 RUN go mod init vardrrunner-nuclei-build     && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/crypto@v0.58.0 golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei     && go version -m /out/nuclei > /out/build-info.txt     && sha256sum /out/nuclei > /out/nuclei.sha256     && cp go.mod go.sum /out/
 
+# Ordinary CLI stays UID10001; only the explicit local-worker overlay invokes this binary.
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS local-owner-build
+COPY container/worker_owner.c /src/worker_owner.c
+RUN gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
+    -D_FORTIFY_SOURCE=2 -o /vardr-worker-owner /src/worker_owner.c
+
 FROM base AS toolkit
+# Existing signing dependency stays in the explicitly selected toolkit.
+USER root
+RUN python -m pip install --no-cache-dir '/opt/runner[authorization]'
 # Nmap is deliberately not installed: its license terms are unresolved for distribution. libpcap is for naabu.
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends libpcap0.8 ca-certificates \
@@ -142,6 +151,11 @@ RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in
 ENV XDG_CONFIG_HOME=/home/runner/.vardrmap \
     XDG_CACHE_HOME=/home/runner/.vardrmap/tool-cache
 COPY --from=gate-build /out/vardrgate /usr/local/bin/vardrgate
+COPY --from=local-owner-build /vardr-worker-owner /usr/local/bin/vardr-worker-owner
+RUN chmod 0555 /usr/local/bin/vardr-worker-owner \
+    && mkdir -m 0700 /run/vardr-worker-ready \
+    && chown 10000:10000 /run/vardr-worker-ready \
+    && install -d -m 0700 -o 10001 -g 10001 /issuer /exports
 USER 10001:10001
 
 FROM base AS core
