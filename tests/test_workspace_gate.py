@@ -589,6 +589,14 @@ def test_operator_provision_authorize_execute_uses_existing_runtime(journey, mon
     assert reviewed["engagement_id"] == f.workspace.workspace_id
     assert reviewed["max_executions"] == 1 and reviewed["mode"] == "strict"
     assert reviewed["authority_sha256"] == metadata["authority_sha256"]
+    anchors = operator.read_anchors(public / "trust.json")
+    payload = gate.verify(operator.read_document(public / "contract.json"), anchors, "contract")
+    operator._check_authority_binding(payload, reviewed, anchors)
+    foreign = Ed25519PrivateKey.from_private_bytes(SEED).public_key().public_bytes_raw()
+    with pytest.raises(ValueError, match="issuer_binding_changed"):
+        operator._check_authority_binding(
+            payload, reviewed, (replace(anchors[0], public_key=foreign),)
+        )
     assert all(g["issuer"] == "standalone" for g in f.grant_store.entries())
     with patch.object(audit, "export_run") as export:
         operator.execute(

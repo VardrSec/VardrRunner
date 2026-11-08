@@ -334,6 +334,28 @@ def authorize(
         raise typer.Exit(1) from None
 
 
+def _check_authority_binding(
+    payload: dict, permission: dict, anchors: tuple[TrustAnchor, ...]
+) -> None:
+    """Join public issuer trust to the original locally provisioned authority hash."""
+    require(len(anchors) == 1, "issuer_binding_changed")
+    anchor = anchors[0]
+    require(
+        anchor.issuer_id == payload["issuer"]["id"]
+        and anchor.key_id == payload["issuer"]["key_id"],
+        "issuer_binding_changed",
+    )
+    metadata = {
+        "schema": "vardr.workspace-authority/1",
+        "workspace_id": payload["engagement_id"],
+        "runner_id": payload["runner_id"],
+        "issuer": payload["issuer"],
+        "public_key": b64(anchor.public_key),
+        "authority_revision": permission["authority_revision"],
+    }
+    require(digest(encoded(metadata)) == permission["authority_sha256"], "issuer_binding_changed")
+
+
 def execute(
     workspace_id: str, *, authorization: Path, output: Path, export: Path | None = None
 ) -> None:
@@ -352,6 +374,6 @@ def execute(
     except Exception:
         console.print("[red]Public authorization bundle unavailable.[/red]")
         raise typer.Exit(1) from None
-    finished = workspace_gate.run(workspace_id, **paths, output=output)
+    finished = workspace_gate.run(workspace_id, **paths, output=output, provisioned_issuer=True)
     if export is not None:
         audit.export_run(finished.run_id, export)

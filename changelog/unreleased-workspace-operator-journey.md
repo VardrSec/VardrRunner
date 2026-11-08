@@ -11,3 +11,8 @@ bundle or exports. Container packaging must preserve this separation. Existing
 connected commands, explicit file interfaces and unsupported-platform refusal
 remain unchanged. This increment alone does not provide a recon executor or
 qualify cross-platform packaging.
+
+New bundle consumers reconstruct the original workspace/Runner/issuer/public-key
+metadata hash before consumption. A self-signed replacement key cannot reuse an
+existing local authority digest. Legacy explicit reference-trust inputs keep their
+existing meaning.

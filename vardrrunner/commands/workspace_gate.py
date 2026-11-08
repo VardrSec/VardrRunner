@@ -35,6 +35,7 @@ def run(
     execution: Path,
     trust: Path,
     output: Path,
+    provisioned_issuer: bool = False,
 ) -> RunRecord:
     """Use existing signed permission; never issue or elevate it."""
     record = None
@@ -71,6 +72,10 @@ def run(
             capabilities=frozenset({PROFILE}),
         )
         validate(envelope, receipt, compiled, case_input, options, anchors, current)
+        if provisioned_issuer:
+            from vardrrunner.commands.workspace_authority import _check_authority_binding
+
+            _check_authority_binding(signed, permission, anchors)
         # No trusted capabilities, time, identity or managed status come from a context file.
         require(not output.exists() and not output.is_symlink(), "exclusive_output_required")
         resources.ensure_free_space(output.parent, resources.load_limits().min_free_disk_bytes)

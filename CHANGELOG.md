@@ -9,8 +9,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 - Add explicit workspace issuer provisioning, terminal-reviewed single-use Gate
   authorization and public-bundle execution with optional existing redacted export.
-  Keep private signing custody separate from execution state; preserve existing
-  file contracts, control requirements, grants and legacy commands.
+  Keep private signing custody separate from execution state and bind public
+  issuer keys to the provisioned authority hash. Preserve existing file contracts,
+  control requirements, grants and legacy commands.
 
 - Promote a case-bound guarded Gate progress checkpoint only after trusted native
   confirmed stop, retaining original bytes and failed-only publication. Reject a
