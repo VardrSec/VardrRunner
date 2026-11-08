@@ -408,8 +408,14 @@ def _check_pipelines() -> list[Check]:
 
 
 def _collect(
-    production: bool = False, *, platform: bool = False, offline: bool = False
+    production: bool = False,
+    *,
+    platform: bool = False,
+    offline: bool = False,
+    standalone: bool = False,
 ) -> list[Check]:
+    if standalone and platform:
+        raise ValueError("--standalone cannot use --platform: platform checks require Map")
     checks: list[Check] = [
         Check("version", Health.OK, f"{__version__} (release discovery skipped)")
         if offline
@@ -419,9 +425,11 @@ def _collect(
     # corrupted we surface one clear FAIL and skip the auth attempt (which
     # would crash or mislead with a noisy follow-up error).
     try:
-        checks += _check_credentials(production=production)
+        if not standalone:
+            checks += _check_credentials(production=production)
         checks.append(_check_permissions())
-        checks.append(_check_auth())
+        if not standalone:
+            checks.append(_check_auth())
         if platform:
             checks += _check_platform()
     except config.InvalidConfigFile as e:
@@ -501,16 +509,27 @@ def run_doctor(
     *,
     platform: bool = False,
     offline: bool = False,
+    standalone: bool = False,
 ) -> None:
-    """Run all checks, report, and exit non-zero if any check failed."""
-    checks = _collect(production=production, platform=platform, offline=offline)
+    """Run the selected checks, report, and exit non-zero on actionable failure."""
+    if standalone and platform:
+        console.print("[red]--standalone cannot use --platform: platform checks require Map.[/red]")
+        raise typer.Exit(2)
+    checks = _collect(
+        production=production,
+        platform=platform,
+        offline=offline,
+        **({"standalone": True} if standalone else {}),
+    )
     failed = [c for c in checks if c.status is Health.FAIL]
     warned = [c for c in checks if c.status is Health.WARN]
 
     if as_json:
         payload = {
             "healthy": not failed,
-            "profile": "production" if production else "standard",
+            "profile": ("standalone-production" if production else "standalone")
+            if standalone
+            else ("production" if production else "standard"),
             "summary": {
                 "ok": sum(c.status is Health.OK for c in checks),
                 "warn": len(warned),

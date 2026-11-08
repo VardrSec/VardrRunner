@@ -281,3 +281,56 @@ def test_doctor_reports_the_version_first():
     ):
         checks = doctor._collect()
     assert checks[0].name == "version"
+
+
+def test_standalone_offline_retains_local_checks_without_map_or_discovery(monkeypatch, capsys):
+    import json
+
+    retained = (
+        "permissions",
+        "identity",
+        "journal",
+        "run_dir",
+        "resource_policy",
+        "disk",
+        "tools",
+        "pipelines",
+    )
+    called = []
+    for name in retained:
+
+        def check(*args, _name=name, **kwargs):
+            called.append(_name)
+            result = Check(_name, Health.OK, "local fixture")
+            return [result] if _name in {"tools", "pipelines"} else result
+
+        monkeypatch.setattr(doctor, "_check_" + name, check)
+    with (
+        patch.object(
+            doctor, "_check_credentials", side_effect=AssertionError("Map credentials used")
+        ) as credentials,
+        patch.object(
+            doctor, "_check_auth", side_effect=AssertionError("Map authentication used")
+        ) as auth,
+        patch.object(
+            doctor, "_check_platform", side_effect=AssertionError("Map platform used")
+        ) as platform,
+        patch.object(
+            doctor, "_check_version", side_effect=AssertionError("release discovery used")
+        ) as discovery,
+        patch.object(
+            doctor.api, "VardrMapClient", side_effect=AssertionError("Map client created")
+        ) as client,
+    ):
+        with pytest.raises(typer.Exit) as done:
+            doctor.run_doctor(as_json=True, standalone=True, offline=True)
+        assert done.value.exit_code == 0
+        report = json.loads(capsys.readouterr().out)
+        assert report["healthy"] is True and report["profile"] == "standalone"
+        assert called == list(retained)
+        assert {entry["name"] for entry in report["checks"]} == {"version", *retained}
+        with pytest.raises(typer.Exit) as refused:
+            doctor.run_doctor(standalone=True, platform=True)
+        assert refused.value.exit_code == 2
+        for forbidden in (credentials, auth, platform, discovery, client):
+            forbidden.assert_not_called()

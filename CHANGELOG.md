@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicit `doctor --standalone` for local state/tool diagnostics without Map
+  credentials or API calls. Combine with `--offline` to skip release discovery;
+  retain ordinary Full checks and refuse the incompatible platform combination.
+
 - Add an explicit one-shot local Gate worker in the existing toolkit image, using
   the worker-only native owner and signed standalone ledger. Require native DONE
   before completion; preserve successful runs when optional evidence export is held.
