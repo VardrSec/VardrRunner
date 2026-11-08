@@ -152,7 +152,8 @@ def test_preclaim_grant_denial_has_zero_rpc(entry_fixture, reason):
             pytest.raises(ClaimError),
         ):
             f.make().acquire(f.directory)
-        assert state(f) == "denied_before_rpc" and not f.rpc
+        assert state(f) == "preclaim_retired" and not f.rpc
+        assert f.journal.list()[0].phase == Phase.FAILED
         return
     else:
         f.s.ticks[0] = 61
@@ -174,10 +175,13 @@ def test_write_failures_never_retry_or_launch(entry_fixture, monkeypatch, point)
         f.make().acquire(f.directory)
     assert len(f.rpc) == (1 if point == "bind" else 0)
     monkeypatch.setattr(ClaimStore, point, original)
-    with pytest.raises(AuthorizationError, match="existing_invocation"):
+    expected = "already_reserved" if point == "prepare_send" else "existing_invocation"
+    with pytest.raises(AuthorizationError, match=expected):
         f.make().acquire(f.directory)
     client = Mock()
-    assert reconcile(f.journal, client, "https://map.example.test").deferred == 1
+    assert reconcile(f.journal, client, "https://map.example.test").deferred == (
+        0 if point == "prepare_send" else 1
+    )
     assert not client.mock_calls
 
 
@@ -365,7 +369,8 @@ def test_grants_changed_during_last_journal_read_prevent_rpc(entry_fixture, monk
     monkeypatch.setattr(f.journal, "stop_requested", late)
     with pytest.raises(ClaimError, match="denied_before_rpc"):
         f.make().acquire(f.directory)
-    assert calls and not f.rpc and state(f) == "denied_before_rpc"
+    assert calls and not f.rpc and state(f) == "preclaim_retired"
+    assert f.journal.list()[0].phase == Phase.FAILED
 
 
 def test_monotonic_sample_precedes_utc_and_pause_cannot_extend(entry_fixture):
@@ -535,7 +540,8 @@ def test_local_stop_before_rpc_is_durably_denied(entry_fixture, monkeypatch):
     monkeypatch.setattr(ClaimStore, "prepare_send", stop)
     with pytest.raises(ClaimError, match="denied_before_rpc"):
         f.make().acquire(f.directory)
-    assert not f.rpc and state(f) == "denied_before_rpc"
+    assert not f.rpc and state(f) == "preclaim_retired"
+    assert f.journal.list()[0].phase == Phase.FAILED
 
 
 def inert_artifact(monkeypatch):

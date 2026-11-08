@@ -10,25 +10,119 @@ tool output.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import stat
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import urlsplit, urlunsplit
 
 from vardrrunner import manifests, redaction
+from vardrrunner.windows_journal import WindowsJournalError, WindowsJournalPin
 
 SCHEMA_VERSION = 1
+RETENTION_RECORD_LIMIT = 10_000
+RETENTION_PATH_BYTES = 4096
+RETENTION_TOTAL_BYTES = 8 * 1024 * 1024
+
+
+_AuditRow = TypeVar("_AuditRow")
+
+
+def audit_rows(
+    rows: Iterable[_AuditRow], checkpoint: Callable[[], None] | None = None
+) -> Iterator[_AuditRow]:
+    """Keep existing row order, with optional cooperative inspection checkpoints."""
+    for row in rows:
+        if checkpoint is not None:
+            checkpoint()
+        yield row
 
 
 class JournalError(RuntimeError):
     """The journal is unavailable, corrupt, or received an invalid transition."""
+
+
+def _journal_path_info(path: Path) -> os.stat_result | None:
+    """Observe the target and retain its identity for the Windows handle check."""
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise JournalError("Cannot inspect journal path") from None
+    try:
+        # Preserve leaf symlinks to ordinary files; dangling/special targets refuse.
+        if stat.S_ISLNK(info.st_mode):
+            info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            raise JournalError("Unsupported nonregular or reparse journal target")
+    except OSError:
+        raise JournalError("Cannot inspect journal target") from None
+    return info
+
+
+def journal_path_present(path: Path) -> bool:
+    """Observe an ordinary journal target, not a race-safe open or I/O deadline."""
+    return _journal_path_info(path) is not None
+
+
+def journal_path_identity(path: Path) -> tuple[int, int]:
+    """Require the existing ordinary DB identity; WAL updates do not replace it."""
+    observed = _journal_path_info(path)
+    if observed is None or observed.st_ino <= 0:
+        raise JournalError("Existing journal identity unavailable")
+    return observed.st_dev, observed.st_ino
+
+
+@contextmanager
+def journal_connection(
+    path: Path, *, readonly: bool = False, expected_identity: tuple[int, int] | None = None
+) -> Iterator[sqlite3.Connection]:
+    """Use one canonical DB/WAL identity; keep Windows names pinned until close.
+
+    POSIX retains the existing observed-file check, not a race-safe open promise.
+    Read-only SQLite connections can still create or change WAL sidecars.
+    """
+    observed = _journal_path_info(path)
+    must_exist = readonly or expected_identity is not None
+    if expected_identity is not None and (
+        observed is None or (observed.st_dev, observed.st_ino) != expected_identity
+    ):
+        raise JournalError("Original journal identity changed")
+    try:
+        canonical = path.resolve(strict=must_exist)
+        guard = (
+            WindowsJournalPin(canonical, create=not must_exist, observed=observed)
+            if os.name == "nt"
+            else nullcontext()
+        )
+        with guard:
+            target = (
+                canonical.as_uri() + ("?mode=ro" if readonly else "?mode=rw")
+                if must_exist
+                else canonical
+            )
+            con = sqlite3.connect(target, uri=must_exist, timeout=5.0)
+            try:
+                if (
+                    expected_identity is not None
+                    and journal_path_identity(path) != expected_identity
+                ):
+                    raise JournalError("Original journal identity changed")
+                yield con
+            finally:
+                con.close()
+    except OSError:
+        raise JournalError("Cannot open journal path") from None
+    except WindowsJournalError:
+        raise JournalError("Cannot pin journal path") from None
 
 
 class Phase(str, Enum):
@@ -117,6 +211,26 @@ class RunRecord:
         return data
 
 
+@dataclass(frozen=True)
+class RetainedPaths:
+    run_dir: str | None
+    artifact_path: str | None
+    manifest_path: str | None
+
+
+def unfinished_records(
+    con: sqlite3.Connection, *, checkpoint: Callable[[], None] | None = None
+) -> list[RunRecord]:
+    """Validate the existing unfinished-row selection on the caller's snapshot."""
+    rows = con.execute(
+        """SELECT * FROM runs
+            WHERE phase NOT IN (?, ?, ?, ?, ?)
+            ORDER BY started_at""",
+        _TERMINAL_VALUES,
+    )
+    return [Journal._record(row) for row in audit_rows(rows, checkpoint)]
+
+
 class Journal:
     """Transaction-safe journal repository; one short-lived connection per call."""
 
@@ -128,22 +242,85 @@ class Journal:
         except (OSError, sqlite3.Error) as exc:
             raise JournalError(f"cannot open execution journal: {exc}") from exc
 
-    def _connect(self) -> sqlite3.Connection:
-        con = sqlite3.connect(self.path, timeout=5.0)
-        con.row_factory = sqlite3.Row
-        con.execute("PRAGMA foreign_keys = ON")
-        con.execute("PRAGMA busy_timeout = 5000")
-        return con
+    @classmethod
+    def open_existing(cls, path: Path, *, expected_identity: tuple[int, int]) -> Journal:
+        """Open the selected current DB without creation, migration or repair."""
+        return _ExistingJournal(path, expected_identity)
+
+    @classmethod
+    def read_existing(cls, path: Path, run_id: str) -> RunRecord | None:
+        """Inspect one current-schema record without creating or migrating storage."""
+        try:
+            with journal_connection(Path(path), readonly=True) as con:
+                con.row_factory = sqlite3.Row
+                if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+                    raise JournalError("unsupported read-only journal schema")
+                row = con.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            return cls._record(row) if row else None
+        except (OSError, sqlite3.Error):
+            raise JournalError("cannot inspect existing execution journal") from None
+
+    @classmethod
+    def read_existing_paths(cls, path: Path) -> list[RetainedPaths]:
+        """Read complete, bounded path references for conservative retention.
+
+        A destructive cleanup decision must never use a truncated inventory.
+        This is a SQLite read, not a promise of unchanged filesystem sidecars.
+        """
+        try:
+            with journal_connection(Path(path), readonly=True) as con:
+                con.row_factory = sqlite3.Row
+                if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+                    raise JournalError("unsupported read-only journal schema")
+                # Bound database-encoded bytes before Python materializes them.
+                # A bytes sentinel cannot be mistaken for an admissible text path.
+                rows = con.execute(
+                    """SELECT
+                    CASE WHEN run_dir IS NULL THEN NULL
+                         WHEN typeof(run_dir)='text' AND length(CAST(run_dir AS BLOB))<=?
+                         THEN run_dir ELSE x'00' END,
+                    CASE WHEN artifact_path IS NULL THEN NULL
+                         WHEN typeof(artifact_path)='text' AND length(CAST(artifact_path AS BLOB))<=?
+                         THEN artifact_path ELSE x'00' END,
+                    CASE WHEN manifest_path IS NULL THEN NULL
+                         WHEN typeof(manifest_path)='text' AND length(CAST(manifest_path AS BLOB))<=?
+                         THEN manifest_path ELSE x'00' END
+                    FROM runs LIMIT ?""",
+                    (RETENTION_PATH_BYTES,) * 3 + (RETENTION_RECORD_LIMIT + 1,),
+                )
+                records: list[RetainedPaths] = []
+                total = 0
+                for row in rows:
+                    if len(records) >= RETENTION_RECORD_LIMIT:
+                        raise JournalError("journal retention inventory exceeds safe limit")
+                    values = tuple(row)
+                    if any(value is not None and not isinstance(value, str) for value in values):
+                        raise JournalError("unsupported journal retention path")
+                    sizes = [len(value.encode("utf-8")) for value in values if value is not None]
+                    if any(size > RETENTION_PATH_BYTES for size in sizes):
+                        raise JournalError("unsupported journal retention path")
+                    total += sum(sizes)
+                    if total > RETENTION_TOTAL_BYTES:
+                        raise JournalError("journal retention inventory exceeds safe byte limit")
+                    records.append(RetainedPaths(*values))
+                return records
+        except (OSError, sqlite3.Error):
+            raise JournalError("cannot inspect existing execution journal") from None
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        with journal_connection(self.path) as con:
+            con.row_factory = sqlite3.Row
+            con.execute("PRAGMA foreign_keys = ON")
+            con.execute("PRAGMA busy_timeout = 5000")
+            yield con
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         """Commit or roll back the transaction and always close the handle."""
-        con = self._connect()
-        try:
+        with self._connect() as con:
             with con:
                 yield con
-        finally:
-            con.close()
 
     def _migrate(self) -> None:
         with self._connection() as con:
@@ -192,10 +369,13 @@ class Journal:
                     PRAGMA user_version = 1;
                     """
                 )
-        try:
-            self.path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
+            try:
+                # Use SQLite's canonical name while its Windows pins remain held;
+                # an unpinned input alias must not redirect the permission update.
+                database = Path(con.execute("PRAGMA database_list").fetchone()[2])
+                database.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                pass
 
     def begin(
         self,
@@ -425,20 +605,22 @@ class Journal:
 
     def unfinished(self) -> list[RunRecord]:
         with self._connection() as con:
-            rows = con.execute(
-                """SELECT * FROM runs
-                    WHERE phase NOT IN (?, ?, ?, ?, ?)
-                    ORDER BY started_at""",
-                _TERMINAL_VALUES,
-            ).fetchall()
-        return [self._record(row) for row in rows]
+            return unfinished_records(con)
 
-    def list(self, *, since: str | None = None, limit: int = 100) -> list[RunRecord]:
+    def list(
+        self, *, since: str | None = None, limit: int = 100, engagement_id: str | None = None
+    ) -> list[RunRecord]:
         query = "SELECT * FROM runs"
         params: list[Any] = []
+        conditions = []
         if since:
-            query += " WHERE started_at >= ?"
+            conditions.append("started_at >= ?")
             params.append(since)
+        if engagement_id is not None:
+            conditions.append("engagement_id = ?")
+            params.append(engagement_id)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY started_at DESC LIMIT ?"
         params.append(max(1, min(limit, 10_000)))
         with self._connection() as con:
@@ -481,3 +663,23 @@ class Journal:
             warnings=warnings,
             updated_at=row["updated_at"],
         )
+
+
+class _ExistingJournal(Journal):
+    """Only the explicit reconciliation facade uses this noncreating repository."""
+
+    def __init__(self, path: Path, expected_identity: tuple[int, int]):
+        self.path = Path(path)
+        self._expected_identity = expected_identity
+        with self._connect():
+            pass
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        with journal_connection(self.path, expected_identity=self._expected_identity) as con:
+            con.row_factory = sqlite3.Row
+            con.execute("PRAGMA foreign_keys = ON")
+            con.execute("PRAGMA busy_timeout = 5000")
+            if con.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+                raise JournalError("unsupported existing journal schema")
+            yield con

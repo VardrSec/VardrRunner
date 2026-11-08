@@ -1,0 +1,28 @@
+# Worker-only overlay: caller must choose a reviewed immutable toolkit image.
+ARG RUNNER_BASE_IMAGE
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS owner-build
+COPY container/worker_owner.c /src/worker_owner.c
+COPY container/tests/worker_owner_eof_test.c /src/tests/worker_owner_eof_test.c
+COPY container/tests/worker_owner_sequence_test.c /src/tests/worker_owner_sequence_test.c
+RUN gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
+    -D_FORTIFY_SOURCE=2 -o /vardr-worker-owner /src/worker_owner.c \
+    && gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
+    -D_FORTIFY_SOURCE=2 -o /worker-owner-eof-test /src/tests/worker_owner_eof_test.c \
+    && timeout 5s /worker-owner-eof-test \
+    && gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
+    -D_FORTIFY_SOURCE=2 -o /worker-owner-sequence-test /src/tests/worker_owner_sequence_test.c \
+    && timeout 5s /worker-owner-sequence-test
+
+FROM ${RUNNER_BASE_IMAGE}
+USER 0:0
+# A fresh per-incarnation local volume copies this empty, owner-only seed.
+# Existing/stale readiness data is never imported or overwritten by the image.
+RUN test ! -e /run/vardr-worker-ready \
+    && mkdir -m 0700 /run/vardr-worker-ready \
+    && chown 10000:10000 /run/vardr-worker-ready
+COPY --from=owner-build /vardr-worker-owner /usr/local/bin/vardr-worker-owner
+COPY vardrrunner /opt/runner/vardrrunner
+# Replace only Python package source; reuse installed dependencies and toolkit.
+RUN python -I -c "import pathlib,shutil,vardrrunner; shutil.copytree('/opt/runner/vardrrunner', pathlib.Path(vardrrunner.__file__).parent, dirs_exist_ok=True)"
+ENTRYPOINT ["/usr/local/bin/vardr-worker-owner"]
+CMD []

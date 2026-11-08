@@ -79,3 +79,46 @@ def test_store_and_export_errors_exit_cleanly(tmp_path, monkeypatch):
     ):
         with pytest.raises(typer.Exit):
             audit.export_runs(tmp_path / "out.json")
+
+
+def test_scoped_list_and_export_are_local_redacted_and_preserve_other_runs(tmp_path, monkeypatch):
+    path = tmp_path / "journal.sqlite3"
+    selected = _seed(path)
+    store = Journal(path)
+    other = store.begin(
+        job_id="other-job",
+        backend_url="",
+        engagement_id="other-workspace",
+        job_type="httpx",
+        tool="httpx",
+        target_source="explicit",
+    )
+    before = path.read_bytes()
+    monkeypatch.setattr(config, "JOURNAL_FILE", path)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Local audit must not require Map authentication")
+
+    monkeypatch.setattr(config, "require_auth", forbidden)
+    output = tmp_path / "scoped.json"
+    audit.export_runs(output, engagement_id="eng-1", limit=1)
+    document = json.loads(output.read_text())
+    assert document["audit_schema_version"] == 1 and document["run_count"] == 1
+    assert document["runs"][0]["run_id"] == selected.run_id
+    assert "do-not-export" not in output.read_text() and "vmap_abcdefghi" not in output.read_text()
+    assert store.get(other.run_id) == other and path.read_bytes() == before
+
+
+def test_scoped_json_and_table_history_and_empty_export(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "journal.sqlite3"
+    selected = _seed(path)
+    monkeypatch.setattr(config, "JOURNAL_FILE", path)
+    audit.list_runs(engagement_id="eng-1", as_json=True)
+    assert selected.run_id in capsys.readouterr().out
+    audit.list_runs(engagement_id="missing", as_json=True)
+    assert json.loads(capsys.readouterr().out) == []
+    audit.list_runs(engagement_id="missing")
+    assert "No journaled runs" in capsys.readouterr().out
+    output = tmp_path / "empty.json"
+    audit.export_runs(output, engagement_id="missing")
+    assert json.loads(output.read_text()) == {"audit_schema_version": 1, "run_count": 0, "runs": []}

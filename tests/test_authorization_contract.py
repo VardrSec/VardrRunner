@@ -366,6 +366,7 @@ def test_unsupported_contract_versions_deny_before_consumption(specimen, documen
     with s["ledger"].journal._connection() as con:
         rows = con.execute("SELECT consumed FROM authorization_contracts").fetchall()
     assert len(rows) == 1 and rows[0]["consumed"] == 1
+    assert check(s)["execution_index"] == 1
 
 
 @pytest.mark.parametrize("anchor", [None, "revoked", "purpose", "origin", "bad_key"])

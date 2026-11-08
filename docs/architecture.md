@@ -1,5 +1,130 @@
 # VardrRunner — Architecture
 
+Guarded Gate `execution_in_progress` files are local checkpoints. Only an existing
+trusted native confirmed stop may promote their case-bound pending rows into a
+separate cancelled result; the original bytes remain unchanged. Normal return
+rejects a stale checkpoint before result publication. No checkpoint grants stop
+proof, healthy reuse, a retry or additional time.
+
+The [explicit managed-worker candidate](managed-worker.md) composes the existing
+managed claim/Gate/result protocols with the separate
+[Linux lifecycle owner](worker-lifecycle.md). Actual verified owner context alone
+enables Linux controlled execution. Native Windows Job Objects and ordinary CLI
+behavior remain unchanged. Host-observed retirement is authenticated metadata;
+it does not recreate a native execution handle or consumption acknowledgement.
+Runtime acceptance remains open and default startup remains inert.
+
+The inactive persistent-v3 candidate retains signed-64-bit decimal sequences and
+immutable admission snapshots in additive tables of the same journal. Exact
+original-key observation `/4` may record physical retirement; it never supplies a
+missing claim, consume, DONE or idle-release acknowledgment. Full startup audits
+validate retained history; normal idle checks select unresolved rows.
+
+Persistent selections are provisional metadata until the claim transport returns.
+Preparing one does not advance the issued history head or native sequence. An
+unknown reply retains its original association and hold. A source-proven local
+no-send denial can close only that selection; it cannot reset an issued attempt
+or delete the generic claim tombstone.
+
+V3 reusability records every refresh-loop callback failure, including local
+stop-journal reads. Exact thread quiescence alone cannot erase that failure.
+Native idle-channel EOF has its own immutable cleanup deadline; an open healthy
+idle channel retains persistent availability without job authority.
+
+An optional finite v3 idle policy closes claims at the conservative pre-ACK
+cutoff. Closure is sticky: after a full hold audit and empty-lineage check,
+Runner keeps the channel open in a nonspawning, no-RPC wait. Its checked post-ACK
+idle bound includes a fixed five-second shutdown-only reserve; no claim, native
+or job deadline moves. Native exit 124 identifies an unambiguous optional-idle
+branch only, not a successful job or physical-stop receipt. The separate native
+EOF cleanup deadline and all unresolved holds remain unchanged.
+Python's separate discovery window stops new requests but never selects physical
+idle termination. If it closes before the owner cutoff is observed, Runner
+rechecks readiness and full holds with bounded sleeps while keeping fd3 open.
+Count exhaustion still returns through its existing completed-session path.
+
+The worker's pre-send runtime/enrollment/root association commits in the same
+journal transaction as its send marker. Optional authenticated observation v2
+can retire an untouched unknown intent only after Map has irreversibly fenced
+that exact unbound runtime against late claims. Legacy unlinked records retain
+v1 and their conservative holds. Neither receipt nor local retirement reconstructs
+an execution capability or resets a tombstone or spent allowance.
+
+Runner remains the single execution engine, with standalone workspaces and
+optional Map coordination. The native standalone Gate consumer is a development
+capability. Recon remains validation-only, rejected before reservation callbacks
+or execution; managed Docker execution remains gated.
+Canonical journal/WAL identity and Windows database/ancestor replacement pins are
+implemented; POSIX pathname replacement and SQLite snapshot non-mutation remain
+open safety gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+Full/Mapless, Docker and cross-platform acceptance remain required. Earlier test
+evidence applies only to its recorded source revision.
+
+The additive `workspace gate` consumer reuses the existing standalone contract,
+ledger, fixed-Gate runtime, native Windows control, journal and audit/export. It
+does not issue approval, bootstrap trust or use Map. Unsupported execution platforms
+refuse before consumption; unfinished local records never enter Map recovery.
+See [ADR 0039](adr/0039-standalone-workspace-gate.md). Existing legacy commands,
+queue and MCP remain independent of this explicit consumer.
+
+
+The DNSx adapter explicitly disables the pinned tool's automatic version check.
+This removes that auxiliary version request; it is not DNS destination, proxy,
+redirect, scope or aggregate-budget enforcement for a standalone recon profile.
+
+The reconciled export read also uses the existing observed-file guard before its
+SQLite connection; read-only mode, fresh reads and live WAL visibility remain.
+
+Workspace metadata listing reuses `local_workspaces` and the same row validation
+as known-ID lookup. A bounded SQLite read-only query checks current journal/table
+schemas and orders before limiting; it constructs no Journal and performs no
+initialization/migration. No active selection, new state, authority or execution
+path is introduced. Existing application startup maintenance remains unchanged.
+
+Every journal connection uses one canonical database pathname, including grant
+transactions and workspace inventory. Ordinary symlinks resolve to that database,
+so Windows readers see its committed WAL rather than a separate alias WAL name.
+On Windows, each canonical ancestor and the database are opened as non-reparse
+objects and retained without delete sharing until SQLite closes. Ancestor handles
+also deny write sharing; database handles allow legitimate concurrent SQLite writes.
+Hardlinked Windows databases refuse because alternate names can split WAL state.
+The adapter uses existing Windows APIs and adds no minimum Windows version.
+Missing journals retain their existing creation/read-only semantics. POSIX retains
+the observed-file check; its pathname replacement race is not closed. The Windows
+pins cover database/ancestor replacement, not authority authenticity, database-content
+tampering, sidecar replacement, strict inspection non-mutation or bounded metadata I/O.
+See [ADR 0042](adr/0042-canonical-journal-name-pins.md).
+
+Age cleanup preserves every journal-linked directory, including terminal and
+uncertain runs. Bounded path-only inventory must be complete before deletion.
+On supported runtimes, cleanup verifies and holds the run-root descriptor and
+performs later operations relative to it. Windows, Python 3.10 and runtimes
+without that confinement skip automatic cleanup; direct execution remains usable.
+Journal evidence has no new automatic deletion policy.
+
+The partial NM-3 single-run evidence exporter reuses journal/schema-1 audit and
+manifest formats. It reads a current-schema journal in SQLite read-only mode,
+binds source JSON to the recorded digest/size and regular-file descriptor, then
+serializes a centrally redacted derivative. Original provenance stays in audit;
+the portable manifest describes the derivative and links the original hash.
+Fixed filenames are created exclusively through a pinned private POSIX directory
+descriptor. Fresh journal rechecks detect changed records without pinning one
+stale database snapshot. No database, grants, config or executable authority is
+copied. Windows now has an isolated handle-adapter candidate using verified private
+ACLs and no-redirect creation. Native security acceptance remains open. See
+[ADR 0040](adr/0040-portable-run-export.md).
+
+Path conversion can normalize input spellings before validation. The security
+boundary binds the resulting path through actual no-redirect handle operations;
+it does not promise raw CLI-token rejection for every spelling alias.
+
+Audit history and schema-1 metadata export optionally select an exact engagement
+or local workspace ID through the existing journal query. Bound SQL parameters
+apply that filter together with the time bound before ordering and limiting.
+Only `None` means unscoped; explicit blank/whitespace values remain literal
+historical IDs. No workspace lookup, Map transport, authorization, schema change
+or artifact-copy system is involved. Existing callers remain unscoped by default.
+
 The opt-in authorization ledger records trusted observed time in a short separate
 transaction, independent of permission changes. Denied issuance/consumption cannot
 forget expiry, and permission transactions recheck time after writer-lock waits
@@ -129,6 +254,7 @@ requires VardrMap ≥ v0.22.0.
 | `vardrrunner/commands/imports.py` | `import nuclei|httpx` — push an existing output file. |
 | `vardrrunner/commands/jobs.py` | `jobs list|run` — owns the uniform job *lifecycle* (`_execute_one`): capability → config → targets → claim → events → upload → done/fail, delegating specifics to a `handlers` registry entry. |
 | `vardrrunner/commands/audit.py` | `audit list|show|export` — read-only views and atomic exports of sanitized journal state. |
+| `vardrrunner/workspaces.py`, `commands/workspace.py` | Explicit `workspace create|show` metadata in an additive table of the existing SQLite journal. No Map client, credential provider, approval, active-context selection or execution path. Existing run identities and journal schema version remain unchanged. This is the first metadata-only NM-3 slice, not complete Mapless operation. |
 | `vardrrunner/commands/identity.py` | `identity show|set-name` — inspect or label this installation without exposing credentials. |
 | `vardrrunner/commands/updates.py` | `update` — install the newest release in the foreground with pipx (`updates.upgrade_argv`/`run_upgrade`), confirm it from an isolated interpreter, or name the installer's command for uv/virtualenv installs; `update check` — report only. Both always ask the registry. Nothing installs unless the operator runs `update`. |
 | `vardrrunner/commands/setup.py` | `init` — compose auth, identity, journal, tool installation, and doctor into one idempotent guided/provisioning workflow. |
@@ -346,7 +472,10 @@ managed Map success. See [ADR 0032](adr/0032-unregistered-managed-native-gate.md
 The independent `authorization` package adds signed bounded approvals, single-use
 execution contracts and additive journal state. It reuses the Gate handler with a
 request projection for the explicitly supported `gate-fixed-http/1` profile.
-Legacy CLI, queue and MCP paths do not import or advertise this capability.
+Legacy commands, queue and MCP paths do not advertise this capability. The
+separate native Windows `workspace gate` consumer uses it explicitly with
+existing signed permission; issuer-side key/trust provisioning and context
+preparation are not yet a supported first-run workflow.
 See [ADR 0025](adr/0025-authorization-contract-v1.md) and the
 [conformance specification](contracts/README.md) for trust boundaries and limits.
 
@@ -408,3 +537,110 @@ Managed transport also preserves a trusted configured API base prefix such as
 Full's `/backend`; it does not strip or rewrite the signed origin/association
 identity. Only simple path segments are accepted. Prefix compatibility supplies
 no new route activation or execution right.
+
+### Dormant finite recon projection (NM-3)
+
+`authorization.recon_plan` is a pure, opt-in contract projection, with no CLI,
+MCP, default capability or recon executor. The initial slice accepts canonical
+finite ASCII hostnames, explicit HTTPS/443 GET-root tuples, IPv4 destination
+CIDRs and numeric IPv4 resolver endpoints. A-only DNSx and the exact reviewed
+Linux release binary hashes are required; Windows and A+AAAA remain unsupported.
+Existing Gate behavior and default capabilities are preserved.
+
+The signed full-plan digest binds both tools, all original candidates, resolvers,
+destination networks, fixed options/environment, a shared deadline and evidence
+byte ceiling. The existing human approval and ledger allocate one whole journey
+ordinal before any future execution. No stage refund, smaller post-DNS reservation
+or additional budget store is introduced. The conditional Linux source model
+reserves `4M` HTTP application requests and `2N + 50M` DNS application questions for
+N original DNS inputs and M original URL inputs. DNS authority is explicit in the
+human-reviewed plan digest; this is neither an independent DNS quota nor a global
+cross-plan token pool. These numbers do not bound packets, connections or bytes.
+Evidence byte limits are declarations for future enforcement, not disk quotas.
+
+Pure DNS handoff can select only original URL tuples; ambiguous, empty or mixed
+out-of-CIDR address sets fail closed. It cannot establish destination enforcement
+at connect time. No tool runs through this module. Even trusted explicit profile
+validation cannot pass the Gate runtime's first-line profile guard. No common
+platform currently has both the Linux tool proof and accepted native cancellation.
+The Docker managed worker remains disabled/unsupported, with its watchdog-hang
+security gate open. No execution adoption or full portability is claimed.
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.
+
+### Existing-worker inspection snapshot
+
+The explicit top-level `worker-state` facade reads an operator-selected existing
+identity and journal. It uses the pure identity validator and noncreating bounded
+reader, `journal_connection(readonly=True)`, and one `BEGIN` read snapshot. The
+existing full local-holds engine and unfinished RunRecord validation accept that
+same connection; ordinary callers delegate with unchanged predicates and no
+inspection budget. Optional checkpoints cover history loops and nested scans only
+when the inspection supplies them. No Store/Journal constructor or migration runs.
+
+Inspection validates current schema, exact admission/runtime/Runner binding,
+original association joins and canonical retirement provenance. Genuine parent0
+without any per-runtime association is `empty_unissued`, never fabricated local
+retirement. A retired nonempty runtime keeps earlier released rows unchanged.
+If the next claim committed remotely but its reply was lost, the exact original
+observation can anchor retirement at server sequence N+1 while the local cursor
+stays N, including N=0. The preceding full audit validates existing released
+history. Inspection requires the exact next retired selection, no local attempt
+at N+1, no consumption, and the original validated snapshot; it creates no claim
+acknowledgement or history entry and preserves all earlier released rows.
+Closed preclaim tombstones remain unchanged and do not count as issued attempts.
+Incomplete facts are held with null counts; valid unretired state or nonzero
+global holds may report complete facts while remaining held. The closed public
+schema contains no raw rows, tokens, token hashes, identity labels or response
+values. Logical read-only WAL semantics do not promise zero filesystem writes.
+See [ADR0043](adr/0043-proposed-linux-worker-lifecycle-owner.md#offline-existing-state-inspection-amendment)
+and [the CLI contract](cli.md#offline-worker-state-inspection-nm-2-candidate).
+
+### Original worker reconciliation selector
+
+`authorization/worker_reconciliation.py` and the top-level `worker-reconcile`
+command reuse the same six-selection validators, complete read snapshot and closed
+`worker-state/1` audit builder. The audit contract is unchanged. A unique pending
+selection takes priority over the exact issued history head; ambiguity and absent
+original associations are held rather than guessed from a generic bounded list.
+No job/history count limit is added.
+
+Only a validated actionable original association reaches credential resolution and
+the existing original-key managed observation route. One response is retained for
+existing result/stop/retirement reconciliation; it cannot authorize another RPC or
+execution. Optional exact-association guards apply before observation and receipt
+metadata writes, including result/stop ACK/close transactions. Legacy callers keep
+the original default predicates and behavior. A final fresh audit must establish
+original-key-linked retirement and zero global holds before success is reported.
+
+The explicit writer uses `Journal.open_existing` without the ordinary constructor.
+It binds every `mode=rw` connection to the DB dev/inode observed at original
+selection and refuses missing/replaced/current-schema mismatches. It reuses the
+same transaction and existing SQL methods, including ordinary evidence-table
+creation during authenticated observation, not a second SQL recovery engine.
+Normal WAL sidecars remain supported. Existing Windows path pins and POSIX
+observed-file limitations remain; this is not an OS sandbox or content freeze.
+
+Already-retired state and truly empty parent0 return offline without credentials.
+A fully certified closed-preclaim parent0 cohort has a separate parent-only
+retirement branch. It preserves the existing early-return and physical selection
+ancestry paths. Reuse the original observation RECORD transaction, which validates
+its exact source and stores only evidence. Then a new full same-connection audit
+and retained original-key claimNone/unbound last0 snapshot permit updating only
+the exact parent. No tombstone, issued attempt, ACK or grant is created/rewritten.
+The full private cohort UUID tuple detects membership drift without a count cap.
+Inspection recognizes that original-key snapshot on its unchanged tombstone;
+actual nonzero associations remain visible. Global-holds engines are unchanged,
+and another runtime/run hold is never cleared or concealed by parent retirement. Distribution still owns physical stop and any
+future next-enable lifecycle; this component adds no service, Map endpoint,
+automatic reconciliation or activation.
+
+
+The separate `worker-bootstrap-state` reader shares the current journal schema,
+identity and bounded read-only snapshot with `worker-state`. It audits all
+existing local holds and fixed worker history tables without pretending there
+is an admitted worker parent. Absence of a journal is incomplete, not a zero
+ledger or fresh-installation assertion. Distribution still owns first and
+successor container lifecycle decisions; this helper grants no authority.

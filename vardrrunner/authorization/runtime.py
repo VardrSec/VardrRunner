@@ -1,9 +1,10 @@
-"""Explicit standalone reference execution; never called by CLI queue/MCP paths."""
+"""Explicit standalone Gate execution; never called by queue or MCP paths."""
 
 from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,7 @@ from vardrrunner import configs, credential_grants, handlers, resources, runner
 from .codec import TrustAnchor, digest, require
 from .contracts import ValidationContext, approved, timestamp
 from .ledger import AuthorizationLedger
+from .plan import PROFILE
 
 
 def execute_gate(
@@ -27,16 +29,27 @@ def execute_gate(
     run_dir: Path,
     *,
     expiring_grants: bool = False,
+    on_reserved: Callable[[], None] | None = None,
 ) -> Path:
     """Validate/reserve, reuse local secret approvals and execute a guarded Gate.
 
     This standalone prototype supplies no Mapless workspace or managed control.
     Operator invocation and a signed approval are both required by the caller.
     """
+    require(isinstance(plan, dict) and plan.get("profile") == PROFILE, "unsupported_enforcement")
     if expiring_grants:
         with credential_grants.required("standalone"):
             return execute_gate(
-                ledger, envelope, approval, plan, case, execution, anchors, context, run_dir
+                ledger,
+                envelope,
+                approval,
+                plan,
+                case,
+                execution,
+                anchors,
+                context,
+                run_dir,
+                on_reserved=on_reserved,
             )
     require(context.origin == "standalone", "managed_control_unsupported")
     require(
@@ -57,6 +70,10 @@ def execute_gate(
     handlers.check_gate_case(case, current.engagement_id)
     current = replace(current, now=datetime.now(timezone.utc))
     claimed = ledger.consume(envelope, approval, plan, case, execution, anchors, current)
+    # Trusted local journal bridge only. Failure spends permission without launch;
+    # no cross-table atomicity or automatic recovery/replay is claimed.
+    if on_reserved is not None:
+        on_reserved()
     deadline = min(
         timestamp(claimed["expires_at"]),
         timestamp(permission["expires_at"]),

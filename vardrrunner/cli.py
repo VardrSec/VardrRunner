@@ -19,11 +19,15 @@ from vardrrunner.commands import audit, auth, engagements, identity, imports, jo
 from vardrrunner.commands import credentials as credentials_cmd
 from vardrrunner.commands import doctor as doctor_cmd
 from vardrrunner.commands import heartbeat as heartbeat_cmd
+from vardrrunner.commands import managed_recovery as managed_recovery_cmd
 from vardrrunner.commands import pipeline as pipeline_cmd
 from vardrrunner.commands import setup as setup_cmd
 from vardrrunner.commands import status as status_cmd
 from vardrrunner.commands import test_cases as test_cases_cmd
 from vardrrunner.commands import updates as updates_cmd
+from vardrrunner.commands import worker_audit as worker_audit_cmd
+from vardrrunner.commands import worker_reconcile as worker_reconcile_cmd
+from vardrrunner.commands import workspace as workspace_cmd
 
 # Characters the CLI's output uses that legacy code pages (Windows cp1252 when
 # output is piped or redirected) cannot encode.
@@ -99,7 +103,8 @@ def _startup_cleanup(
     ),
 ) -> None:
     """Remove sensitive temp state left by a previously interrupted process."""
-    process_runner.cleanup_sensitive_temp_dirs()
+    if ctx.invoked_subcommand not in {"worker-state", "worker-reconcile", "worker-bootstrap-state"}:
+        process_runner.cleanup_sensitive_temp_dirs()
     if ctx.invoked_subcommand is not None:
         return
     if _interactive() and not shell.is_running():
@@ -288,10 +293,117 @@ def credentials_revoke(
     )
 
 
+workspace_app = typer.Typer(
+    help="Local workspace metadata and explicitly approved native standalone Gate execution.",
+    no_args_is_help=True,
+)
+app.add_typer(workspace_app, name="workspace")
+
+
+@workspace_app.command("create")
+def workspace_create(name: str = typer.Argument(..., help="Short workspace label, no credentials")):
+    """Create an inert local workspace and print its metadata as JSON."""
+    workspace_cmd.create(name)
+
+
+@workspace_app.command("show")
+def workspace_show(workspace_id: str = typer.Argument(..., help="Full local workspace ID")):
+    """Show workspace metadata as JSON without contacting Map."""
+    workspace_cmd.show(workspace_id)
+
+
+@workspace_app.command("gate")
+def workspace_gate(
+    workspace_id: str = typer.Argument(..., help="Local workspace bound by the signed approval"),
+    approval: Path = typer.Option(..., "--approval", help="Existing signed human approval"),
+    contract: Path = typer.Option(..., "--contract", help="Existing single-use execution contract"),
+    plan: Path = typer.Option(..., "--plan", help="Exact reviewed fixed-Gate plan"),
+    case: Path = typer.Option(..., "--case", help="Unresolved reviewed Gate case"),
+    execution: Path = typer.Option(..., "--execution", help="Reviewed Gate execution options"),
+    trust: Path = typer.Option(..., "--trust", help="Operator-selected public standalone trust"),
+    output: Path = typer.Option(..., "--output", help="New exclusive evidence directory"),
+):
+    """Native Windows standalone Gate; existing signed permission and expiring grants required."""
+    from vardrrunner.commands import workspace_gate as gate_cmd
+
+    gate_cmd.run(
+        workspace_id,
+        approval=approval,
+        contract=contract,
+        plan=plan,
+        case=case,
+        execution=execution,
+        trust=trust,
+        output=output,
+    )
+
+
+@workspace_app.command("list")
+def workspace_list(limit: int = typer.Option(100, "--limit", min=1, max=1000)):
+    """List saved local workspace metadata as JSON without contacting Map."""
+    workspace_cmd.list_workspaces(limit=limit)
+
+
 audit_app = typer.Typer(
     help="Inspect and export the sanitized local execution journal.", no_args_is_help=True
 )
 app.add_typer(audit_app, name="audit")
+
+
+@app.command("worker-state")
+def worker_state(
+    journal: str = typer.Option(..., "--journal", help="Explicit existing execution journal"),
+    identity: str = typer.Option(..., "--identity", help="Explicit existing Runner identity"),
+    runner_id: str = typer.Option(..., "--runner-id", help="Expected canonical Runner UUID"),
+    runtime_id: str = typer.Option(..., "--runtime-id", help="Expected canonical runtime UUID"),
+    runtime_sha256: str = typer.Option(..., "--runtime-sha256", help="Expected runtime digest"),
+    admission_sha256: str = typer.Option(
+        ..., "--admission-sha256", help="Expected admission digest"
+    ),
+):
+    """Inspect explicit existing worker state offline, without startup cleanup."""
+    worker_audit_cmd.worker_state(
+        journal=journal,
+        identity=identity,
+        runner_id=runner_id,
+        runtime_id=runtime_id,
+        runtime_sha256=runtime_sha256,
+        admission_sha256=admission_sha256,
+    )
+
+
+@app.command("worker-bootstrap-state")
+def worker_bootstrap_state(
+    journal: str = typer.Option(..., "--journal", help="Explicit absolute execution journal path"),
+    identity: str = typer.Option(
+        ..., "--identity", help="Explicit absolute existing Runner identity"
+    ),
+    runner_id: str = typer.Option(..., "--runner-id", help="Expected canonical Runner UUID"),
+) -> None:
+    """Inspect an installed journal before the first managed worker, offline."""
+    worker_audit_cmd.worker_bootstrap_state(journal=journal, identity=identity, runner_id=runner_id)
+
+
+@app.command("worker-reconcile")
+def worker_reconcile(
+    journal: str = typer.Option(..., "--journal", help="Explicit existing execution journal"),
+    identity: str = typer.Option(..., "--identity", help="Explicit existing Runner identity"),
+    runner_id: str = typer.Option(..., "--runner-id", help="Expected canonical Runner UUID"),
+    runtime_id: str = typer.Option(..., "--runtime-id", help="Expected canonical runtime UUID"),
+    runtime_sha256: str = typer.Option(..., "--runtime-sha256", help="Expected runtime digest"),
+    admission_sha256: str = typer.Option(
+        ..., "--admission-sha256", help="Expected admission digest"
+    ),
+):
+    """Reconcile at most one exact original worker run; never execute or stop work."""
+    worker_reconcile_cmd.worker_reconcile(
+        journal=journal,
+        identity=identity,
+        runner_id=runner_id,
+        runtime_id=runtime_id,
+        runtime_sha256=runtime_sha256,
+        admission_sha256=admission_sha256,
+    )
 
 
 @audit_app.command("list")
@@ -299,9 +411,12 @@ def audit_list(
     since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
     limit: int = typer.Option(100, "--limit", min=1, max=10_000),
     as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
+    engagement_id: str | None = typer.Option(
+        None, "--engagement", "-e", help="Exact local engagement or workspace ID"
+    ),
 ):
     """List recent journaled job runs."""
-    audit.list_runs(since=since, limit=limit, as_json=as_json)
+    audit.list_runs(since=since, limit=limit, as_json=as_json, engagement_id=engagement_id)
 
 
 @audit_app.command("show")
@@ -315,9 +430,29 @@ def audit_export(
     output: Path = typer.Option(..., "--output", "-o", help="Destination JSON file"),
     since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
     limit: int = typer.Option(10_000, "--limit", min=1, max=10_000),
+    engagement_id: str | None = typer.Option(
+        None, "--engagement", "-e", help="Exact local engagement or workspace ID"
+    ),
 ):
     """Atomically export sanitized journal records."""
-    audit.export_runs(output=output, since=since, limit=limit)
+    audit.export_runs(output=output, since=since, limit=limit, engagement_id=engagement_id)
+
+
+@audit_app.command("reconcile-managed")
+def audit_reconcile_managed(
+    run_id: str = typer.Argument(..., help="Exact local managed journal run ID"),
+):
+    """Observe retained managed receipts and retire only exact local metadata."""
+    managed_recovery_cmd.reconcile_managed_run(run_id=run_id)
+
+
+@audit_app.command("export-run")
+def audit_export_run(
+    run_id: str = typer.Argument(..., help="One terminal journal run ID"),
+    output: Path = typer.Option(..., "--output", "-o", help="New portable evidence directory"),
+):
+    """Export one run's redacted JSON evidence copy on supported POSIX systems."""
+    audit.export_run(run_id=run_id, output=output)
 
 
 @app.command()

@@ -30,9 +30,14 @@ VardrSec repository.
 - No AI attribution: no `Co-Authored-By` trailers or "Generated with" lines.
 
 ## Execution boundaries
-- **Never reintroduce startup or background execution** (ADR 0016): no service
-  install, sign-in task, detached worker or polling loop, opt-in or not. Queued jobs
-  run only from an explicit `jobs run`; starting a container never starts a scan.
+- **Default startup remains inert:** preserve explicit `jobs run`, direct commands
+  and their legacy behavior. Never install a sign-in task or silently enable scans.
+- **Owner-authorized New Moon work (2026-11-05):** the approved charter and current
+  owner instruction authorize an explicitly enabled managed Compose worker. This
+  supersedes ADR 0016's blanket worker ban for that bounded path only. Default
+  disabled, shared contract validation, authenticated control, grants, budgets,
+  confirmed termination and failure-path acceptance remain required before activation.
+  This authorization does not waive containment gates or approve added privileges.
 - **Subprocesses:** argv lists only, never `shell=True` or shell strings built from
   server data. `runner.program()` is the only way a command gets its executable.
   Every tool runs with an empty stdin, a timeout that kills the whole process tree,
@@ -56,6 +61,10 @@ VardrSec repository.
 - **Containerized Runner** (ADR 0019): UID/GID 10001, no added capabilities, no
   Docker socket, no published ports. Raw-packet modes are unsupported — never "fix"
   that with `--privileged`.
+  Owner-approved ADR 0043 (2026-11-05) permits only its separate worker's temporary
+  UID-0/SETUID/SETGID/SETPCAP bootstrap and trusted-host stop-report development.
+  All five capability sets must be empty before work; acceptance and default-off
+  requirements remain. Ordinary Runner retains the baseline above.
 
 ## Credentials and transport
 - Key sources, in order: `VARDRMAP_API_KEY`, OS keychain, then

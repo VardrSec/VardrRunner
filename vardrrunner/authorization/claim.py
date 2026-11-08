@@ -47,6 +47,20 @@ class ClaimError(AuthorizationError):
     """Fixed local reason; never a raw transport or journal exception."""
 
 
+class LocalPreclaimDenied(ClaimError):
+    """Opt-in local grant-policy denial before the claim callback is invoked."""
+
+
+def _local_grant_denial(error: Exception) -> bool:
+    return (
+        isinstance(error, credential_grants.GrantError)
+        and len(error.args) == 1
+        and type(error.args[0]) is str
+        and error.args[0]
+        in {"grant_missing_or_replaced", "grant_expired_or_revoked", "grant_binding_changed"}
+    )
+
+
 class ClaimStore:
     """Additive tombstones in the SAME journal; no capability or signed payload."""
 
@@ -127,7 +141,14 @@ class ClaimStore:
             raise ClaimError("managed_claim_already_reserved") from None
         return owner
 
-    def prepare_send(self, run_id: str, owner: str, utc: datetime, mono: float) -> None:
+    def prepare_send(
+        self,
+        run_id: str,
+        owner: str,
+        utc: datetime,
+        mono: float,
+        before_claim_send: Callable[[sqlite3.Connection, str], None] | None = None,
+    ) -> None:
         require(
             utc.tzinfo is not None and type(mono) in {int, float} and math.isfinite(mono),
             "invalid_claim_clock",
@@ -150,6 +171,10 @@ class ClaimStore:
                 ),
             ).rowcount
             require(changed == 1, "managed_claim_phase")
+            if before_claim_send is not None:
+                # Trusted metadata-only hook on this exact transaction. No
+                # transport/second connection may intervene before its commit.
+                before_claim_send(con, run_id)
 
     def hold(self, run_id: str, owner: str, state: str) -> None:
         with self.journal._connection() as con:
@@ -297,21 +322,38 @@ class ManagedRun:
                         )
                     except Exception:
                         pass  # Lost durable proof is a hold, never a report right.
-            try:
-                self.store.hold(self.run_id, self._owner, "held_after_claim")
-            except Exception:
-                pass
+                if self._confirmed_stop is not None:
+                    try:
+                        from .results import retain_stopped_artifact
+
+                        retain_stopped_artifact(self, directory)
+                    except Exception:
+                        pass  # Missing/malformed evidence keeps the original stop lane.
+            if self._returned_artifact is None:
+                try:
+                    self.store.hold(self.run_id, self._owner, "held_after_claim")
+                except Exception:
+                    pass
             raise
 
-    def finalize(self, submit: Callable[[dict], dict], finish: Callable[[dict], dict]) -> None:
+    def finalize(self, submit: Callable[[dict], dict], finish: Callable[[dict], dict]) -> dict:
         from .results import finalize
 
-        finalize(self, submit, finish)
+        return finalize(self, submit, finish)
 
     def report_stop(self, send: Callable[[dict], dict]) -> None:
         from .stops import report
 
         report(self, send)
+
+    def finalize_stopped(
+        self, submit: Callable[[dict], dict], finish: Callable[[dict], dict]
+    ) -> bool:
+        """Prefer the retained failed result; ambiguity never permits stop fallback."""
+        if self._confirmed_stop is None or self._returned_artifact is None:
+            return False
+        self.finalize(submit, finish)
+        return True
 
 
 class ManagedEntry:
@@ -333,6 +375,11 @@ class ManagedEntry:
         claim: Callable[[dict], dict],
         current: Callable[[dict], dict],
         consume: Callable[[dict], dict] | None = None,
+        verified_lease: Callable[[dict, float, float], None] | None = None,
+        verified_runtime_lease: Callable[[dict, float, float], None] | None = None,
+        preclaim_check: Callable[[], None] | None = None,
+        before_claim_send: Callable[[sqlite3.Connection, str], None] | None = None,
+        classify_local_denials: bool = False,
         clock: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ):
@@ -345,11 +392,25 @@ class ManagedEntry:
         self.allocated_seconds = allocated_seconds
         self._claim, self._current = claim, current
         self._consume = consume
+        self._verified_lease = verified_lease
+        self._verified_runtime_lease = verified_runtime_lease
+        self._preclaim_check = preclaim_check
+        self._before_claim_send = before_claim_send
+        require(type(classify_local_denials) is bool, "invalid_preclaim_denial_mode")
+        self._classify_local_denials = classify_local_denials
         self.clock, self.monotonic = clock or (lambda: datetime.now(timezone.utc)), monotonic
         self._used = False
         self._artifact_limit: int | None = None
         self._invocation = uuid.uuid4().hex
         self.run_id: str | None = None
+
+    def _credential_check(self) -> None:
+        try:
+            handlers.check_gate_case(self.case, self.engagement_id)
+        except credential_grants.GrantError as error:
+            if self._classify_local_denials and _local_grant_denial(error):
+                raise LocalPreclaimDenied("local_credential_denied_before_rpc") from None
+            raise
 
     def _check(self, directory: Path, plan: dict | None = None):
         require(execution_control.available(), "controlled_process_tree_unsupported")
@@ -357,7 +418,7 @@ class ManagedEntry:
         cfg = configs.VardrGateConfig.from_dict(
             {"test_case": self.case, "execution": self.execution}
         )
-        handlers.check_gate_case(self.case, self.engagement_id)
+        self._credential_check()
         binding, compiled = target_budget.prepare(cfg)
         require(
             encoded(
@@ -424,34 +485,53 @@ class ManagedEntry:
                 record.command_profile.get("managed_invocation") == self._invocation,
                 "managed_claim_existing_invocation",
             )
-            owner = self.store.reserve(
-                record.run_id,
-                fingerprints,
-                {
-                    "backend_url": self.origin,
-                    "job_id": self.job_id,
-                    "engagement_id": self.engagement_id,
-                    "job_type": "vardrgate_api_test",
-                    "tool": "vardrgate_api_test",
-                    "target_source": "case",
-                },
-            )  # A begin return is NOT ownership.
+            try:
+                owner = self.store.reserve(
+                    record.run_id,
+                    fingerprints,
+                    {
+                        "backend_url": self.origin,
+                        "job_id": self.job_id,
+                        "engagement_id": self.engagement_id,
+                        "job_type": "vardrgate_api_test",
+                        "tool": "vardrgate_api_test",
+                        "target_source": "case",
+                    },
+                )  # A begin return is NOT ownership.
+            except ClaimError as error:
+                if error.args == ("managed_claim_already_reserved",):
+                    try:
+                        from .reconciliation import retire_reserve_conflict
+
+                        retire_reserve_conflict(
+                            self.journal, record.run_id, self._invocation, self.origin, self.job_id
+                        )
+                    except Exception:
+                        pass  # Uncertain metadata stays held; no RPC has been attempted.
+                raise
             try:
                 self.journal.transition(record.run_id, Phase.VALIDATING)
                 self.journal.transition(record.run_id, Phase.TARGETS_RESOLVED)
                 mono, utc = self.monotonic(), self.clock()
                 require(utc.tzinfo is not None, "invalid_claim_clock")
-                self.store.prepare_send(record.run_id, owner, utc, mono)
+                self.store.prepare_send(record.run_id, owner, utc, mono, self._before_claim_send)
                 self._check(directory, plan)  # No journal writer held while checking grants.
                 require(not self.journal.stop_requested(record.run_id), "local_stop_before_claim")
-                handlers.check_gate_case(
-                    self.case, self.engagement_id
-                )  # Last blocking check after all preparation/journal waits.
-            except Exception:
+                self._credential_check()  # Last blocking check after preparation/journal waits.
+                if self._preclaim_check is not None:
+                    # Trusted local-only check, inside the known pre-RPC guard.
+                    # Opaque claim callback failures below remain unknown sends.
+                    self._preclaim_check()
+            except Exception as error:
                 try:
                     self.store.hold(record.run_id, owner, "denied_before_rpc")
+                    from .reconciliation import retire_preclaim
+
+                    retire_preclaim(self.journal, record.run_id)
                 except Exception:
                     pass
+                if isinstance(error, LocalPreclaimDenied):
+                    raise error from None
                 raise ClaimError("local_claim_denied_before_rpc") from None
             try:
                 reply = self._claim(
@@ -505,6 +585,8 @@ class ManagedEntry:
                     claim_anchor_utc=utc,
                     grant_snapshot=dict(policy.expected or {}),
                     grant_expiry=policy.expires_at,
+                    verified_lease=self._verified_lease,
+                    verified_runtime_lease=self._verified_runtime_lease,
                 )
                 handlers.check_gate_case(self.case, self.engagement_id)
                 gate.refresh()  # Full signed/owned/current validation before durable binding; consumes nothing.
