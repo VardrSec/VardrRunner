@@ -202,10 +202,19 @@ def doctor(
         "--offline",
         help="Skip release-registry requests; still check the configured backend",
     ),
+    standalone: bool = typer.Option(
+        False,
+        "--standalone",
+        help="Check local Runner without Map credentials or API; use --offline to skip release discovery",
+    ),
 ):
     """Deep preflight before running scans — exits non-zero on actionable failures."""
     doctor_cmd.run_doctor(
-        as_json=as_json, production=production, platform=platform, offline=offline
+        as_json=as_json,
+        production=production,
+        platform=platform,
+        offline=offline,
+        **({"standalone": True} if standalone else {}),
     )
 
 

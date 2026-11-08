@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add explicit `doctor --standalone` for local state/tool diagnostics without Map
+  credentials or API calls. Combine with `--offline` to skip release discovery;
+  retain ordinary Full checks and refuse the incompatible platform combination.
+
 - Add explicit finite Recon authorization/execution using existing managed DNSx
   and HTTPx, one signed ledger ordinal, a shared monotonic deadline and the
   existing owner/journal/export. Validate every DNS address and preserve original

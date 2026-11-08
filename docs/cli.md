@@ -1494,3 +1494,8 @@ bundle through the native owner `--local` entrypoint. It runs one fixed Gate job
 with no Map credential or signing key. Ordinary `workspace gate` retains its
 platform checks. Distribution owns the explicit overlay and optional evidence
 copy from `/exports/result`; see [ADR 0044](adr/0044-explicit-local-worker.md).
+
+For a Mapless installation, use `vardrrunner doctor --standalone --offline --json`.
+`--standalone` omits Map credentials/authentication; `--offline` separately skips
+release discovery. Local state, permissions and tool checks remain. The standalone
+and platform profiles cannot be combined. Diagnostics do not authorize jobs.
