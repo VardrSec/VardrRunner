@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Include the existing optional MCP SDK in the development toolkit image and
+  exercise bounded offline stdio metadata reads in container smoke. Keep the core
+  image lean, default startup inert and distribution sessions explicitly exclusive.
+  See [Docker MCP details](changelog/unreleased-docker-mcp.md).
+
 - Connected MCP queue tools now create pending Map proposals for operator approval;
   older Map refusal never falls back to direct queueing. Matching Map proposal
   endpoints are required before use. No approval or execution tool is added.

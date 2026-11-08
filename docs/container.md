@@ -124,3 +124,36 @@ the public checksum database stays enabled, and TLS verification is unchanged. E
 source receipt and binary hash is still checked. The setting belongs only to builders;
 the runtime image does not inherit it, so tools retain their HTTP/2 support. Container
 CI verifies that the final toolkit has no `GODEBUG` environment override.
+
+## Explicit MCP review sessions
+
+The development `toolkit` target includes the existing optional MCP SDK alongside
+the authorization extra; `core` stays lean. Nothing serves MCP at startup. Invoke
+`mcp --standalone` explicitly for local workspace/run metadata without Map,
+queueing, execution or file-export tools. The connected MCP surface still needs
+its documented Map configuration and operator-approved proposals.
+
+MCP uses raw stdio: keep stdin open (`-i`) and do not allocate a TTY (`-t`).
+For example, after the toolkit build above, use the existing state volume:
+
+```sh
+docker run --rm -i --network none --user 10001:10001 --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --mount source=vardrrunner-state,target=/home/runner/.vardrmap \
+  vardrrunner:toolkit mcp --standalone
+```
+
+For Full or Mapless installed by VardrSec, configure an MCP client to invoke the
+canonical Python entrypoint directly: `python3 /path/to/VardrSec/vardrsec.py runner
+-- mcp --standalone` (Windows: the installed Python executable with the same
+script arguments). The existing installed image/project and named state volume
+are selected; avoid PowerShell text pipelines for raw protocol bytes.
+
+This is an explicit **exclusive CLI read/review session**. The distribution's
+installation lock is preserved: close the MCP client before canonical issuer,
+execution or maintenance commands. Concurrent MCP/canonical commands are not
+claimed. No service, published port, Docker socket, privilege or automatic worker
+enablement is added. The existing container smoke workflow uses the SDK to
+initialize, list the two local tools and inspect an empty fresh container; it sends
+no target requests and mounts no existing data. SDK context exit closes the session
+and removes its ephemeral `--rm` container.
