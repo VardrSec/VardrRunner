@@ -120,7 +120,20 @@ def test_target_guard_is_passed_through_owned_job_lifecycle(prepared, tmp_path, 
         )
     assert execute.call_args.kwargs["request_guard"] == plan
     assert execute.call_args.args[2].execution == plan["execution"]
-    client.execution_control.assert_called_once()
+    calls = client.execution_control.call_args_list
+    finishes = [call for call in calls if call.kwargs.get("finish") is True]
+    assert len(finishes) == 1
+    owned_binding = {
+        "runner_id": client.claim_controlled.call_args.args[1],
+        "origin": client.base,
+        "token": "synthetic-capability-" * 3,
+    }
+    assert finishes[0].args == ("job", {**owned_binding, "outcome": "completed"})
+    assert finishes[0].kwargs == {"finish": True}
+    for refresh in calls:
+        if refresh is not finishes[0]:
+            assert refresh.args == ("job", owned_binding)
+            assert refresh.kwargs == {}
 
 
 def test_target_budget_requires_control_before_contact(monkeypatch):
