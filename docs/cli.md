@@ -1536,3 +1536,23 @@ For a Mapless installation, use `vardrrunner doctor --standalone --offline --jso
 `--standalone` omits Map credentials/authentication; `--offline` separately skips
 release discovery. Local state, permissions and tool checks remain. The standalone
 and platform profiles cannot be combined. Diagnostics do not authorize jobs.
+
+### NM-4 queue review and portable provenance
+
+Connected MCP `queue_job` and `queue_pipeline` create pending Map proposals, not
+jobs. Set `authorization_contract_required: true` for a managed Gate proposal;
+its later execution still needs the existing signed contract. Review exact inputs
+in Map and approve there; the response remains
+`queued: false` and requires operator approval. Follow `list_proposals` while
+pending, then existing job/event reads after approval. Matching Map support for
+these proposal kinds is required; an older backend fails closed with no direct
+queue fallback. The MCP surface contains no approval tool. Approval queues work
+without issuing a signed execution contract or granting indefinite authority.
+
+Gate and finite Recon artifacts carry redacted reviewed-input structure and
+recorded Runner/tool identity where available. An unknown version remains unknown.
+The original case hash refers to the reviewed input, not the redacted derivative.
+Credentials and request payloads may be omitted, with required operator inputs
+identified. These exports are evidence for review, not runnable authority or a
+claim that an independent reassessment occurred. Existing authorize/execute and
+audit/export commands remain the execution and publication boundaries.

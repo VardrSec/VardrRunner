@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from vardrrunner import api, configs, keychain, redaction, runner
+from vardrrunner import api, configs, keychain, manifests, redaction, runner
 from vardrrunner import config as runner_config
 from vardrrunner.targets import _is_wildcard, _resolve_targets
 
@@ -1135,6 +1135,7 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         request_guard: dict | None = None,
         total_timeout: int | None = None,
         execution_deadline: float | None = None,
+        tool_provenance: dict | None = None,
     ) -> Path | None:
         output = run_dir / "vardrgate_result.json"
         # Resolve credential references to real values locally, keeping secrets
@@ -1180,6 +1181,17 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         result["case_hash"] = hashlib.sha256(
             json.dumps(config.test_case, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+        result["provenance"] = manifests.evidence_provenance(
+            config.test_case,
+            result["case_hash"],
+            {
+                "vardrgate_api_test": {
+                    "sha256": (tool_provenance or {}).get("sha256", "unknown"),
+                    "version": (tool_provenance or {}).get("version", "unknown"),
+                    "hash_basis": (tool_provenance or {}).get("hash_basis", "unknown"),
+                }
+            },
+        )
         output.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         return output
 

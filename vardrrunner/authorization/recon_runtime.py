@@ -271,6 +271,18 @@ def execute_recon(
         "plan_sha256": digest(encoded(plan)),
         "case_hash": plan["case_hash"],
         "tools": plan["tools"],
+        "provenance": manifests.evidence_provenance(
+            case,
+            plan["case_hash"],
+            {
+                name: {
+                    "sha256": hashes[name],
+                    "version": version,
+                    "hash_basis": "qualified_managed_binary",
+                }
+                for name, version in _VERSIONS.items()
+            },
+        ),
         "dns": dns_rows,
         "http": observations,
         "counting": {

@@ -532,6 +532,10 @@ def test_runtime_two_tool_handoff_and_fail_closed(
             assert document["http"][0]["logical_url"] == "https://one.example.test:443/"
             assert document["handoff"]["execution_authority"] is False
             assert document["handoff"]["requires_new_review"] is True
+            assert document["provenance"]["tools"]["httpx"]["sha256"] == hashes["httpx"]
+            assert document["provenance"]["tools"]["dnsx"]["version"] == "1.3.1"
+            assert document["provenance"]["case_hash"] == plan["case_hash"]
+            assert document["provenance"]["case_snapshot"]["candidates"] == case["candidates"]
             assert finish.call_count == 1
         else:
             with pytest.raises((AuthorizationError, runtime_module.runner.ToolError)):

@@ -64,6 +64,8 @@ def test_guarded_standalone_reuses_handler_and_single_use(local_execution, tmp_p
     grants.assert_called_once_with(s["case"], "eng-1")
     assert handler.call_args.kwargs["request_guard"] == s["plan"]
     assert handler.call_args.kwargs["total_timeout"] == 60
+    assert handler.call_args.kwargs["tool_provenance"]["hash_basis"] == "verified_runtime_binary"
+    assert handler.call_args.kwargs["tool_provenance"]["sha256"] == s["runtime"].tool_sha256
     other = tmp_path / "second"
     other.mkdir()
     with pytest.raises(AuthorizationError, match="replayed"):
