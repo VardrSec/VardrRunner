@@ -386,13 +386,23 @@ Nothing updates on its own: only typing `vardrrunner update` installs anything.
 
 ```bash
 pip install 'vardrrunner[mcp]'   # one-time: the MCP server is an optional extra
-vardrrunner mcp                  # serve over stdio (clients launch this for you)
+vardrrunner mcp                  # serve connected tools over stdio
+vardrrunner mcp --standalone     # local read-only metadata; no Map configuration
 ```
 
 Runs a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio so an MCP
 client — Claude Code, Claude Desktop — can drive a VardrMap engagement with the same `vmap_`
 key this runner already uses. The agent's model is supplied by the client; this command only
 adapts VardrMap's API to MCP tools. See [ADR 0015](adr/0015-mcp-server.md).
+
+The explicit `--standalone` surface exposes only `list_local_workspaces` and
+`get_local_run(workspace_id, run_id)`. It reads the existing journal without creating
+or migrating it. Workspace labels, paths, target responses, credentials, error text
+and artifact contents are omitted. Run reads require the selected workspace and a
+standalone controlled-run binding. Lists are bounded and report `has_more`; recorded
+phases and artifact hashes are metadata, not independent verification. This mode
+has no authority, execution, queue, export or connected Map tools. It uses the same
+optional MCP dependency and stdio transport; default connected behavior is unchanged.
 
 Register it once with your client:
 
@@ -594,6 +604,33 @@ Existing connected commands retain their meaning and still require Map as
 documented. Workspace state shares the existing local journal; `audit` continues
 to inspect/export run evidence. Full Mapless execution and portable workspace
 export are not delivered by this metadata increment.
+
+### Local Recon-to-Gate drafts
+
+```bash
+vardrrunner workspace draft-gate <workspace-id> --run <completed-recon-run-id> \
+  --output NEW_PRIVATE_DIRECTORY
+```
+
+This local command reads a successful controlled finite Recon run in the selected
+workspace. The existing artifact reader checks its retained hash, size and JSON
+shape; plan/profile bindings and actual HTTP observations must match. It contacts
+no Map service or target, creates no approval and consumes no execution authority.
+
+The existing protected portable-export publisher writes `artifact.json` containing
+a `vardr.gate-drafts/1` envelope, `audit.json` with original run provenance, and
+`manifest.json` binding the redacted derivative. Source run/artifact/plan/tool hashes
+and timing remain in the envelope. Drafts use `{name, description, spec}` entries
+with only original observed HTTPS GET-root URLs; response bodies are not copied.
+Identities and expected access remain empty, so the drafts cannot execute. Supply
+reviewed identities, credential references, ownership/tenant boundaries and policy
+in each `spec`, then use the existing separate authorization workflow. The command
+does not infer those decisions from a successful HTTP response or queue work.
+
+Output must be a new directory. Existing POSIX private-directory and native Windows
+24H2+/fixed-local-NTFS export boundaries apply; unsupported hosts refuse rather than
+fall back to another publisher. Journal reads may maintain ordinary SQLite sidecars;
+this is not an immutable filesystem snapshot or a schema migration.
 
 ### Explicit native standalone Gate
 

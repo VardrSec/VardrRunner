@@ -120,6 +120,91 @@ def invoke(f):
     audit.export_run(f.record.run_id, f.output)
 
 
+@pytest.mark.parametrize("kind", ["valid", "workspace_mismatch", "artifact_changed"])
+def test_local_recon_drafts_preserve_integrity_and_require_review(seeded, capacity, kind):
+    from vardrrunner.authorization.codec import AuthorizationError
+    from vardrrunner.authorization.plan import compile_gate_plan
+    from vardrrunner.authorization.recon_plan import RUNTIME_PROFILE
+    from vardrrunner.commands import workspace_drafts
+    from vardrrunner.workspaces import Workspaces
+
+    f = seeded()
+    workspace = Workspaces(f.journal).create("local drafting")
+    other = Workspaces(f.journal).create("other workspace")
+    url = "https://one.example.test:443/"
+    document = {
+        "schema": "vardr.recon-evidence/1",
+        "profile": RUNTIME_PROFILE,
+        "plan_sha256": "a" * 64,
+        "case_hash": "b" * 64,
+        "tools": {"httpx_sha256": "c" * 64, "dnsx_sha256": "d" * 64},
+        "handoff": {
+            "requires_new_review": True,
+            "execution_authority": False,
+            "candidate_urls": [url],
+        },
+        "http": [
+            {
+                "candidate": {
+                    "hostname": "one.example.test",
+                    "scheme": "https",
+                    "port": 443,
+                    "path": "/",
+                    "method": "GET",
+                },
+                "logical_url": url,
+                "outcome": "response_observed",
+                "observations": [{"status_code": 200, "body": "never-copy-body"}],
+            }
+        ],
+    }
+    f.artifact.write_text(json.dumps(document))
+    record = f.journal.begin(
+        job_id="local-recon",
+        backend_url="",
+        engagement_id=workspace.workspace_id,
+        job_type="recon",
+        tool="recon",
+        target_source="explicit",
+        command_profile={
+            "standalone_profile": RUNTIME_PROFILE,
+            "origin": "standalone",
+            "controlled": True,
+            "plan_sha256": "a" * 64,
+        },
+    )
+    for phase in (
+        Phase.VALIDATING,
+        Phase.TARGETS_RESOLVED,
+        Phase.CLAIMING,
+        Phase.CLAIMED,
+        Phase.EXECUTING,
+    ):
+        f.journal.transition(record.run_id, phase, run_dir=str(f.source))
+    f.journal.attach_artifact(record.run_id, f.artifact)
+    record = f.journal.finish(record.run_id, Phase.DONE, status="done")
+    if kind == "artifact_changed":
+        f.artifact.write_text("{}")
+    selected = other.workspace_id if kind == "workspace_mismatch" else workspace.workspace_id
+    if kind != "valid":
+        with pytest.raises(typer.Exit):
+            workspace_drafts.draft_gate(selected, record.run_id, f.output)
+        assert not f.output.exists()
+    else:
+        workspace_drafts.draft_gate(selected, record.run_id, f.output)
+        artifact = (f.output / "artifact.json").read_text()
+        result = json.loads(artifact)
+        assert result["requires_review"] and result["execution_authority"] is False
+        assert result["source"]["artifact_sha256"] == record.artifact_sha256
+        spec = result["cases"][0]["spec"]
+        assert spec["request"] == {"method": "GET", "url": url}
+        assert spec["identities"] == spec["expected_access"] == []
+        assert "never-copy-body" not in artifact
+        with pytest.raises(AuthorizationError, match="invalid_identities"):
+            compile_gate_plan(spec, tool_sha256="e" * 64)
+    assert f.journal.get(record.run_id) == record
+
+
 def test_windows_adapter_reuses_shared_policy(seeded, capacity, monkeypatch):
     """Mocked platform routing only; not native file security acceptance."""
     f = seeded()

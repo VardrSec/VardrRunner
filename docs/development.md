@@ -1,5 +1,18 @@
 # VardrRunner — Development
 
+Standalone MCP reuses `test_mcp_server.py` for the exact two-tool/read-only surface,
+noncreating absent-journal read, fixed metadata projection, workspace mismatch and
+connected-run refusal, with no Map client construction. The existing MCP suite
+retains connected behavior; `TestMcpCommand` asserts the explicit standalone kwarg.
+These mocked/local-metadata checks execute no scanner or authority operation.
+
+Local assisted drafting reuses `test_portable_export.py` for one focused
+valid/workspace-mismatch/artifact-tampering regression, including nonrunnable empty
+identity/decision specs and no response-body copying. The existing `test_cli.py`
+route case asserts draft-gate run/output kwargs. Reuse the export integrity, privacy
+and Windows adapter cases; do not start another tool or containment campaign for
+this inert projection. Run the required static and existing full coverage checks.
+
 Finite Recon production uses the existing tool launcher, native epoch, ledger
 and export. The focused existing Recon/owner/CLI cases cover explicit capability,
 both binary hashes, all-answer CIDR rejection, fixed-address/original-host handoff,

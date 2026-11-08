@@ -1,5 +1,12 @@
 # VardrRunner — Architecture
 
+Explicit `mcp --standalone` selects two local read tools before Map client setup.
+It reuses the existing noncreating workspace/journal readers and exact standalone
+workspace/run binding. Only fixed metadata is projected through the redactor;
+paths, free-form labels, response bodies and raw errors are omitted. It opens no
+artifact and registers no authority, execution, queue or export tools. Connected
+MCP remains the default; both modes use the same optional SDK and stdio transport.
+
 Guarded Gate `execution_in_progress` files are local checkpoints. Only an existing
 trusted native confirmed stop may promote their case-bound pending rows into a
 separate cancelled result; the original bytes remain unchanged. Normal return
@@ -665,3 +672,18 @@ successor container lifecycle decisions; this helper grants no authority.
 `LocalAdmission` and the authenticated native-owner SDK. Native DONE precedes
 ledger completion and journal DONE. Map admission and ordinary Runner privileges
 are unchanged; see [ADR 0044](adr/0044-explicit-local-worker.md).
+
+## Local assisted Gate drafts
+
+`commands/workspace_drafts.py` projects a verified completed finite Recon artifact
+into nonrunnable case drafts for its existing workspace. It reuses the noncreating
+current-schema journal/workspace readers and the bounded artifact integrity reader.
+A trusted internal callable on `audit.export_run` transforms only the derivative
+artifact; default export bytes/metadata and the protected three-file publisher are
+unchanged. Original run provenance stays in audit, while the new artifact retains
+source hashes and timing. Only original logical HTTPS candidates with HTTP status
+observations produce draft specs; no response body, identity, owner/tenant or access
+decision is inferred. Empty identities/decisions require operator editing and a
+new, separate reviewed authorization. No Map/API, queue, execution, signing or new
+state store participates. This drafting command adds no local coverage claim;
+standalone MCP metadata access remains a separate explicit mode.

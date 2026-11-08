@@ -50,6 +50,12 @@ def test_workspace_list_limit_is_forwarded():
         result = runner.invoke(app, ["workspace", "list", "--limit", "7"])
     assert result.exit_code == 0, result.output
     listing.assert_called_once_with(limit=7)
+    with patch("vardrrunner.commands.workspace_drafts.draft_gate") as drafting:
+        result = runner.invoke(
+            app, ["workspace", "draft-gate", "a" * 32, "--run", "run-id", "--output", "drafts"]
+        )
+    assert result.exit_code == 0, result.output
+    drafting.assert_called_once_with("a" * 32, run_id="run-id", output=Path("drafts"))
 
 
 def test_jobs_run_expiring_grants_routes_opt_in():
@@ -889,6 +895,17 @@ class TestMcpCommand:
         monkeypatch.setitem(sys.modules, "vardrrunner.mcp_server", fake_mod)
         result = invoke("mcp")
         fake_mod.run.assert_called_once_with()
+        assert result.exit_code == 0
+
+    def test_mcp_standalone_passes_explicit_mode(self, monkeypatch):
+        import sys
+        from unittest.mock import MagicMock
+
+        fake_mod = MagicMock()
+        monkeypatch.setitem(sys.modules, "mcp.server", MagicMock())
+        monkeypatch.setitem(sys.modules, "vardrrunner.mcp_server", fake_mod)
+        result = invoke("mcp", "--standalone")
+        fake_mod.run.assert_called_once_with(standalone=True)
         assert result.exit_code == 0
 
     def test_mcp_without_the_extra_prints_install_hint(self, monkeypatch):

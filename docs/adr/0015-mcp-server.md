@@ -273,3 +273,12 @@ scope or authorization, because the act that applies a change is still withheld.
 Each propose tool takes a `reason` and a `source` so the operator can judge the proposal
 without leaving the console. Requires the matching VardrMap release with the
 `/engagements/{id}/proposals` endpoints; older backends return 404 and the tools simply fail.
+
+## Amendment (unreleased): explicit standalone metadata reads
+
+`mcp --standalone` selects a separate read-only tool surface before any Map client
+is constructed. Existing workspace and journal readers provide bounded workspace
+IDs/timestamps and one explicitly workspace-bound standalone run. No names, paths,
+response bodies, credentials or raw errors are returned; hashes are recorded
+metadata rather than artifact verification. No local authority, execution, queue
+or file-export tools are registered. The connected default remains unchanged.
