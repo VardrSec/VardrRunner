@@ -723,3 +723,17 @@ keeps the original local cursor and attempt count, preserves both released rows,
 and validates only the exact next server-issued retirement. The JSON CLI checks
 are offline; synthetic fixtures do not qualify installed transport loss, physical
 exit, containment, or release.
+
+
+### Standalone operator provisioning
+
+Install the existing `authorization` extra for the workspace issuer commands.
+`workspace authority-init` keeps its private signing key outside execution-state
+directories; `workspace authorize` emits only the six existing public protocol
+documents. Packaging must mount the issuer directory only into the operator
+signing command, never into the tool worker. Preserve private file permissions;
+stage worker-readable copies under the execution UID rather than publishing case
+data to all local users. Do not bake an issuer, credential or fixture key into an
+image. Native `workspace execute --export` reuses journal evidence and the existing
+redacted terminal export. CLI routing and the existing synthetic workspace Gate
+fixture cover this composition without invoking a scanner or Map service.

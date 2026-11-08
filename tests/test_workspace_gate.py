@@ -555,3 +555,81 @@ def test_standalone_run_exports_without_changing_consumption_or_grants(journey, 
     with pytest.raises(typer.Exit):
         invoke(f, output=f.tmp / "export-does-not-rearm")
     assert consumed(f) == 2 and len(f.calls) == 1
+
+
+def test_operator_provision_authorize_execute_uses_existing_runtime(journey, monkeypatch):
+    from unittest.mock import patch
+
+    from vardrrunner.commands import workspace_authority as operator
+
+    f = journey
+    monkeypatch.setattr(
+        operator, "sys", SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True))
+    )
+    monkeypatch.setattr(operator.typer, "prompt", lambda *a, **kw: "APPROVE")
+    signer = f.tmp / "private-issuer"
+    public = f.tmp / "public-authorization"
+    operator.authority_init(f.workspace.workspace_id, output=signer)
+    operator.authorize(
+        f.workspace.workspace_id,
+        authority=signer,
+        case=f.paths["case"],
+        execution=None,
+        output=public,
+        expires_in=300,
+    )
+    assert set(p.name for p in public.iterdir()) == {name + ".json" for name in operator.DOCUMENTS}
+    assert not (public / "signing.key").exists()
+    metadata = decoded((signer / "authority.json").read_bytes())
+    permission = operator.read_document(public / "approval.json")
+    from vardrrunner.authorization.contracts import approved
+
+    reviewed = approved(permission, operator.read_anchors(public / "trust.json"))["context"]
+    assert reviewed["runner_id"] == f.identity.runner_id
+    assert reviewed["engagement_id"] == f.workspace.workspace_id
+    assert reviewed["max_executions"] == 1 and reviewed["mode"] == "strict"
+    assert reviewed["authority_sha256"] == metadata["authority_sha256"]
+    assert all(g["issuer"] == "standalone" for g in f.grant_store.entries())
+    with patch.object(audit, "export_run") as export:
+        operator.execute(
+            f.workspace.workspace_id, authorization=public, output=f.output, export=f.tmp / "share"
+        )
+    record = f.journal.list()[0]
+    assert record.phase == Phase.DONE and record.pid is None and len(f.calls) == 1
+    export.assert_called_once_with(record.run_id, f.tmp / "share")
+    with pytest.raises(typer.Exit):
+        operator.execute(f.workspace.workspace_id, authorization=public, output=f.tmp / "replay")
+    assert len(f.calls) == 1
+
+
+def test_operator_issuer_separation_and_revocation_never_reset(journey, monkeypatch):
+    from vardrrunner.commands import workspace_authority as operator
+
+    f = journey
+    state = f.tmp / "execution-state"
+    monkeypatch.setattr(config, "CONFIG_DIR", state)
+    with pytest.raises(typer.Exit):
+        operator.authority_init(f.workspace.workspace_id, output=state / "issuer")
+    assert not state.exists()
+    signer = f.tmp / "private-issuer"
+    operator.authority_init(f.workspace.workspace_id, output=signer)
+    metadata = decoded((signer / "authority.json").read_bytes())
+    AuthorizationLedger(f.journal).set_state(
+        metadata["issuer"]["id"], f.workspace.workspace_id, 2, True, metadata["authority_sha256"]
+    )
+    monkeypatch.setattr(
+        operator, "sys", SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True))
+    )
+    monkeypatch.setattr(operator.typer, "prompt", lambda *a, **kw: "APPROVE")
+    before = f.grant_store.entries()
+    with pytest.raises(typer.Exit):
+        operator.authorize(
+            f.workspace.workspace_id,
+            authority=signer,
+            case=f.paths["case"],
+            execution=None,
+            output=f.tmp / "forbidden",
+            expires_in=300,
+        )
+    assert not (f.tmp / "forbidden").exists() and not f.calls
+    assert f.grant_store.entries() == before

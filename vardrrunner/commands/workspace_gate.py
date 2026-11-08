@@ -19,7 +19,7 @@ from vardrrunner.authorization.documents import read_anchors, read_bytes, read_d
 from vardrrunner.authorization.ledger import AuthorizationLedger
 from vardrrunner.authorization.plan import PROFILE, origin
 from vardrrunner.authorization.runtime import execute_gate
-from vardrrunner.journal import Journal, Phase, utc_now
+from vardrrunner.journal import Journal, Phase, RunRecord, utc_now
 from vardrrunner.workspaces import Workspaces, validate_id
 
 console = Console()
@@ -35,7 +35,7 @@ def run(
     execution: Path,
     trust: Path,
     output: Path,
-) -> None:
+) -> RunRecord:
     """Use existing signed permission; never issue or elevate it."""
     record = None
     journal = None
@@ -166,6 +166,7 @@ def run(
                 }
             )
         )
+        return finished
     except execution_control.ExecutionStopped as stopped:
         if journal is not None and record is not None:
             _retain_pid(journal, record.run_id, stopped.pid)

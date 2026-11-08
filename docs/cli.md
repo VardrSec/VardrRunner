@@ -622,13 +622,52 @@ Other tools, general recon pipelines, issuer enrollment and Full/Mapless install
 are not delivered by this increment. See [ADR 0039](adr/0039-standalone-workspace-gate.md)
 for reference-trust and verification limits. Existing connected commands are unchanged.
 
-This is not yet a complete fresh-operator workflow. The file interface below
-requires separately provisioned signing keys/public trust, existing authority
-state and hand-prepared approval/issuance contexts. Creating a workspace does not
-prepare those inputs. Context preparation and explicit operator key/trust
-provisioning remain delivery work; never use the synthetic fixture key for them.
-Private issuance stays separate from the consumer. Its input files still contain
-engagement data and are not automatically suitable for sharing.
+### Provision, authorize, execute and export
+
+Install the existing authorization extra (`pip install 'vardrrunner[authorization]'`)
+and provision an issuer once for the workspace and this Runner identity:
+
+```bash
+vardrrunner workspace authority-init <workspace-id> --output /PRIVATE_OPERATOR/issuer
+vardrrunner workspace authorize <workspace-id> --authority /PRIVATE_OPERATOR/issuer \
+  --case reviewed-case.json --execution execution.json --output NEW_PUBLIC_BUNDLE \
+  --expires-in 900
+vardrrunner workspace execute <workspace-id> --authorization NEW_PUBLIC_BUNDLE \
+  --output NEW_EVIDENCE_DIRECTORY --export NEW_EXPORT_DIRECTORY
+```
+
+Use operator-selected native paths on Windows. `authority-init` creates a new
+Ed25519 issuer using the existing authorization protocol, binds public trust to
+the actual Runner/workspace and initializes local authority state. Its directory
+must be separate from Runner configuration, journal and execution directories.
+Keep that directory private and outside every tool/worker mount. The private key
+is an issuer input only; neither execution nor export accepts it. A directory
+separation check is not protection against another process running as the same
+OS user. Container packaging must enforce the separate issuer mount boundary.
+
+`authorize` hashes the selected verified Gate binary, compiles the unresolved
+reviewed case, shows the exact HTTP scope and credential reference names, and
+requires a terminal operator to type `APPROVE`. It approves expiring reference
+grants for every contacted origin, without reading their secret values, and
+issues one strict execution. `--execution` defaults to the existing bounded Gate
+options; the approval/reference lifetime is 1–86400 seconds (default900).
+Reapproval changes reference-grant identity, so do not reapprove an in-flight
+attempt. A stopped/revoked local authority is never silently reset.
+
+The new bundle contains only `approval.json`, `contract.json`, `plan.json`,
+`case.json`, `execution.json` and `trust.json`. They are public authorization
+inputs, not a redacted shareable report: unresolved case data remains private.
+Outputs are exclusive; interrupted issuance and partial directories stay for
+inspection rather than being overwritten or replayed. The older explicit
+`authorization` file interface and `workspace gate` flags remain supported.
+
+`execute` uses the existing signed validation, single-use ledger, native process
+control, expiring grants and journal. Optional `--export` calls the same
+`audit export-run` redacted derivative after successful terminal execution. A
+refused export does not undo execution or make the permission reusable. Use
+`audit list --engagement <workspace-id>` and `audit show <run-id>` to recover the
+recorded outcome. Unsupported process-control platforms still refuse; this CLI
+adds no Linux process-group fallback, automatic worker or recon executor.
 
 ---
 

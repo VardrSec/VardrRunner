@@ -60,6 +60,18 @@ open safety gates. Read-only SQLite access is not a strict filesystem non-mutati
 Full/Mapless, Docker and cross-platform acceptance remain required. Earlier test
 evidence applies only to its recorded source revision.
 
+The operator commands in `commands/workspace_authority.py` compose existing
+Ed25519 approval, exact-plan compilation, reference grants and the authorization
+ledger. A dedicated issuer directory holds the key and public descriptor outside
+execution state. A separate six-document bundle contains existing signed formats
+and unresolved reviewed inputs only. Issuance is terminal-reviewed and single-use;
+it neither creates another engine nor changes connected jobs. Authority revocation
+is checked before signing/grant updates and again by the existing issuance/consume
+boundaries. No silent authority reset or uncertain-attempt replay is introduced.
+The native `workspace execute` route composes the existing consumer and terminal
+redacted export; key custody and container mount separation remain operator and
+distribution responsibilities.
+
 The additive `workspace gate` consumer reuses the existing standalone contract,
 ledger, fixed-Gate runtime, native Windows control, journal and audit/export. It
 does not issue approval, bootstrap trust or use Map. Unsupported execution platforms
@@ -475,7 +487,7 @@ request projection for the explicitly supported `gate-fixed-http/1` profile.
 Legacy commands, queue and MCP paths do not advertise this capability. The
 separate native Windows `workspace gate` consumer uses it explicitly with
 existing signed permission; issuer-side key/trust provisioning and context
-preparation are not yet a supported first-run workflow.
+preparation use the explicit workspace operator commands described above.
 See [ADR 0025](adr/0025-authorization-contract-v1.md) and the
 [conformance specification](contracts/README.md) for trust boundaries and limits.
 
