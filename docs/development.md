@@ -1,5 +1,12 @@
 # VardrRunner — Development
 
+Local assisted drafting reuses `test_portable_export.py` for one focused
+valid/workspace-mismatch/artifact-tampering regression, including nonrunnable empty
+identity/decision specs and no response-body copying. The existing `test_cli.py`
+route case asserts draft-gate run/output kwargs. Reuse the export integrity, privacy
+and Windows adapter cases; do not start another tool or containment campaign for
+this inert projection. Run the required static and existing full coverage checks.
+
 Finite Recon production uses the existing tool launcher, native epoch, ledger
 and export. The focused existing Recon/owner/CLI cases cover explicit capability,
 both binary hashes, all-answer CIDR rejection, fixed-address/original-host handoff,

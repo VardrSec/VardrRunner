@@ -595,6 +595,33 @@ documented. Workspace state shares the existing local journal; `audit` continues
 to inspect/export run evidence. Full Mapless execution and portable workspace
 export are not delivered by this metadata increment.
 
+### Local Recon-to-Gate drafts
+
+```bash
+vardrrunner workspace draft-gate <workspace-id> --run <completed-recon-run-id> \
+  --output NEW_PRIVATE_DIRECTORY
+```
+
+This local command reads a successful controlled finite Recon run in the selected
+workspace. The existing artifact reader checks its retained hash, size and JSON
+shape; plan/profile bindings and actual HTTP observations must match. It contacts
+no Map service or target, creates no approval and consumes no execution authority.
+
+The existing protected portable-export publisher writes `artifact.json` containing
+a `vardr.gate-drafts/1` envelope, `audit.json` with original run provenance, and
+`manifest.json` binding the redacted derivative. Source run/artifact/plan/tool hashes
+and timing remain in the envelope. Drafts use `{name, description, spec}` entries
+with only original observed HTTPS GET-root URLs; response bodies are not copied.
+Identities and expected access remain empty, so the drafts cannot execute. Supply
+reviewed identities, credential references, ownership/tenant boundaries and policy
+in each `spec`, then use the existing separate authorization workflow. The command
+does not infer those decisions from a successful HTTP response or queue work.
+
+Output must be a new directory. Existing POSIX private-directory and native Windows
+24H2+/fixed-local-NTFS export boundaries apply; unsupported hosts refuse rather than
+fall back to another publisher. Journal reads may maintain ordinary SQLite sidecars;
+this is not an immutable filesystem snapshot or a schema migration.
+
 ### Explicit native standalone Gate
 
 ```bash

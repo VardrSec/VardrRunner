@@ -8,6 +8,7 @@ import math
 import os
 import re
 import stat
+from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -165,8 +166,14 @@ def _effective_uid() -> int:
     return int(getter())
 
 
-def export_run(run_id: str, output: Path) -> None:
-    """Export one recorded terminal run as a redacted derivative, never executable authority."""
+def export_run(
+    run_id: str,
+    output: Path,
+    *,
+    artifact_projector: Callable[[RunRecord, dict], dict] | None = None,
+) -> None:
+    """Export a terminal run, optionally projecting its verified artifact with trusted code."""
+    label = "Local draft output" if artifact_projector is not None else "Portable export"
     try:
         with ExitStack() as stack:
             windows = stack.enter_context(WindowsExport()) if os.name == "nt" else None
@@ -184,6 +191,9 @@ def export_run(run_id: str, output: Path) -> None:
             limits = resources.load_limits()
             maximum = min(EXPORT_ARTIFACT_LIMIT, limits.max_artifact_bytes)
             document = _artifact_document(record, maximum, windows)
+            if artifact_projector is not None:
+                # Trusted internal projections reuse the same source integrity and publisher.
+                document = artifact_projector(record, document)
             artifact = manifests.encode_export_json(document, maximum_bytes=maximum)
             derivative_hash = hashlib.sha256(artifact).hexdigest()
             portable = replace(
@@ -269,15 +279,15 @@ def export_run(run_id: str, output: Path) -> None:
                 finally:
                     os.close(directory)
     except (ExportError, WindowsExportError) as exc:
-        console.print(
-            f"[red]Portable export refused or incomplete ({exc}); retain any new output.[/red]"
-        )
+        console.print(f"[red]{label} refused or incomplete ({exc}); retain any new output.[/red]")
         raise typer.Exit(1) from None
     except Exception:
-        console.print("[red]Portable export refused or incomplete; retain any new output.[/red]")
+        console.print(f"[red]{label} refused or incomplete; retain any new output.[/red]")
         raise typer.Exit(1) from None
     console.print(
-        "[green]Exported a redacted evidence copy; original run status is preserved.[/green]"
+        "[green]Published nonrunnable drafts; review each spec before separate authorization.[/green]"
+        if artifact_projector is not None
+        else "[green]Exported a redacted evidence copy; original run status is preserved.[/green]"
     )
 
 

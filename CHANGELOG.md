@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add local `workspace draft-gate` to derive nonrunnable Gate case drafts from
+  verified completed finite Recon evidence, preserving source provenance in the
+  existing protected export bundle without Map, queueing or execution. See
+  [local draft details](changelog/unreleased-local-gate-drafts.md).
+
 - Add explicit `doctor --standalone` for local state/tool diagnostics without Map
   credentials or API calls. Combine with `--offline` to skip release discovery;
   retain ordinary Full checks and refuse the incompatible platform combination.

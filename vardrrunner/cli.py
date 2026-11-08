@@ -419,6 +419,20 @@ def workspace_list(limit: int = typer.Option(100, "--limit", min=1, max=1000)):
     workspace_cmd.list_workspaces(limit=limit)
 
 
+@workspace_app.command("draft-gate")
+def workspace_draft_gate(
+    workspace_id: str = typer.Argument(..., help="Full local workspace ID"),
+    run_id: str = typer.Option(..., "--run", help="Completed finite Recon run in this workspace"),
+    output: Path = typer.Option(
+        ..., "--output", help="New private directory for nonrunnable drafts"
+    ),
+):
+    """Draft Gate cases from local Recon evidence; never authorize or queue work."""
+    from vardrrunner.commands import workspace_drafts
+
+    workspace_drafts.draft_gate(workspace_id, run_id=run_id, output=output)
+
+
 audit_app = typer.Typer(
     help="Inspect and export the sanitized local execution journal.", no_args_is_help=True
 )

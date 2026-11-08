@@ -665,3 +665,17 @@ successor container lifecycle decisions; this helper grants no authority.
 `LocalAdmission` and the authenticated native-owner SDK. Native DONE precedes
 ledger completion and journal DONE. Map admission and ordinary Runner privileges
 are unchanged; see [ADR 0044](adr/0044-explicit-local-worker.md).
+
+## Local assisted Gate drafts
+
+`commands/workspace_drafts.py` projects a verified completed finite Recon artifact
+into nonrunnable case drafts for its existing workspace. It reuses the noncreating
+current-schema journal/workspace readers and the bounded artifact integrity reader.
+A trusted internal callable on `audit.export_run` transforms only the derivative
+artifact; default export bytes/metadata and the protected three-file publisher are
+unchanged. Original run provenance stays in audit, while the new artifact retains
+source hashes and timing. Only original logical HTTPS candidates with HTTP status
+observations produce draft specs; no response body, identity, owner/tenant or access
+decision is inferred. Empty identities/decisions require operator editing and a
+new, separate reviewed authorization. No Map/API, queue, execution, signing or new
+state store participates. This does not add a local coverage claim or local MCP.

@@ -50,6 +50,12 @@ def test_workspace_list_limit_is_forwarded():
         result = runner.invoke(app, ["workspace", "list", "--limit", "7"])
     assert result.exit_code == 0, result.output
     listing.assert_called_once_with(limit=7)
+    with patch("vardrrunner.commands.workspace_drafts.draft_gate") as drafting:
+        result = runner.invoke(
+            app, ["workspace", "draft-gate", "a" * 32, "--run", "run-id", "--output", "drafts"]
+        )
+    assert result.exit_code == 0, result.output
+    drafting.assert_called_once_with("a" * 32, run_id="run-id", output=Path("drafts"))
 
 
 def test_jobs_run_expiring_grants_routes_opt_in():
