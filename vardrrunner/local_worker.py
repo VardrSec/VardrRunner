@@ -134,14 +134,17 @@ def run() -> dict:
                 policy = stack.enter_context(credential_grants.required("standalone"))
                 handlers.check_gate_case(case, context.engagement_id)
                 # The inherited native ceiling and every renewal only shorten this cap.
-                hard_end = entered + max(
-                    0.0,
-                    (
-                        admission.expires_at
-                        - timedelta(seconds=worker_lifecycle.REPORT_RUNWAY_SECONDS)
-                        - anchor
-                    ).total_seconds(),
+                work_until = min(
+                    admission.expires_at
+                    - timedelta(seconds=worker_lifecycle.REPORT_RUNWAY_SECONDS),
+                    context.now
+                    + timedelta(
+                        seconds=min(
+                            permission["max_duration_seconds"], plan["execution"]["timeout_seconds"]
+                        )
+                    ),
                 )
+                hard_end = entered + max(0.0, (work_until - anchor).total_seconds())
                 if policy.expires_at is not None:
                     hard_end = min(hard_end, entered + (policy.expires_at - anchor).total_seconds())
                 binding = {

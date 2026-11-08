@@ -37,12 +37,6 @@ class LocalAdmission:
             timestamp(payload["expires_at"]),
             *(timestamp(permission[key]) for key in ("expires_at", "testing_end")),
             *(timestamp(grant["expires_at"]) for grant in permission["credential_grants"]),
-            now
-            + timedelta(
-                seconds=min(
-                    permission["max_duration_seconds"], plan["execution"]["timeout_seconds"]
-                )
-            ),
         )
         require(now < ending, "local_authority_expired")
         runtime_id = str(uuid.uuid4())
@@ -54,7 +48,8 @@ class LocalAdmission:
             "plan_sha256": digest(encoded(plan)),
         }
         # The existing owner reserves 150 seconds for final evidence/closure;
-        # subtracting that same runway leaves exactly the authorized work ceiling.
+        # this outer incarnation ceiling is distinct from the shorter per-job LEASE.
+        # Native DONE then retains the existing finite idle/report opportunity.
         from vardrrunner.worker_lifecycle import REPORT_RUNWAY_SECONDS
 
         return cls(

@@ -23,6 +23,7 @@ from vardrrunner.authorization.codec import (
     sign,
     unb64,
 )
+from vardrrunner.authorization.contracts import timestamp
 from vardrrunner.authorization.local_admission import LocalAdmission
 from vardrrunner.authorization.worker_admission import Admission
 from vardrrunner.journal import Phase
@@ -85,7 +86,11 @@ def test_local_admission_caps_work_and_preserves_map_origin_boundary(local_case)
     *_, context, payload, permission = local._inputs()
     plan = f.values["plan"]
     admission = LocalAdmission.verified(payload, permission, plan, now=context.now)
-    expected = context.now + timedelta(seconds=plan["execution"]["timeout_seconds"])
+    expected = min(
+        timestamp(payload["expires_at"]),
+        timestamp(permission["testing_end"]),
+        *(timestamp(g["expires_at"]) for g in permission["credential_grants"]),
+    )
     assert admission.expires_at == expected + timedelta(seconds=life.REPORT_RUNWAY_SECONDS)
     assert admission.origin == "standalone" and admission.max_attempts == 1
     assert len(admission.runtime_sha256) == 64
@@ -167,6 +172,11 @@ def test_local_native_done_precedes_completion_export_and_replay_refusal(local_c
     assert exported == [local.EXPORT / "result"]
     assert len(f.calls) == 1
     assert epoch.verified_lease.call_args.args[0]["origin"] == "standalone"
+    # The outer owner/report ceiling never becomes extra tool authority.
+    lease, hard = epoch.verified_lease.call_args.args[1:]
+    assert (
+        lease <= hard <= local.time.monotonic() + f.values["plan"]["execution"]["timeout_seconds"]
+    )
     assert result["artifact_sha256"] == record.artifact_sha256
     assert result["export_status"] == "completed"
     with pytest.raises(AuthorizationError, match="replayed"):
