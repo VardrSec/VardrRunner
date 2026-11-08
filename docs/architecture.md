@@ -656,3 +656,10 @@ existing local holds and fixed worker history tables without pretending there
 is an admitted worker parent. Absence of a journal is incomplete, not a zero
 ledger or fresh-installation assertion. Distribution still owns first and
 successor container lifecycle decisions; this helper grants no authority.
+
+### One-shot local worker
+
+`local_worker` composes the existing standalone ledger/runtime with a separate
+`LocalAdmission` and the authenticated native-owner SDK. Native DONE precedes
+ledger completion and journal DONE. Map admission and ordinary Runner privileges
+are unchanged; see [ADR 0044](adr/0044-explicit-local-worker.md).

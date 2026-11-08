@@ -1484,3 +1484,11 @@ its original behavior. Missing original auth/receipt stays held without fallback
 This new command is a separate immutable-image capability;090/e8 images do not
 provide it. Missing support must be held. Stop/re-enable and Linux/Desktop lifecycle
 acceptance remain separate, unclosed gates; nothing is enabled automatically.
+
+### One-shot local worker packaging
+
+The explicit Linux/Docker local worker consumes the six-file public authorization
+bundle through the native owner `--local` entrypoint. It runs one fixed Gate job,
+with no Map credential or signing key. Ordinary `workspace gate` retains its
+platform checks. Distribution owns the explicit overlay and optional evidence
+copy from `/exports/result`; see [ADR 0044](adr/0044-explicit-local-worker.md).

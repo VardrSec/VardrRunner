@@ -737,3 +737,12 @@ data to all local users. Do not bake an issuer, credential or fixture key into a
 image. Native `workspace execute --export` reuses journal evidence and the existing
 redacted terminal export. CLI routing and the existing synthetic workspace Gate
 fixture cover this composition without invoking a scanner or Map service.
+
+### Local worker composition checks
+
+`tests/test_local_worker.py` uses the existing isolated workspace fixture, signed
+synthetic inputs and inert owner channel to check consume/lease/DONE ordering,
+revocation, replay refusal and evidence export. The affected authorization-runtime
+and native SDK unit tests remain applicable. These are component checks; actual
+image/bootstrap containment and installed journey verification are separate. See
+[ADR 0044](adr/0044-explicit-local-worker.md).

@@ -29,6 +29,7 @@ from vardrrunner.authorization.codec import encoded
 from vardrrunner.authorization.persistent_codec import MAX_SEQUENCE, wire_sequence64
 
 if TYPE_CHECKING:
+    from vardrrunner.authorization.local_admission import LocalAdmission
     from vardrrunner.authorization.worker_admission import Admission
     from vardrrunner.execution_control import Control
 
@@ -71,7 +72,7 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _incarnation_clock(admission: Admission) -> tuple[tuple[int, float], int]:
+def _incarnation_clock(admission: Admission | LocalAdmission) -> tuple[tuple[int, float], int]:
     # UTC last is conservative across pauses between the elapsed-clock samples
     # and timestamp validation. Later conversions never resample this offset.
     boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
@@ -133,7 +134,7 @@ class WorkerOwner:
     def __init__(
         self,
         channel: socket.socket,
-        admission: Admission,
+        admission: Admission | LocalAdmission,
         clock_anchor: tuple[int, float],
         grant_end: int,
     ):
@@ -180,7 +181,7 @@ class WorkerOwner:
         _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < self._work_end)  # type: ignore[attr-defined]
         self._exchange(_HELLO, self._work_end, self._grant_end, nonce)
 
-    def require_ready(self, admission: Admission) -> None:
+    def require_ready(self, admission: Admission | LocalAdmission) -> None:
         _require(self._ready and not self._closed and os.getpid() == self._pid)
         _require(admission == self._admission and not self._finished)
         _process_readback()
@@ -420,7 +421,7 @@ class SequentialWorkerOwner(WorkerOwner):
     def __init__(
         self,
         channel: socket.socket,
-        admission: Admission,
+        admission: Admission | LocalAdmission,
         clock_anchor: tuple[int, float],
         grant_end: int,
     ):
@@ -477,14 +478,23 @@ class SequentialWorkerOwner(WorkerOwner):
             _PACKET_V2.pack(self._magic, _ACK, sequence, lease, hard, binding)
         ).hexdigest()
 
+    def _handshake_local(self) -> None:
+        """Accept freshness only from the already credential-checked PID-1 peer."""
+        kind, sequence, lease, hard, nonce = self._receive_v2()
+        _require((kind, sequence, lease, hard) == (_READY, 0, 0, 0))
+        self._hello(nonce)
+
     def _handshake(self, nonce: bytes) -> None:
         _require(self._receive_v2() == (_READY, 0, 0, 0, nonce))
+        self._hello(nonce)
+
+    def _hello(self, nonce: bytes) -> None:
         before = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
         _require(before < self._work_end)
         self._exchange_v2(_HELLO, 0, self._work_end, self._grant_end, nonce)
         self._idle_end = min(before + _IDLE_SECONDS * _SECOND, self._work_end)
 
-    def require_ready(self, admission: Admission) -> None:
+    def require_ready(self, admission: Admission | LocalAdmission) -> None:
         super().require_ready(admission)
         if self._epoch is None or self._epoch._finished or self._binding is None:
             _require(time.clock_gettime_ns(time.CLOCK_BOOTTIME) < self._idle_end)  # type: ignore[attr-defined]
@@ -533,6 +543,7 @@ class PersistentWorkerOwner(SequentialWorkerOwner):
     """Explicit v3 idle availability; every attempt still needs a finite native lease."""
 
     _magic = _MAGIC_V3
+    _admission: Admission
 
     def __init__(
         self,
@@ -602,7 +613,11 @@ class PersistentWorkerOwner(SequentialWorkerOwner):
                 time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
             )
 
-    def require_ready(self, admission: Admission) -> None:
+    def require_ready(self, admission: Admission | LocalAdmission) -> None:
+        from vardrrunner.authorization.local_admission import LocalAdmission
+
+        _require(not isinstance(admission, LocalAdmission))
+        assert not isinstance(admission, LocalAdmission)
         WorkerOwner.require_ready(self, admission)
         admission.to_document()
         if self._idle_closing:
@@ -631,7 +646,7 @@ class PersistentWorkerOwner(SequentialWorkerOwner):
 
 
 @contextmanager
-def connect(admission: Admission) -> Iterator[WorkerOwner]:
+def connect(admission: Admission | LocalAdmission) -> Iterator[WorkerOwner]:
     """Accept only the fixed inherited fd3; never an env flag or caller socket."""
     global _ACTIVE, _HOOK_INSTALLED
     _require(sys.platform == "linux" and hasattr(time, "CLOCK_BOOTTIME"))
@@ -652,16 +667,27 @@ def connect(admission: Admission) -> Iterator[WorkerOwner]:
             channel.settimeout(1.0)
             _require(channel.family == socket.AF_UNIX and channel.type == socket.SOCK_SEQPACKET)  # type: ignore[attr-defined]
             _require(channel.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED) == 1)  # type: ignore[attr-defined]
-            owner_type = (
-                PersistentWorkerOwner
-                if persistent
-                else SequentialWorkerOwner
-                if getattr(admission, "max_attempts", None) is not None
-                else WorkerOwner
-            )
-            owner = owner_type(channel, admission, clock_anchor, grant_end)
-            nonce = bytes.fromhex(admission.identity["owner_nonce"])
-            owner._handshake(nonce)
+            from vardrrunner.authorization.local_admission import LocalAdmission
+
+            if isinstance(admission, LocalAdmission):
+                _require(admission.origin == "standalone" and admission.max_attempts == 1)
+                _require(admission.mode is None)
+                owner: WorkerOwner = SequentialWorkerOwner(
+                    channel, admission, clock_anchor, grant_end
+                )
+                assert isinstance(owner, SequentialWorkerOwner)
+                owner._handshake_local()
+            else:
+                owner_type = (
+                    PersistentWorkerOwner
+                    if persistent
+                    else SequentialWorkerOwner
+                    if getattr(admission, "max_attempts", None) is not None
+                    else WorkerOwner
+                )
+                owner = owner_type(channel, admission, clock_anchor, grant_end)
+                nonce = bytes.fromhex(admission.identity["owner_nonce"])
+                owner._handshake(nonce)
             if not _HOOK_INSTALLED:
                 sys.addaudithook(_audit)
                 _HOOK_INSTALLED = True

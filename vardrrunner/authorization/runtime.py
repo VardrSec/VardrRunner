@@ -30,6 +30,7 @@ def execute_gate(
     *,
     expiring_grants: bool = False,
     on_reserved: Callable[[], None] | None = None,
+    before_finish: Callable[[Path], None] | None = None,
 ) -> Path:
     """Validate/reserve, reuse local secret approvals and execute a guarded Gate.
 
@@ -50,6 +51,7 @@ def execute_gate(
                 context,
                 run_dir,
                 on_reserved=on_reserved,
+                before_finish=before_finish,
             )
     require(context.origin == "standalone", "managed_control_unsupported")
     require(
@@ -92,6 +94,11 @@ def execute_gate(
         total_timeout=timeout,
         execution_deadline=deadline.timestamp(),
     )
+    if before_finish is not None:
+        require(output is not None, "missing_artifact")
+        assert output is not None
+        resources.enforce_artifact(output, permission["max_artifact_bytes"])
+        before_finish(output)
     ledger.finish(claimed)
     require(output is not None, "missing_artifact")
     assert output is not None

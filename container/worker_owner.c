@@ -316,8 +316,12 @@ static void publish(const unsigned char nonce[32]) {
     close(fd); close(dir);
 }
 int main(int argc, char **argv) {
-    (void)argv;
-    if (argc != 1 || getpid() != 1 || getppid() != 0 || getuid() != 0 || geteuid() != 0) fail();
+    int local = argc == 2 && !strcmp(argv[1], "--local");
+#ifdef VARDR_PERSISTENT
+    if (local) fail();
+#endif
+    if ((argc != 1 && !local) || getpid() != 1 || getppid() != 0 ||
+        getuid() != 0 || geteuid() != 0) fail();
     prepare_environment();
     errno = 0;
     if (getpwuid(OWNER) != NULL || errno != 0) fail();
@@ -361,7 +365,8 @@ int main(int argc, char **argv) {
         close_inherited();
         struct packet boot = { .magic = MAGIC, .type = BOOT };
         send_packet(3, &boot);
-        char *command[] = {"python", "-I", "-m", "vardrrunner.managed_worker", NULL};
+        char *command[] = {"python", "-I", "-m",
+            local ? "vardrrunner.local_worker" : "vardrrunner.managed_worker", NULL};
         execve("/usr/local/bin/python", command, child_env);
         fail();
     }
