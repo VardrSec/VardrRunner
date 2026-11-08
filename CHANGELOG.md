@@ -7,6 +7,179 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Promote a case-bound guarded Gate progress checkpoint only after trusted native
+  confirmed stop, retaining original bytes and failed-only publication. Reject a
+  stale progress checkpoint on normal return; deadlines and stop authority stay
+  unchanged.
+
+- Preserve validated released history when the next claim commits but its reply
+  is lost: inspection recognizes only that original selected-only retirement,
+  without advancing the local cursor or creating an attempt acknowledgement.
+
+- Recognize the original selected-only physical retirement after a lost first
+  claim reply, preserving local cursor zero and refusing substituted observation
+  bindings without creating an acknowledgement or local attempt.
+- Reconcile physical worker retirement after a verified native stop while
+  preserving the stopped process's historical PID and terminal receipt.
+
+- Add explicit offline `worker-bootstrap-state` for an installed Runner journal.
+  Reuse the original schema and full local-holds audit; missing storage remains
+  incomplete and a prior worker history never qualifies as initial state.
+
+- Add the narrowly certified closed-preclaim parent0 retirement branch using one
+  original-key unbound last0 observation. Preserve every no-send tombstone and
+  issued ancestry; update only the parent, retain real nonzero association counts
+  and leave global-holds engines unchanged. Cohort/DB drift or unrelated holds
+  remain held. Component/image/platform validation stays separately gated.
+
+- Add explicit `worker-reconcile` selection of one original persistent-worker
+  proposal/history head, reusing one original-key observation and existing local
+  receipt reconciliation. Preserve `worker-state/1`; bind the noncreating writer
+  to the originally selected DB identity and recheck candidate association before
+  RPC/metadata writes. Already-retired and genuinely empty state stay offline.
+  Actual stop/re-enable remains a separate NM-2 gate; this new command requires
+  a matching qualified image and enables no work automatically.
+
+- Add explicit offline `worker-state` inspection for an existing persistent-worker
+  identity/journal and exact Runner/runtime/admission binding. Reuse the full audit
+  in one read-only WAL snapshot; incomplete facts are held with null counts.
+  Distinguish genuine unissued parent0 from original-key-linked retirement without
+  constructors, startup cleanup, credential lookup or network. A cooperative
+  inspection budget changes no execution authority, startup limit or history cap;
+  old images and actual stop/re-enable remain separately gated.
+
+- Keep the persistent worker channel open when Python's optional idle window
+  closes. Recheck native readiness and full local holds in a bounded no-send
+  wait instead of returning cleanly before PID 1 selects its idle branch.
+  Preserve count completion, unlimited availability and every existing deadline;
+  pure scheduling models do not close physical platform acceptance.
+
+- Classify an optional persistent-v3 idle cutoff as native exit 124 when its
+  owner state is unambiguous. Latch Runner into a nonspawning, no-RPC wait with a
+  checked five-second shutdown-only reserve after the valid ACK idle bound.
+  Preserve claim cutoffs, per-job deadlines, EOF cleanup and unknown-state holds;
+  model/compiler checks do not close actual platform acceptance.
+
+- Hold v3 reuse after a local stop-journal callback fails in the refresh loop,
+  including when later renewal succeeds. Bound clean idle-channel EOF cleanup
+  by a separate immutable five-second BOOTTIME deadline; repeated EOF or later
+  frames cannot revive it. Healthy persistent idle and finite protocols keep
+  their existing behavior. Physical disconnect acceptance remains open.
+
+- Keep v3 available after source-proven local credential denials before claim.
+  Retain provisional selections without consuming an issued sequence; start each
+  immutable owner epoch only after the final trusted preclaim checks. Unknown
+  replies and custody/clock/owner/storage failures retain their holds. Late-denied
+  jobs keep their unique tombstones and require a new queued job after remediation.
+
+- Retain persistent-v3 admission and attempt history in the existing journal,
+  with exact original-key observation/reconciliation and canonical receipt
+  bindings. Physical retirement preserves missing ACKs and spent allowances;
+  full startup audits reject missing or changed evidence.
+
+- Prepare explicit persistent-v3 worker availability until operator stop, with
+  optional finite session controls and unchanged fresh per-job authority and
+  termination checks. Preserve matching finite images/protocols; use exact int64
+  decimal sequences, per-attempt clock anchors, and normal drained failed-result
+  continuation only. The owner approved persistent STOP reporting for isolated
+  testing; default startup and independent platform/security gates remain.
+- Retain bounded, case-bound Gate cancellation evidence only after confirmed
+  native cleanup and an existing stop cause. Preserve the original Gate artifact,
+  publish a separate failed-result copy without overwriting files, and retain
+  ambiguous result/finish holds. Cancelled work never advances the healthy queue
+  or widens execution/grace deadlines; ordinary/manual behavior is unchanged.
+- Add explicitly selected v2 managed batches of 1–32 healthy attempts in one
+  admitted incarnation. Capture immutable lease epochs, join the exact refresh
+  thread, require native drain/DONE and a durable original-token idle release
+  before another claim. Preserve append-only journal links, unknown-send holds,
+  spent allowances and legacy one-shot operation. Physical v2 acceptance is open.
+- Bind read-only v3 observation to the original runtime sequence. Revalidate full
+  retained retirement evidence during startup audits; missing or abbreviated
+  proof retains its hold. Physical retirement never invents claim, consume,
+  DONE or idle-release acknowledgements.
+
+- Handle clean worker-channel EOF after DONE while waiting for the exact Runner
+  child to become waitable. Preserve packet validation, active-attempt refusal and
+  all deadlines; only the tracked child's normal exit zero establishes success.
+  Add bounded benign socket/close regressions to the existing compiler stage.
+
+- Link worker runtime/enrollment fingerprints in the original claim-send journal
+  transaction. Recognize exact authenticated v2 unbound-retirement receipts for
+  untouched local intents, and failed completion of the original retained result.
+  Preserve send/ACK history, artifacts, spent allowances and all tombstones;
+  legacy unlinked records and unresolved credentials remain held.
+
+- Bind each managed-worker incarnation to an immutable admission-expiry ceiling
+  with a fixed 150-second host-reporting opportunity. Refuse claims whose full
+  allocation cannot fit, and cap every native lease/hard deadline before that
+  runway. Pauses cannot move the ceiling forward; reporting availability and VM
+  suspend acceptance remain separate gates.
+- Seed an empty UID/GID-10000 readiness directory at worker-image build time for
+  a fresh per-incarnation local metadata volume. Docker's copy API cannot read
+  the earlier tmpfs path; preserve both refused trials. Add no runtime capability
+  or secret mount. Corrected platform proof remains pending.
+- Add the explicit managed-worker candidate over existing claim, contract, grant,
+  budget and receipt services. The worker-only PID-1 owner drops its three approved
+  bootstrap capabilities before work; live private-channel/kernel readiness is
+  required for Linux control. Initial scope is one attempt per admitted container.
+  Normal startup/manual/Mapless behavior stays unchanged; platform acceptance is open.
+- Add `audit reconcile-managed RUN_ID` for authenticated terminal observation and
+  exact local metadata retirement. Preserve artifacts, spent allowances and ACK
+  history; unresolved transport/database state stays held. Retire only proven
+  zero-RPC local denials and invocation-owned duplicate-claim placeholders.
+- Record the owner-reviewed worker-only PID-1 lifecycle and protected host
+  stop-report design. Its bounded implementation/testing is authorized; no worker,
+  privilege, protocol or startup behavior is enabled by this documentation.
+- Add signed future-version/schema rejection proof without consuming the existing
+  authorization contract. Reconcile agent guidance and ADR 0016 with the owner's
+  explicitly enabled New Moon worker direction; activation and containment remain
+  gated and no runtime behavior changes in this increment.
+- Reconcile reference-interface documentation with the existing native standalone
+  Gate command. State the missing operator context and key/trust preparation
+  prerequisites explicitly; no issuer, enrollment or execution behavior changes.
+- Use canonical journal/WAL paths and pin Windows database/ancestor identities
+  through SQLite connection close. Share this boundary with workspace reads and
+  credential grants; refuse hardlinked Windows journals. POSIX replacement and
+  strict non-mutating snapshot acceptance remain open.
+- Preserve journal-linked evidence during age-based direct-run cleanup, including
+  unfinished work, uncertain uploads and completed records. Unreadable or
+  ambiguous retention state leaves evidence in place. Automatic deletion requires
+  confined descriptor-relative operations; Windows and Python 3.10 defer cleanup.
+- Exercise local workspace creation and inspection across separate CLI processes
+  with Map credentials, real keychain access, network calls and tool launches
+  unavailable. Remove the obsolete branch-only Windows diagnostic workflow while
+  retaining its behavioral regressions in normal CI. Allow explicit dispatch of
+  that existing CI suite on a candidate branch.
+
+- Combine the published standalone Gate/workspace and dormant recon candidates
+  on their shared public base. Preserve Gate reservation callbacks and reject
+  recon before those callbacks. This is a new candidate, not recovered historical
+  source; integrate journal/export `3dd3b4f` while inventory `c1bfc18` stays separate.
+  Integrate the reviewed
+  launch-failure cleanup from 1320e5a without enabling execution profiles.
+
+- Add an explicit native Windows `workspace gate` consumer for existing signed
+  standalone fixed-Gate permission, reusing the validator, ledger, native control
+  and local evidence/audit. No issuance, enrollment, Map fallback or worker.
+  Keep uncertain consumption/PIDs and refuse unsupported execution platforms.
+
+- Reconcile workspace journal and portable-export candidates; apply the existing
+  observed-file guard to read-only export journal reads. Native acceptance remains open.
+- Refuse observed special journal objects before SQLite connections, avoiding
+  pre-existing FIFO hangs while preserving regular-file, leaf-alias and WAL
+  behavior. Concurrent replacement and filesystem I/O deadlines remain unproven.
+
+- Add bounded `workspace list --limit` metadata discovery from the existing local
+  journal without initialization/migration or Map credentials. Existing creation,
+  known-ID lookup, authority and execution behavior remain unchanged.
+
+- Add explicit local `workspace create` and `workspace show` metadata in the
+  existing SQLite journal, without Map authentication or execution authority.
+  Preserve connected commands, execution records and existing audit/export.
+
+
+- Disable DNSx's automatic version check during adapter execution. This removes
+  that auxiliary request; no standalone recon profile or network authority is added.
 - Clean up private Gate job data when executable resolution or preflight inspection
   fails before launch. Preserve the original exception and existing cleanup-error
   handling. See [launch cleanup note](changelog/unreleased-gate-launch-cleanup.md).
@@ -14,6 +187,21 @@ Per-version detail notes live in [`changelog/`](changelog/).
 - Verify that unsupported signed authorization, approval and envelope versions
   are refused before consuming a contract; a subsequent valid contract remains usable.
   See [the NM-1 regression note](changelog/unreleased-nm1-contract-version-regressions.md).
+- Clarify portable-export path normalization and test the real CLI conversion;
+  raw adapter rejection cases do not imply rejection of every CLI spelling alias.
+
+
+- Add synthetic evidence-export regression for active/revoked reference grants
+  and live ledger safety state. Export preserves those stores and excludes their
+  files/state; no production behavior or authority-restoration feature is added.
+
+- Add local `audit export-run` for a single terminal run's redacted JSON evidence
+  copy, original audit provenance and relative-path manifest. This partial NM-3
+  increment uses POSIX directory-FD controls or a candidate Windows 11 24H2+
+  handle adapter on local fixed NTFS. Native Windows security acceptance remains open.
+
+- Filter local audit history and metadata export by exact engagement/workspace ID
+  with `--engagement` (`-e`), using the existing journal and export schema.
 
 - Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
   retain real link rejection checks and add an explicit synthetic guard assertion.
@@ -1546,3 +1734,9 @@ recorded here for continuity; their commits are present in this repo's history.
 ### v0.9.0 — VardrRunner v1
 - subfinder support for wildcard scope; `jobs list` / `jobs run`; missing tool marks job
   failed instead of silently skipping; `status` command
+
+- Unreleased: dormant finite DNS/HTTP recon plan projection and whole-journey approval validation; no execution capability enabled (ADR 0041).
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.

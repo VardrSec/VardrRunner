@@ -21,11 +21,40 @@ MANIFEST_NAME = "manifest.json"
 MANIFEST_SCHEMA_VERSION = 1
 
 
-def artifact_digest(path: Path, chunk_size: int = 1024 * 1024) -> tuple[str, int]:
+def encode_export_json(payload: dict[str, Any], *, maximum_bytes: int) -> bytes:
+    """Bound the exact serialized redacted derivative before reserving disk space."""
+    data = (
+        json.dumps(redaction.redact(payload), indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    if len(data) > maximum_bytes:
+        raise ValueError("export document exceeds limit")
+    return data
+
+
+def write_exclusive(path: Path, data: bytes, *, directory_fd: int | None = None) -> Path:
+    """Write new owner-only export bytes; never replace or delete partial output."""
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd)
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(data)
+        stream.flush()
+        os.fsync(stream.fileno())
+    return path
+
+
+def artifact_digest(
+    path: Path, chunk_size: int = 1024 * 1024, *, directory_fd: int | None = None
+) -> tuple[str, int]:
     """Return ``(sha256, size)`` while reading the artifact once."""
     digest = hashlib.sha256()
     size = 0
-    with path.open("rb") as fh:
+    handle = (
+        path.open("rb")
+        if directory_fd is None
+        else os.fdopen(
+            os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory_fd), "rb"
+        )
+    )
+    with handle as fh:
         while chunk := fh.read(chunk_size):
             digest.update(chunk)
             size += len(chunk)

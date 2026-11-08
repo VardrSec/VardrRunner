@@ -183,6 +183,10 @@ def reconcile(
     expected_backend = normalize_backend_url(backend_url)
     for record in store.unfinished():
         counts["examined"] += 1
+        if record.command_profile.get("standalone_profile") == "gate-fixed-http/1":
+            # Local signed permission cannot become a Map upload or replay.
+            counts["deferred"] += 1
+            continue
         if record.backend_url != expected_backend:
             counts["foreign"] += 1
             continue

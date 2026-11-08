@@ -1,5 +1,44 @@
 # VardrRunner — CLI Reference
 
+Standalone workspaces and the explicitly approved native Gate consumer are
+development capabilities. Recon remains validation-only, rejected before
+reservation callbacks or execution; managed Docker execution remains gated.
+Windows database/ancestor replacement pins and canonical WAL reads are implemented;
+POSIX pathname replacement and SQLite snapshot non-mutation remain open safety gates.
+Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+These limits leave the required Full/Mapless, Docker and cross-platform acceptance
+open. Earlier test evidence applies only to its recorded source revision.
+
+The separately prepared persistent-v3 worker remains inactive. Its original-key
+observation and metadata reconciliation preserve existing audit commands and
+never recreate execution authority or replay an uncertain request. Finite v1/v2
+receipts retain their original meaning; they do not prove persistent availability.
+
+Persistent availability applies while the trusted worker channel remains healthy.
+An idle channel disconnect enters bounded cleanup; it never grants a replacement
+execution handle or automatically restarts the worker. Callback/journal failures
+retain their no-reuse hold even after a clean thread join.
+
+If an optional finite v3 idle policy is selected, its claim cutoff closes
+permanently before a bounded nonspawning wait for the native owner. The fixed
+five-second shutdown reserve grants no job authority or renewed claim window.
+Native exit 124 is an optional-idle diagnostic, not job success or a confirmed
+physical-stop receipt. This adds no CLI flag and enables no worker.
+Python's idle discovery window cannot establish a clean shutdown: after it
+closes, Runner rechecks native readiness and full holds without sending another
+request. Explicit count completion retains its existing clean return.
+
+DNSx invocations suppress automatic version checks. Existing connected commands
+retain their meaning; this correction does not enable standalone recon or grant
+authority for DNS/HTTP targets or auxiliary services.
+
+Journal reads, workspace inventory and credential-grant transactions resolve ordinary
+symlinks to the canonical database/WAL path. Windows retains non-reparse database and
+ancestor handles without delete sharing through each SQLite connection; hardlinked
+databases refuse to avoid separate WAL names. Legitimate SQLite writers remain allowed.
+POSIX retains its observed-file guard. This does not make inspection filesystem
+non-mutating or close the POSIX/sidecar replacement gates.
+
 Opt-in NM-2 source builds add `vardrrunner jobs run --controlled [--yes]` with
 matching Map execution-control endpoints, and `vardrrunner jobs stop RUN_ID` to
 request local emergency stop of that journal run. A stop request is not confirmed
@@ -522,15 +561,86 @@ you have reviewed them. Nothing is queued: run a saved case from the job compose
 
 ---
 
+## `workspace` — local workspace metadata
+
+```bash
+vardrrunner workspace create "Local assessment"
+vardrrunner workspace show <workspace-id>
+vardrrunner workspace list [--limit 100]
+```
+
+These commands create and inspect inert metadata without a Map account, API key
+or `--local` flag. Each create returns a new full workspace ID, label, creation
+time and metadata schema version as JSON. Repeated labels do not overwrite an
+existing workspace. Labels must be short printable text without credentials.
+
+`list` discovers saved IDs and labels from the existing local workspace table as
+a JSON array. It defaults to 100 records (1–1000), ordered by stored creation time
+descending and ID ascending for ties. It opens an existing journal read-only;
+an absent journal/table returns an empty array without initialization. Unknown
+schemas or invalid selected rows refuse without migration or partial output.
+Listing does not choose an active workspace, grant permission or contact Map.
+Observed special journal objects (including FIFOs and directories) refuse before
+SQLite opens them; dangling leaf links also refuse. Ordinary leaf links to regular
+journals use the canonical connection boundary described above. Windows pins
+database and ancestor names; POSIX retains a pathname precheck. Neither provides
+a filesystem I/O deadline or a strictly non-mutating snapshot.
+
+These create/show/list commands record metadata only. They do not configure scope,
+approve a contract, select an active engagement, run a tool or enable a worker.
+Existing connected commands retain their meaning and still require Map as
+documented. Workspace state shares the existing local journal; `audit` continues
+to inspect/export run evidence. Full Mapless execution and portable workspace
+export are not delivered by this metadata increment.
+
+### Explicit native standalone Gate
+
+```bash
+vardrrunner workspace gate <workspace-id> --approval approval.json --contract contract.json \
+  --plan plan.json --case case.json --execution execution.json --trust public-trust.json \
+  --output NEW_PRIVATE_DIRECTORY
+```
+
+This separate consumer requires native Windows, the authorization runtime extra,
+existing operator-selected public standalone trust, a signed human approval and
+single-use contract bound to this workspace and the actual Runner identity. Use
+the existing explicit file-based authorization workflow; this command creates no
+keys, approvals or authority state. Missing/stale local authority fails closed.
+Existing expiring reference grants with issuer `standalone` must cover every
+referenced origin. No private approval key is accepted by this command.
+
+The command requires terminal confirmation of the existing permission, records
+the local run ID, and executes only the fixed HTTP Gate profile. It contacts no
+Map service and needs no Map account/API token. Use `jobs stop <run-id>` for local
+emergency stop; the owning native invocation confirms termination. Inspect and
+export through existing `audit` commands. Output directories must be new; partial
+files, uncertain PIDs and spent consumption remain for explicit reconciliation,
+never automatic replay. Hashes establish recorded integrity, not host attestation.
+
+Linux/Docker execution is refused; no uncontrolled fallback or worker is enabled.
+Other tools, general recon pipelines, issuer enrollment and Full/Mapless installers
+are not delivered by this increment. See [ADR 0039](adr/0039-standalone-workspace-gate.md)
+for reference-trust and verification limits. Existing connected commands are unchanged.
+
+This is not yet a complete fresh-operator workflow. The file interface below
+requires separately provisioned signing keys/public trust, existing authority
+state and hand-prepared approval/issuance contexts. Creating a workspace does not
+prepare those inputs. Context preparation and explicit operator key/trust
+provisioning remain delivery work; never use the synthetic fixture key for them.
+Private issuance stays separate from the consumer. Its input files still contain
+engagement data and are not automatically suitable for sharing.
+
+---
+
 ## `audit` — local execution evidence
 
 Queue-driven jobs are recorded in `~/.vardrmap/runner-journal.sqlite3`. Audit commands are
 local and never contact the backend:
 
 ```bash
-vardrrunner audit list [--since <iso-timestamp>] [--limit 100] [--json]
+vardrrunner audit list [--engagement <id>] [--since <iso-timestamp>] [--limit 100] [--json]
 vardrrunner audit show <run-id>
-vardrrunner audit export --output audit.json [--since <iso-timestamp>] [--limit 10000]
+vardrrunner audit export --output audit.json [--engagement <id>] [--since <iso-timestamp>] [--limit 10000]
 ```
 
 `list` shows recent lifecycle outcomes, `show` prints one full sanitized record, and
@@ -539,10 +649,75 @@ retention. Records include target counts, sanitized tool settings, lifecycle tim
 failure categories, policy warnings, and artifact SHA-256/size. They exclude raw targets,
 credentials, request bodies, and headers.
 
+`--engagement <id>` (or `-e`) selects an exact local engagement or workspace ID.
+It requires no Map connection, account or token. The filter combines with `--since`
+before sorting and `--limit`; omitting it preserves the existing all-engagement
+view. IDs are literal and case-sensitive, with no wildcard or whitespace
+normalization. A missing match produces an empty history/export. This scopes the
+existing sanitized metadata export; it does not copy artifact bytes, contracts,
+credential state or a complete workspace backup, and grants no execution authority.
+
 Completed runs write the same evidence to `manifest.json` beside the artifact. The SQLite
 journal remains the recovery source of truth; manifests are portable run evidence.
 
+### `audit export-run` — redacted evidence copy (partial portability candidate)
+
+```bash
+vardrrunner audit export-run <run-id> --output NEW_EXPORT_DIRECTORY
+```
+
+Select one terminal journal run with no unresolved PID and a recorded artifact
+hash/size. This explicit local command needs no Map connection or credentials.
+Its artifact must be a regular, singly linked direct child of the recorded run
+directory, named with a `.json` suffix and containing one unambiguous JSON object.
+The source and redacted copy each fit the smaller of 8 MiB and the local artifact
+limit; JSON nesting is limited to 12. Binary/JSONL, missing, changed, ambiguous or
+unbound artifacts are refused. Use existing metadata export for other records.
+
+The new directory contains exactly three files:
+
+- `audit.json`: existing schema-1 sanitized source history, including the original
+  artifact hash and historical paths.
+- `artifact.json`: a separately serialized copy passed through central redaction.
+  Original tool output stays untouched; decisions are not reclassified.
+- `manifest.json`: existing schema 1 with relative paths, the exact copy's hash/size
+  and a `redacted_export` warning linking its source hash. Source status is retained,
+  including failed/partial outcomes; export does not complete or validate a run.
+
+The output directory must be new and outside the source run. Supported POSIX
+filesystems must provide directory-FD/no-follow operations and private modes.
+Ancestor directories must be owned by root/current user, without group/other
+write except trusted sticky directories. Writes use the opened new directory,
+never replace files, and reserve the unchanged free-disk floor plus actual output
+bytes. Failure retains partial files; do not infer a successful export from a
+partial directory or a recorded source status alone.
+
+**Windows 11 24H2+ candidate:** local fixed NTFS only, with the documented
+CreateDirectory2W/CreateFile3 APIs. Every ancestor must have an exact trusted owner
+(current user, SYSTEM or Administrators). Reparse paths, unsupported namespaces,
+sharing conflicts and unsupported owners refuse without fallback. New output ACLs
+are protected and verified, and handles remain pinned through manifest publication.
+Native ACL/race acceptance is still open; this does not claim full NM-3 portability.
+Existing Windows execution and metadata commands retain their behavior.
+
+The CLI converts output to a Python `Path` and resolves it for export. Dot and
+repeated-separator spellings can normalize before adapter validation; this is
+accepted normalization, not rejection of every raw argument alias. Security
+checks apply to the resulting absolute path and actual no-redirect handle opens.
+Direct adapter raw-string rejection tests do not prove CLI-token rejection.
+
+The copied JSON formats are readable elsewhere, but no import, authority
+restoration, archive encryption or independent provenance attestation is provided.
+Central redaction is not a proof that all sensitive content was found; review the
+copy before sharing it. Escaped lone Unicode surrogates may remain in JSON.
+
 ---
+
+Automatic cleanup of old direct-run directories preserves every journal-linked
+run, artifact and manifest. Unjournaled directories older than seven days are
+eligible only where descriptor-relative deletion is supported. Windows, Python
+3.10 and unsupported runtimes preserve old data; execution still works. Manage
+retained data explicitly rather than assuming it will be removed automatically.
 
 ## `tools` — pinned, verified tool installs
 
@@ -1028,14 +1203,37 @@ path is explicit; approval requires a terminal and operator review. Validation
 does not run a tool. No approval command is exposed through MCP, and this module
 does not enable a worker or change `vardrrunner` command behavior.
 See the [contract specification](contracts/README.md) before using the prototype.
-Guarded execution is an explicit library acceptance path, not another CLI command.
-It requires the companion unreleased Gate request-guard capability; older Gate
+The native Windows `workspace gate` consumer above calls the shared guarded
+runtime. The file interface itself never executes a tool; other guarded library
+adapters are not general CLI execution paths. Guarded execution requires the
+companion unreleased Gate request-guard capability; older Gate
 binaries fail on the required flag before contacting a target.
 The internal guarded adapter also refuses an expired launch after local preparation
 and caps the process timeout by the signed execution contract's own expiry. No
 legacy CLI option or behavior changes.
 
 ## Owned engagement capacity (local NM-2 increment)
+
+### Explicit managed metadata reconciliation
+
+`vardrrunner audit reconcile-managed RUN_ID` observes the original managed
+association using the configured original enrollment and existing Runner identity.
+It closes local metadata only for an exact authenticated terminal receipt, or a
+durable local marker proving no claim RPC was invoked. It preserves artifacts,
+spent counts, fences and consumption-ACK history. It performs no target work,
+uploads, PID action or execution-token recovery. Unknown state stays held and a
+nonzero exit reports remaining local holds. Normal `recover` keeps its existing
+managed-run deferral. See [managed worker and recovery](managed-worker.md).
+
+For a worker durably linked before claim-send, the command also recognizes the
+exact server receipt for an irreversibly retired, unbound incarnation. This can
+close only an untouched local claim intent as `not_claimed_by_retired_runtime`;
+it grants no retry and never fabricates a contract or consumption acknowledgement.
+Old unlinked intents and missing original credentials remain held.
+
+The managed worker is a separately enabled distribution capability; ordinary
+Runner startup, `jobs run` and direct/Mapless commands do not start it. Initial
+worker/profile limitations and platform proof are in [lifecycle](worker-lifecycle.md).
 
 For finite cumulative permission allocations, invoke
 `jobs run --controlled --duration-budget 30`. Requires Map `0035durationbudget`
@@ -1107,6 +1305,12 @@ Managed result finalization and receipt reconciliation remain explicit library
 operations only. No existing recovery command reconstructs a capability or retries
 managed work. See [ADR 0035](adr/0035-managed-result-finalization.md).
 
+A guarded Gate `execution_in_progress` artifact is a local checkpoint. Normal
+return rejects it as unfinished. Only trusted native confirmed stop may retain
+its genuine observations in a separate cancelled copy bound to the reviewed case;
+the original checkpoint bytes remain unchanged. This adds no publication retry,
+stop proof, grace period or execution time.
+
 Managed known-stop reporting remains an explicit library operation. No CLI or
 automatic recovery path infers termination from a PID or retries a stop report.
 See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
@@ -1121,3 +1325,123 @@ retain their behavior. See the [canonical exit status](nm2-canonical-exit-status
 
 The library-only managed transport honors the configured API base prefix used by
 the existing Full distribution. This adds no CLI command, worker or enrollment.
+
+### Dormant finite recon projection (NM-3)
+
+No recon command or default capability is added. Existing authorization CLI
+planning and Gate execution remain Gate-only. The offline projection is described
+in [architecture](architecture.md#dormant-finite-recon-projection-nm-3);
+validation of a signed projection does not authorize an executable recon path.
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.
+
+### Offline worker-state inspection (NM-2 candidate)
+
+`vardrrunner worker-state --journal PATH --identity PATH --runner-id UUID
+--runtime-id UUID --runtime-sha256 SHA256 --admission-sha256 SHA256` requires all
+six explicit selections. It reads existing local state offline, skips startup
+cleanup only for this command, creates no identity or journal, and performs no
+Map request, credential lookup, tool execution, migration or repair.
+
+The closed `vardr.worker-state-audit/1` JSON has `status` equal to `retired`,
+`empty_unissued` or `held`. Exit0 means a complete matching local audit with zero
+global holds and one of the first two states. Exit1 means held. Incomplete,
+unsupported, inconsistent or inspection-budget-exhausted state has `complete:false`
+and null counts/holds; it never masquerades as zero. Inputs that fail the fixed
+selection validators produce redacted JSON, without echoing their values.
+
+`empty_unissued` requires the exact idle parent/cursor0 and no selections,
+attempts, associated runs or claims. It supplies no physical stop or retirement
+proof. `retired` requires the retained original-key-linked retirement observation;
+earlier released job rows need not be rewritten as physically retired. Public
+output contains only the selected UUIDs/digests, parent/cursor, counts, retirement
+receipt digest and fixed status/reason fields. Identity labels/hostnames and raw
+journal documents never leave the inspection.
+
+For a claim whose reply was lost, a validated original retirement may
+prove server sequence N+1 while the local cursor stays N, including zero.
+The audit preserves validated released history and no-send tombstones; it creates
+no acknowledgement, attempt or history entry.
+
+The command has a cooperative30-second inspection budget, SQL progress checks and
+the existing5-second SQLite busy wait. It imposes no healthy-history/job ceiling
+and changes no execution, native or startup deadline. This is not a proven hard
+wall for filesystem calls or JSON parsing. Normal SQLite read-only WAL handling
+is retained and may create/change sidecars; no checkpoint or immutable fallback
+is used. Identity input is bounded to8192 bytes and rejects linked/reparse paths.
+
+This command is a new image capability. A lifecycle caller must explicitly hold
+when an old image lacks it; it must not assume e8 images support it or replace
+missing output with zero. Stop/re-enable remains an unimplemented, separate
+lifecycle candidate; this command enables no worker and closes no platform gate.
+
+### Offline first-worker state inspection (NM-2 candidate)
+
+`vardrrunner worker-bootstrap-state --journal PATH --identity PATH --runner-id UUID`
+reads explicit absolute paths in the same state directory. It uses the existing
+identity reader, read-only SQLite snapshot and full local-holds audit. The
+closed `vardr.worker-bootstrap-audit/1` JSON is `clear` only for a complete
+existing journal with zero global holds and no worker history. A missing
+journal is held as `journal_not_initialized`, with no history or hold claims.
+Incomplete or inconsistent state, and any prior worker history, remain held. No names,
+hostnames, database values, secrets or paths appear in the JSON.
+
+The helper skips startup cleanup, creates or migrates no database, and makes
+no HTTP or credential request. Normal SQLite read-only WAL sidecars still
+apply. Even `clear` is only a local fact; the distribution must independently
+verify the complete original installation and no previous lifecycle effects.
+
+### Explicit original worker reconciliation (NM-2 candidate)
+
+`vardrrunner worker-reconcile --journal PATH --identity PATH --runner-id UUID
+--runtime-id UUID --runtime-sha256 SHA256 --admission-sha256 SHA256` requires the
+same six explicit selections as `worker-state`. It first performs that existing
+identity/schema/binding and full-holds audit in one read-only snapshot. It skips
+startup cleanup for the explicit worker inspection and reconciliation commands;
+legacy commands keep their current startup behavior.
+
+For an unretired runtime it selects the unique pending original proposal, otherwise
+the exact issued history head. Ambiguous, missing or inconsistent associations are
+held; it does not guess from a limited audit list or require the operator to recover
+a local run ID from logs. The configured API origin must match the original run.
+Existing environment/keychain/explicit plaintext credential policy applies only
+after selection succeeds. At most one original-key authenticated
+`POST /jobs/{job_id}/managed/observation` is made through the existing API transport.
+There is no claim, consumption, upload, replay, grant change or execution.
+
+Local writes reuse existing receipt reconciliation. A noncreating repository opens
+the originally selected DB identity with SQLite `mode=rw`, checks current schema on
+every connection and retains normal WAL handling. Missing/replaced DBs are held;
+no identity/journal constructor, migration, repair or immutable fallback runs.
+Exact association and pending/head priority are checked again before observation
+and local metadata transactions. Existing Windows name pins remain; POSIX keeps
+its observed-file checks, not a race-free open or OS sandbox guarantee.
+
+A native stop can retain the stopped process's PID as audit metadata. Worker
+retirement checks the exact terminal stop receipt, original contract, and
+physical retirement together. It keeps the historical PID and receipt and
+clears the temporary claim hold in the same transaction as retirement.
+
+The closed `vardr.worker-reconciliation/1` JSON contains fixed status/reason,
+complete flag, public binding, the one selected local run ID/sequence, reconciliation
+state, remaining global holds and retirement receipt digest. `reconciled` requires
+a fresh complete retired audit with zero global holds. `already_retired` and genuine
+`empty_unissued` need no credentials or network. The latter is offline N/A, not
+physical retirement evidence. These three states exit0; `held` exits1. Incomplete
+facts have null holds/receipt. Raw rows, keys, token hashes and response bodies are
+not output.
+
+A nonempty parent0 cohort made entirely of validated no-send preclaim tombstones
+uses the canonical lowest original run UUID as its one observation anchor. The
+parent can retire only after exact original-key /4 claimNone, unbound last0 proof.
+All original run/claim/selection rows stay unchanged; public counts stay nonzero.
+This is never `empty_unissued` or an invented issued head. Cohort membership is
+rechecked before POST and the parent transaction; any drift is held. Global holds
+must be0 before parent retirement and in the final fresh audit. Unknown, mixed or
+malformed state cannot enter this branch. Existing selected/head recovery retains
+its original behavior. Missing original auth/receipt stays held without fallback.
+This new command is a separate immutable-image capability;090/e8 images do not
+provide it. Missing support must be held. Stop/re-enable and Linux/Desktop lifecycle
+acceptance remain separate, unclosed gates; nothing is enabled automatically.

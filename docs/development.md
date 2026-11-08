@@ -1,5 +1,207 @@
 # VardrRunner — Development
 
+The focused managed-checkpoint tests use real private files and inert Runner
+dispatch/HTTP. They verify confirmed-stop-only promotion, unchanged source bytes,
+reviewed role/index binding, malformed-checkpoint refusal and no publication on a
+normal return with stale progress. Gate's matching component test reads its real
+atomic checkpoint during ordinary HTTP execution. These tests provide no installed
+Windows/Linux termination or C01 acceptance credit.
+
+Managed-worker checks live in `test_managed_worker`, `test_worker_admission`,
+`test_worker_binding`, `test_worker_lifecycle` and `test_managed_reconciliation`.
+They cover explicit composition, durable send fences, authenticated observation,
+process/clock readbacks and conservative unknown-state holds. Run the repository's
+normal Ruff/format, mypy and complete 95%-coverage suite for the combined change.
+Python mocks do not certify native containment.
+
+`test_worker_persistent_journal`, `test_worker_persistent_observations` and
+`test_worker_persistent_reconciliation` cover exact signed-64-bit string counters,
+SQL history backstops, lost replies, original-key recovery and retained snapshot
+corruption. Later-job retirement cannot replace an earlier job's terminal receipt.
+Compiler-stage native state tests establish protocol behavior only; actual idle
+availability, more than 32 jobs, physical stops and containment still need the
+separate Linux and Docker Desktop acceptance matrix.
+
+`test_worker_persistent_preclaim` exercises denied-first/healthy-next discovery,
+fresh initial grants, immutable late-denial tombstones and unarmed deferred
+epochs. Owner/storage/custody/clock failures cannot masquerade as grant denials.
+The native owner and Map counters are not reset to continue after an unknown send.
+
+`test_worker_reuse_control` reproduces transient stop-journal exceptions before
+HTTP and verifies that later clean joins/valid refreshes never reset the reuse
+latch. Persistent native scalar units cover first/repeated EOF, exact cleanup
+expiry, overflow and non-revival; they create no owner or control-channel probe.
+Source review and compiler tests do not replace physical disconnect acceptance.
+
+`test_worker_idle_stop` composes the real worker adapter with pure clocks for
+finite idle closure, including a 10-microsecond ACK and a native observation
+20 milliseconds after expiry. It checks sticky no-claim/no-RPC waiting, unchanged
+permission bounds, uint64 overflow, full holds, empty lineage and readback faults.
+Native scalar classification units cover exit 124 versus clean/failure branches.
+These model/compiler checks do not prove that actual PID 1 selected that branch;
+exact-incarnation Windows Docker Desktop/Linux stop and containment acceptance
+remain separate. Keep the full native suite and exact 95% coverage floor.
+
+`test_worker_idle_return` covers a direct Python boundary jump with a
+10-microsecond ACK and two-second polling, one original job's DONE/release,
+one-nanosecond boundary ordering, full-hold refusal and finite count completion.
+It uses the existing journal/claim fixture with inert I/O and mocked owner ACKs;
+no native process or channel is created. The optional idle discovery cutoff
+must neither return cleanly nor send another request while awaiting PID 1.
+
+`test_runtime_retirement_observation` additionally checks exact v2 receipt binding,
+legacy v1 behavior, monotonic receipt retention, source changes during RPC and
+refusal when execution/artifact/ledger metadata conflicts. `test_worker_binding`
+checks that the runtime link and send marker commit or roll back together.
+These local protocol tests do not establish Map's PostgreSQL lock interleavings
+or direct physical exit; run those separate companion/platform gates too.
+
+`Dockerfile.worker` adds the small static lifecycle owner to an explicitly selected
+toolkit base. Keep build/source/image receipts and exercise the approved profile
+on actual Docker Desktop and Linux before accepting it. The ordinary Dockerfile
+and default CLI behavior are unchanged. The initial worker allows one attempt,
+32 explicitly declared credential environment names and no proxy environment;
+larger/proxy-dependent workflows remain unsupported by that candidate profile.
+See [lifecycle](worker-lifecycle.md) and [worker/recovery](managed-worker.md) for
+the exact entrypoint, privilege transition, fixed paths and remaining gates.
+
+Journal I/O checks include canonical symlink/WAL visibility and native Windows
+replacement attempts immediately before SQLite opens the pinned database.
+`tests/test_journal_io.py` also checks pin lifetime/error cleanup, actual-handle
+validation and complete read-only retention inventory. A skipped hardlink/symlink
+fixture means its native permission was unavailable, not that the case passed.
+These checks do not establish POSIX race safety or a non-mutating SQLite snapshot.
+
+`tests/test_run_commands.py` includes real-journal preservation and a physical
+run-root substitution regression. Its portable descriptor-protocol fixture checks
+refusal ordering and relative deletion but does not substitute for native POSIX
+confinement. Run the same suite on Linux; unsupported runtimes must preserve data.
+
+`tests/test_workspace_cli_process.py` starts independent CLI processes with fresh
+profiles, no Map credentials and a disabled keychain. A child audit hook refuses
+network connections and tool launches. The tests verify workspace persistence and
+that missing reads or invalid labels do not initialize state.
+
+Recon remains validation-only, rejected before reservation callbacks or execution;
+managed Docker execution remains gated. Full/Mapless, Docker and cross-platform
+acceptance remain required.
+Windows database/ancestor replacement pins and canonical WAL reads are implemented;
+POSIX pathname replacement and SQLite snapshot non-mutation remain open safety gates.
+Read-only SQLite access is not a strict filesystem non-mutation guarantee.
+Earlier test evidence applies only to its recorded source revision.
+
+## Standalone workspace Gate consumer
+
+`test_workspace_gate.py` tests the explicit file consumer with synthetic signed
+inputs and mocked native dispatch. It covers actual identity/workspace binding,
+Map refusal, grants, spent consumption, callback failure, deadline composition,
+stop/PID and partial-evidence handling; these mocks do not certify Windows runtime.
+`test_authorization_documents.py` covers the shared bounded public-file reader.
+
+The real native gate is separately opt-in: set `NM3_NATIVE_GATE_ACCEPTANCE=1`,
+`NM3_GATE_BINARY` to the independently receipt-verified Windows Gate,
+`NM3_GATE_SHA256` to its independently verified hash, and
+`NM3_DISTRIBUTION_SOURCE` to a trusted VardrSec checkout with the recorded NM-1
+loopback fixture. Run `pytest tests/test_workspace_gate_native.py` in a fresh
+disposable profile with adequate disk and no production bindings. It reuses that
+target, public fixture signing seed and synthetic values only; no host setting or
+privileged container is needed. It requires native Windows, five phases/14 requests,
+preserved case binding, no Map, no replay traffic and sanitized local evidence.
+It does not itself test active cancellation; retain separate native fault/stop gates.
+The synthetic reset establishes a baseline before each identity; it is not final
+cleanup. Gate runs the deny-expected peer first, then the allowed owner. The
+fixture checks that reset/write order and expects the owner's final value `1`,
+while preserving the 14-request ceiling. No extra cleanup request is added or
+claimed; the target is disposable loopback state. Replay and audit must still pass.
+Keep the default resource reserve/95% coverage floor and retain skipped/unrun gates.
+
+Reconciled journal/export checks extend the existing special-file cases to
+`read_existing`, including ordinary leaf aliases and committed live WAL records.
+These checks do not close the demonstrated concurrent-replacement race or native
+Windows acceptance. Test counts from older candidates are not combined acceptance.
+
+## Local workspace metadata
+
+Listing cases check bounded/deterministic metadata discovery, missing/corrupt/
+future state without initialization, byte preservation and no Map/provider/process
+use. CLI forwarding checks the limit kwarg. Tests isolate the unchanged global
+startup maintenance hook; database read-only claims are not a claim of zero
+filesystem bookkeeping by SQLite or the application's existing startup code.
+
+`tests/test_journal_file_types.py` checks pre-existing FIFOs/directories and
+dangling/special-target links refuse before SQLite, including the grant store's
+separate connection and repeated journal calls. It checks absent reads do not
+initialize state and ordinary leaf aliases see live committed WAL data. Windows
+reparse attributes are simulated; native Windows semantics need platform testing.
+These checks do not prove safety against concurrent replacement between metadata
+inspection and SQLite's pathname open, or bounded I/O on unavailable filesystems.
+
+`tests/test_workspaces.py` covers fresh and existing journal preservation,
+concurrent creation, collision refusal, invalid/future/corrupt state and CLI
+operation without Map authentication, network or process creation. Tests use
+disposable journals, never an installed workspace. Creation stores metadata only;
+it does not establish scope, grant approval or enable execution. Existing audit
+and connected CLI regressions remain applicable. The normal full suite and 95%
+coverage floor are unchanged; do not lower resource policies to accommodate a
+small test host. Report simulated resource inputs separately from actual capacity.
+
+
+`test_run_dnsx_uses_arg_list` checks automatic version checks are disabled in the
+adapter argv. Opt in to `tests/test_smoke_dnsx.py` with `VARDRRUNNER_SMOKE=1` and
+`VARDRRUNNER_SMOKE_MANAGED_DIR` pointing to existing hash-verified pinned tools.
+The smoke uses only version mode and an isolated configuration home: flag parsing,
+not a DNS query, real-target scan, destination boundary or network-isolation proof.
+An absent verified artifact leaves this smoke unrun; never substitute a PATH tool.
+
+## Partial portable run export
+
+CLI alias coverage uses real Typer Path conversion. Direct raw-string Windows
+adapter tests cover that lower-level API only; they do not claim raw CLI aliases
+are all rejected before Python normalization. Native path/ACL/race gates remain.
+
+
+The control-store exclusion regression seeds real synthetic reference grants,
+their revocation, ledger authority state, a synthetically seeded prior-use fence
+and trusted-clock metadata. The seeded fence is not evidence of a real execution.
+Evidence export must leave those live stores byte-for-byte/row-for-row unchanged
+and copy only the existing three evidence files, before and after revocation.
+No credential is resolved and no approval/contract is issued or executed. This
+does not prove authority restoration, rollback reconciliation or an installed
+Mapless-to-Full transition; correlation metadata is still permitted in evidence.
+
+`tests/test_portable_export.py` checks source hash/size and descriptor binding,
+strict bounded JSON, original versus derivative provenance, status preservation,
+exclusive private output, redirected-directory refusal, fresh record reads and
+partial-output retention. Every case uses synthetic local files; no tool or Map
+request is made. New unit cases simulate a finite 2 GiB capacity observation and
+only the filesystem-root UID as 0, preserving all other stat observations. This
+cloud runtime actually has root UID 65534 and insufficient free disk, so those
+unit results are not actual-host permission/capacity acceptance.
+
+`test_real_capacity_export` uses neither simulation. It must run in Workstream C
+on an adequately sized supported POSIX host, along with normal full regression
+and the unchanged 95% floor. Its environment skip here is unproven, not passed.
+Windows uses a candidate 24H2+ handle adapter on local fixed NTFS; native ACL/race
+acceptance remains open. `tests/test_windows_export.py` distinguishes mocked API
+protocol checks from the opt-in actual native check. On Windows, set
+`VARDRRUNNER_WINDOWS_EXPORT_ACCEPTANCE=1` for that synthetic test, using a NEW
+retained basetemp; never reuse a pytest basetemp containing evidence. No Windows
+security acceptance is claimed by mocked cases. Existing execution is unchanged.
+Preserve test files;
+do not lower resource policy, change host ownership/ACLs or repeat unchanged
+native Gate/scanner checks for this file-export increment.
+
+## Scoped local audit history
+
+`tests/test_journal.py` checks exact engagement filtering before limits, combined
+time bounds, case/wildcard behavior and literal blank/SQL-looking historical IDs.
+`tests/test_audit.py` checks local-only redacted metadata export, empty selection
+and preservation of other runs. `tests/test_cli.py` checks both `--engagement`
+and `-e` delegation for list/export and unchanged defaults. Use the normal
+full-suite/95% coverage floor and resource reserve; this feature needs no live
+Map service, credentials, Gate binary or managed worker. Export remains schema 1
+with existing atomic replacement behavior; it is not an artifact/workspace backup.
+
 `tests/test_managed_claim.py` covers the unregistered pre-claim entry, independent
 journal connections, preparation/grant/clock failures and conservative recovery.
 Map's explicit `tests/test_managed_entry.py` adds real verified loopback TLS and
@@ -153,7 +355,7 @@ VARDRRUNNER_SMOKE=1 VARDRRUNNER_SMOKE_BIN_DIR=/path/to/bins pytest tests -m smok
   report on an unreachable target.
 
 ### Wiring and guard tests
-`tests/test_cli.py` is the only thing that checks Typer wiring, and
+`tests/test_cli.py` checks Typer option forwarding, and
 `mock.assert_called_once()` is not enough: it passes whether or not an option reaches the
 command module. Two v0.28.0 fixes existed because nothing asserted kwargs — `--max-targets`
 was implemented but never exposed, and `import ffuf` stayed registered after leaving
@@ -441,3 +643,83 @@ Only Windows `symlink_to` error 1314 marks that real fixture unavailable/unprove
 no host privilege/settings change or link substitute is permitted. A separately
 labeled synthetic marker test always checks fail-closed rejection and zero RPCs;
 it does not certify an OS boundary. Required real-link evidence remains separate.
+
+### Dormant finite recon projection (NM-3)
+
+`tests/test_recon_projection.py` uses synthetic documents and the existing ledger;
+it performs no DNS, HTTP or tool execution. Run it with the legacy authorization
+contract/runtime tests, then the unchanged full-suite 95% floor and static checks.
+See [ADR 0041](adr/0041-dormant-finite-recon-projection.md) for the conditional Linux
+request model. Native Windows, common-platform cancellation and execution gates
+remain open; these projection tests cannot close them.
+
+Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
+Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
+No execution path is enabled.
+
+### Existing-worker inspection validation
+
+`tests/test_worker_state_audit.py` uses only isolated temporary identity files and
+SQLite journals, the existing synthetic persistent fixtures, and inert original
+observation callbacks. The suite fixture selects and verifies every config,
+journal, identity, grant-catalog and tools/data path before dependent fixtures.
+The external guarded validator installs private HOME and permanent operator,
+provider, network and process denials before project imports. Ordinary CLI wiring
+checks cover all six explicit strings and the inspection-only cleanup bypass.
+
+Required coverage includes genuine unissued parent0, selected-but-unissued
+retirement, prior released history, original observation loss, schema/binding
+mismatches, orphan associations, unrelated global holds, incomplete budget failure,
+normal WAL reads and fixed JSON on bad selections. Component tests establish
+neither physical stop nor same-installation re-enable. Actual first and next
+incarnations must use an image containing the new inspection contract; unsupported
+old images remain held. Full validation/95% coverage and Linux/Desktop lifecycle
+acceptance remain separate gates. Inspection's30-second cooperative budget is not
+an execution or startup budget and must not truncate history into a false zero.
+
+### Original worker reconciliation validation
+
+`tests/test_worker_reconciliation.py` uses isolated persistent-worker models,
+temporary identity/journal files and an inert original-key client. All config,
+grant, journal, identity and tool paths are scoped before dependent fixtures.
+The fixed-error contract also runs against unchanged090 for a clean-red proof.
+
+Required vectors cover pending-versus-history-head priority, more-than32 healthy
+jobs without a ceiling, ambiguous proposals, genuine empty parent0, already-retired
+offline behavior, preclaim-only parent0 held, wrong binding/origin, unavailable or
+nonretiring observations and the one-request guard. Missing, replaced or changed
+schema after selection must not create/migrate a journal or issue an observation.
+Candidate drift before POST/after reply/before record and wrong association at
+result/stop writes must retain holds and original history. Ordinary WAL updates
+must remain compatible with the original file identity.
+
+Run these with the existing worker-state, managed observation/reconciliation,
+persistent sequence, result/stop, journal, identity and CLI regressions, then the
+unchanged full-suite95% floor and static checks. Permanent focused guard evidence
+does not replace full quality or physical Linux/Desktop acceptance. First and next
+actual lifecycle trials need an image containing both inspection and reconciliation
+contracts; unsupported older images are held. The closed-preclaim parent0 tests require1/2/33 genuine model-produced denial
+tombstones, positive original last0 retirement, exact unchanged tombstone bytes,
+real nonzero public counts and offline repeat. Negative cases cover malformed or
+mixed cohorts, membership/state drift before/after POST, wrong origin/original
+reply, changed database identity, stale evidence, inspection budget exhaustion
+and unrelated global holds before/during/after commit. The latter must remain
+held with its original record intact. The legacy selected/head, true-empty0,
+count/idle/normal35 paths and all global-holds predicates must remain unchanged.
+Same-installation next-enable and actual lifecycle acceptance remain NM-2 gates.
+
+
+The first-worker inspection tests use explicit temporary journals and identities.
+Exercise a current clear journal, real worker history with no active holds,
+uninitialized state, orphaned sidecars, wrong identity and unknown worker schema.
+Keep this audit separate from actual first-installation and successor acceptance.
+
+
+The worker-state regressions for a lost claim reply use real isolated journals
+and original-association observations. They cover the first claim and two healthy
+released jobs followed by a committed third claim whose reply is lost, including
+a retained closed preclaim tombstone before the healthy jobs. Inspection
+keeps the original local cursor and attempt count, preserves both released rows,
+and validates only the exact next server-issued retirement. The JSON CLI checks
+are offline; synthetic fixtures do not qualify installed transport loss, physical
+exit, containment, or release.

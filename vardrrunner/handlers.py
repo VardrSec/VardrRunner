@@ -1168,6 +1168,8 @@ class VardrGateHandler(ToolHandler[configs.VardrGateConfig]):
         result = json.loads(output.read_text(encoding="utf-8"))
         if not isinstance(result, dict):
             raise runner.ToolError("VardrGate returned an unexpected result shape")
+        if result.get("error") == "execution_in_progress":
+            raise runner.ToolError("VardrGate checkpoint is not a final result")
         declared = {
             identity["id"]: identity["preflight"]
             for identity in configs.gate_identities(config.test_case)

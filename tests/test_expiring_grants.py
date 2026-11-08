@@ -467,5 +467,8 @@ def test_grant_expiry_during_controlled_permission_callback(tmp_path, monkeypatc
                     [sys.executable, "-c", code], config.tool_environment(), delayed_permission
                 )
     assert not marker.exists()
-    assert len(creates) == 1
-    creates[0].assert_not_called()
+    # Journal name pins also load kernel32. Every actual process-creation
+    # entrypoint must remain uncalled, regardless of unrelated library loads.
+    assert creates
+    for create in creates:
+        create.assert_not_called()

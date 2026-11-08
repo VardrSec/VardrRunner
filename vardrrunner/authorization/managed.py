@@ -67,6 +67,8 @@ class ManagedGate:
         claim_anchor_utc: datetime | None = None,
         grant_snapshot: dict[str, str] | None = None,
         grant_expiry: datetime | None = None,
+        verified_lease: Callable[[dict, float, float], None] | None = None,
+        verified_runtime_lease: Callable[[dict, float, float], None] | None = None,
     ):
         require(context.origin == "map", "managed_origin_required")
         require(
@@ -142,6 +144,11 @@ class ManagedGate:
         self._lease_end = min(claim_started + lease, self.hard_end)
         self._state_lock, self._refresh_lock = threading.Lock(), threading.Lock()
         self._current, self._local_stop = current, local_stop
+        self._verified_lease = verified_lease
+        self._verified_runtime_lease = verified_runtime_lease
+        require(
+            verified_lease is None or verified_runtime_lease is None, "worker_lease_hook_conflict"
+        )
         self._used = self._denied = False
         self._policy: credential_grants.Policy | None = None
         self.control: execution_control.Control | None = None
@@ -219,6 +226,25 @@ class ManagedGate:
                 self.anchors,
                 checked,
             )
+            if self._verified_lease is not None or self._verified_runtime_lease is not None:
+                try:
+                    if self._verified_runtime_lease is not None:
+                        from .results import BINDING
+
+                        worker_binding = {
+                            key: self.binding[key] for key in BINDING - {"contract_sha256"}
+                        }
+                        worker_binding["contract_sha256"] = digest(encoded(self.envelope))
+                        self._verified_runtime_lease(worker_binding, end, self.hard_end)
+                    elif self._verified_lease is not None:
+                        self._verified_lease(dict(self.binding), end, self.hard_end)
+                except Exception:
+                    self._denied = True
+                    raise AuthorizationError("worker_owner_control_unavailable") from None
+                require(
+                    time.monotonic() < min(end, self.lease_deadline()),
+                    "managed_lease_expired_or_stopped",
+                )
             with self._state_lock:
                 self._lease_end = end
             # Only shortens the verified interval. Control also receives end as

@@ -313,6 +313,9 @@ def test_actual_native_tree_stops_at_strictest_window(tmp_path, monkeypatch, mod
     assert failure.value.confirmed
     assert str(failure.value) == ("tool_timeout" if mode == "per_job" else "authorization_deadline")
     assert parent.exists() and child.exists() and partial.read_text() == "partial evidence"
+    for label, path in [("parent", parent), ("child", child)]:
+        if not path.read_text():
+            print(f"::error::duration_empty_pid_{mode}_{label}")
     assert not any(process_running(int(path.read_text())) for path in [parent, child])
     assert elapsed < 6  # 1s window + existing 2s grace/2s verification + scheduling margin.
     if mode == "budget_forced":

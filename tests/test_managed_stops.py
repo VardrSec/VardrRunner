@@ -113,6 +113,7 @@ def test_only_known_confirmed_stop_can_report_and_close(stopped, cause):
     [
         (False, "tool_timeout"),
         (1, "tool_timeout"),
+        (True, "observed_exit"),
         (True, "execution_state_uncertain"),
         (True, "untrusted raw error"),
     ],

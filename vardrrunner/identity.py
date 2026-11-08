@@ -8,10 +8,12 @@ import socket
 import stat
 import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
 from vardrrunner import config, manifests
+from vardrrunner.windows_journal import WindowsJournalError, WindowsJournalPin
 
 ENV_RUNNER_NAME = "VARDRRUNNER_NAME"
 IDENTITY_SCHEMA_VERSION = 1
@@ -70,6 +72,74 @@ def _read(path: Path) -> RunnerIdentity:
             if attempt < 4:
                 time.sleep(0.01)
     raise IdentityError(f"cannot read runner identity: {last_error}") from last_error
+
+
+def read_existing(path: Path) -> RunnerIdentity:
+    """Read one bounded existing identity without defaults, creation or overrides.
+
+    Reject linked/reparse components and detect replacement or content changes.
+    Windows uses the existing noncreating name pin; this is not an OS sandbox.
+    """
+    try:
+        path = Path(path).absolute()
+        if ".." in path.parts:
+            raise IdentityError("identity_path_unsupported")
+        for component in (path, *path.parents):
+            info = component.lstat()
+            if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+                raise IdentityError("identity_path_unsupported")
+        before = path.lstat()
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise IdentityError("identity_file_unsupported")
+        if os.name == "posix":
+            effective_uid = getattr(os, "geteuid", None)
+            if (
+                not callable(effective_uid)
+                or before.st_uid not in {0, effective_uid()}
+                or stat.S_IMODE(before.st_mode) & 0o077
+            ):
+                raise IdentityError("identity_permissions_unsupported")
+        guard = (
+            WindowsJournalPin(path, create=False, observed=before)
+            if os.name == "nt"
+            else nullcontext()
+        )
+        with guard:
+            descriptor = os.open(
+                path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+            )
+            with os.fdopen(descriptor, "rb") as stream:
+                opened = os.fstat(stream.fileno())
+
+                def identity(item):
+                    return (item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_nlink)
+
+                if identity(opened) != identity(before) or not stat.S_ISREG(opened.st_mode):
+                    raise IdentityError("identity_changed")
+                data = stream.read(8193)
+                if identity(os.fstat(stream.fileno())) != identity(opened) or identity(
+                    path.lstat()
+                ) != identity(opened):
+                    raise IdentityError("identity_changed")
+        if not 0 < len(data) <= 8192:
+            raise IdentityError("identity_size_unsupported")
+        # Use the shared duplicate-key/depth checks, then the existing pure loader.
+        from vardrrunner.authorization.codec import decoded
+
+        value = decoded(data, 8192)
+        if (
+            type(value) is not dict
+            or set(value) != {"identity_schema_version", "runner_id", "name", "hostname"}
+            or type(value["identity_schema_version"]) is not int
+            or value["identity_schema_version"] != IDENTITY_SCHEMA_VERSION
+        ):
+            raise IdentityError("identity_schema_unsupported")
+        result = _validated(value)
+        if value["runner_id"] != result.runner_id:
+            raise IdentityError("identity_uuid_unsupported")
+        return result
+    except (OSError, ValueError, WindowsJournalError):
+        raise IdentityError("identity_unavailable") from None
 
 
 def _create_exclusive(path: Path, created: RunnerIdentity) -> bool:

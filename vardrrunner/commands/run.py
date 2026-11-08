@@ -9,7 +9,10 @@ execute + upload. So `run nmap --timing 9` is rejected exactly like a job would 
 """
 
 import datetime
+import os
 import shutil
+import stat
+import sys
 import tempfile
 from pathlib import Path
 
@@ -17,19 +20,69 @@ import typer
 from rich.console import Console
 
 from vardrrunner import api, config, configs, handlers, redaction, resources, runner, targets
+from vardrrunner.journal import Journal, JournalError, journal_path_present
 
 _PRUNE_AFTER_DAYS = 7
 
 
 def _prune_run_dirs() -> None:
-    """Delete run directories older than _PRUNE_AFTER_DAYS days."""
+    """Age-prune unjournaled directories; retain all journal-linked evidence."""
+    if (
+        sys.version_info < (3, 11)
+        or not shutil.rmtree.avoids_symlink_attacks
+        or os.listdir not in os.supports_fd
+        or not hasattr(os, "O_DIRECTORY")
+        or not hasattr(os, "O_NOFOLLOW")
+    ):
+        return  # Unsupported confinement must preserve evidence, not fall back.
     runs = config.runs_dir()
-    if not runs.exists():
+    retained: set[Path] = set()
+    descriptor = None
+    try:
+        info = runs.lstat()
+        if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            return
+        root = runs.resolve()
+        if root != runs.absolute():
+            return
+        descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
+            return
+        path = config.journal_file()
+        records = Journal.read_existing_paths(path) if journal_path_present(path) else []
+        for record in records:
+            for value in (record.run_dir, record.artifact_path, record.manifest_path):
+                if value is None:
+                    continue
+                reference = Path(value)
+                if not reference.is_absolute():
+                    return  # Its original working directory cannot be reconstructed.
+                retained.update((reference, reference.resolve()))
+        cutoff = datetime.datetime.now().timestamp() - _PRUNE_AFTER_DAYS * 86400
+        for name in os.listdir(descriptor):
+            info = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+            if (
+                not stat.S_ISDIR(info.st_mode)
+                or getattr(info, "st_file_attributes", 0) & 0x400
+                or info.st_mtime >= cutoff
+            ):
+                continue
+            candidate = root / name
+            if any(
+                reference == candidate
+                or candidate in reference.parents
+                or reference in candidate.parents
+                for reference in retained
+            ):
+                continue
+            shutil.rmtree(name, dir_fd=descriptor, ignore_errors=True)
+    except (OSError, RuntimeError, ValueError, TypeError, JournalError):
+        # Unavailable or ambiguous state must never become permission to delete.
         return
-    cutoff = datetime.datetime.now().timestamp() - _PRUNE_AFTER_DAYS * 86400
-    for d in runs.iterdir():
-        if d.is_dir() and d.stat().st_mtime < cutoff:
-            shutil.rmtree(d, ignore_errors=True)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 # Re-exported so existing call sites and tests can patch them here.

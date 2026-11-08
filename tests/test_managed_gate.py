@@ -149,7 +149,7 @@ def specimen(tmp_path, monkeypatch):
         calls.append(True)
         return copy.deepcopy(reply)
 
-    def make(allocated_seconds=30):
+    def make(allocated_seconds=30, verified_lease=None):
         return managed.ManagedGate(
             claim,
             anchors,
@@ -162,6 +162,7 @@ def specimen(tmp_path, monkeypatch):
             claim_started=0,
             allocated_seconds=allocated_seconds,
             current=current,
+            verified_lease=verified_lease,
         )
 
     return SimpleNamespace(
@@ -177,6 +178,36 @@ def specimen(tmp_path, monkeypatch):
         execution=vector["execution"],
         anchors=anchors,
     )
+
+
+def test_lifecycle_receives_only_verified_bounded_lease(specimen):
+    s = specimen
+    received = []
+    gate = s.make(verified_lease=lambda *args: received.append(args))
+    gate.refresh()
+    assert received == [(gate.binding, gate.lease_deadline(), gate.hard_end)]
+
+
+@pytest.mark.parametrize("failure", ["remote", "owner", "late_owner"])
+def test_invalid_or_delayed_lifecycle_update_never_extends_permission(specimen, failure):
+    s = specimen
+    received = []
+
+    def update(*args):
+        received.append(args)
+        if failure == "owner":
+            raise OSError("synthetic owner disconnect")
+        if failure == "late_owner":
+            s.ticks[0] = 11
+
+    gate = s.make(verified_lease=update)
+    before = gate.lease_deadline()
+    if failure == "remote":
+        s.reply["action"] = "cancel"
+    with pytest.raises(AuthorizationError):
+        gate.refresh()
+    assert len(received) == (0 if failure == "remote" else 1)
+    assert gate.lease_deadline() == before
 
 
 def test_shared_validation_consumption_and_local_only_artifact(specimen, tmp_path, monkeypatch):
