@@ -18,6 +18,8 @@ from vardrrunner.authorization.contracts import ValidationContext, approved, tim
 from vardrrunner.authorization.documents import read_anchors, read_bytes, read_document
 from vardrrunner.authorization.ledger import AuthorizationLedger
 from vardrrunner.authorization.plan import PROFILE, origin
+from vardrrunner.authorization.recon_plan import RUNTIME_PROFILE
+from vardrrunner.authorization.recon_runtime import execute_recon, qualified_tools
 from vardrrunner.authorization.runtime import execute_gate
 from vardrrunner.journal import Journal, Phase, RunRecord, utc_now
 from vardrrunner.workspaces import Workspaces, validate_id
@@ -36,6 +38,7 @@ def run(
     trust: Path,
     output: Path,
     provisioned_issuer: bool = False,
+    allow_recon: bool = False,
 ) -> RunRecord:
     """Use existing signed permission; never issue or elevate it."""
     record = None
@@ -56,6 +59,15 @@ def run(
             read_document(execution),
         )
         require(plan_bytes == encoded(compiled), "plan_bytes_changed")
+        require(
+            compiled.get("profile") in ({PROFILE, RUNTIME_PROFILE} if allow_recon else {PROFILE}),
+            "unsupported_enforcement",
+        )
+        recon = compiled["profile"] == RUNTIME_PROFILE
+        tool_sha256, dnsx_sha256 = compiled["tool_sha256"], None
+        if recon:
+            _, hashes = qualified_tools()
+            tool_sha256, dnsx_sha256 = hashes["httpx"], hashes["dnsx"]
         signed = verify(envelope, anchors, "contract")
         permission = approved(receipt, anchors)["context"]
         current = ValidationContext(
@@ -67,9 +79,10 @@ def run(
             origin="standalone",
             now=datetime.now(timezone.utc),
             authority_revision=permission["authority_revision"],
-            tool_sha256=compiled["tool_sha256"],
+            tool_sha256=tool_sha256,
+            dnsx_sha256=dnsx_sha256,
             authority_sha256=permission["authority_sha256"],
-            capabilities=frozenset({PROFILE}),
+            capabilities=frozenset({compiled["profile"]}),
         )
         validate(envelope, receipt, compiled, case_input, options, anchors, current)
         if provisioned_issuer:
@@ -93,11 +106,11 @@ def run(
             job_id=journal_key,
             backend_url="",
             engagement_id=workspace_id,
-            job_type="vardrgate_api_test",
-            tool="vardrgate_api_test",
+            job_type="recon" if recon else "vardrgate_api_test",
+            tool="recon" if recon else "vardrgate_api_test",
             target_source="explicit",
             command_profile={
-                "standalone_profile": PROFILE,
+                "standalone_profile": compiled["profile"],
                 "origin": "standalone",
                 "controlled": True,
                 "contract_sha256": digest(encoded(envelope)),
@@ -105,7 +118,7 @@ def run(
                 "signed_job_id": signed["job_id"],
                 "attempt_id": signed["attempt_id"],
                 "fence": signed["fence"],
-                "grant_policy": "expiring/1",
+                "grant_policy": "none/1" if recon else "expiring/1",
             },
         )
         journal.transition(
@@ -114,7 +127,9 @@ def run(
         journal.transition(
             record.run_id,
             Phase.TARGETS_RESOLVED,
-            target_count=len({origin(d["request"]["url"]) for d in compiled["dispatches"]}),
+            target_count=len(case_input["hostnames"])
+            if recon
+            else len({origin(d["request"]["url"]) for d in compiled["dispatches"]}),
         )
         journal.transition(record.run_id, Phase.CLAIMING)
         console.print(f"Local run: {record.run_id}")
@@ -129,9 +144,18 @@ def run(
             ledger,
             current,
             signed["issuer"]["id"],
-            permission,
+            {
+                **permission,
+                "max_duration_seconds": min(
+                    permission["max_duration_seconds"], options["timeout_seconds"]
+                ),
+            }
+            if recon
+            else permission,
             record.run_id,
-            timestamp(signed["expires_at"]),
+            min(timestamp(signed["expires_at"]), timestamp(options["deadline"]))
+            if recon
+            else timestamp(signed["expires_at"]),
         )
 
         def observed(pid: int) -> None:
@@ -145,7 +169,7 @@ def run(
             launch_guard.monotonic_deadline(control.lease_deadline()),
             runner.observe_process(observed),
         ):
-            output_file = execute_gate(
+            output_file = (execute_recon if recon else execute_gate)(
                 ledger,
                 envelope,
                 receipt,

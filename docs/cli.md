@@ -1,8 +1,10 @@
 # VardrRunner — CLI Reference
 
-Standalone workspaces and the explicitly approved native Gate consumer are
-development capabilities. Recon remains validation-only, rejected before
-reservation callbacks or execution; managed Docker execution remains gated.
+Standalone workspaces and the explicitly approved native consumers are
+development capabilities. [Finite Recon](finite-recon.md) is an explicit
+`workspace authorize --profile recon` selection; Gate remains the default.
+The original Recon /1 projection stays dormant. Full/Mapless component pins and
+installed qualification remain separate from source implementation.
 Windows database/ancestor replacement pins and canonical WAL reads are implemented;
 POSIX pathname replacement and SQLite snapshot non-mutation remain open safety gates.
 Read-only SQLite access is not a strict filesystem non-mutation guarantee.

@@ -51,9 +51,11 @@ v1 and their conservative holds. Neither receipt nor local retirement reconstruc
 an execution capability or resets a tombstone or spent allowance.
 
 Runner remains the single execution engine, with standalone workspaces and
-optional Map coordination. The native standalone Gate consumer is a development
-capability. Recon remains validation-only, rejected before reservation callbacks
-or execution; managed Docker execution remains gated.
+optional Map coordination. Standalone Gate and explicit finite Recon /2 are
+development capabilities. [ADR 0045](adr/0045-finite-recon-execution.md) keeps one
+consumed ordinal and the existing owner across DNS and fixed-address HTTP tools;
+the original /1 projection stays dormant. Gate and default capabilities remain
+unchanged. Installed qualification remains separate.
 Canonical journal/WAL identity and Windows database/ancestor replacement pins are
 implemented; POSIX pathname replacement and SQLite snapshot non-mutation remain
 open safety gates. Read-only SQLite access is not a strict filesystem non-mutation guarantee.

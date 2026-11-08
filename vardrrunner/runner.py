@@ -22,6 +22,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
+from typing import TypedDict
 
 from vardrrunner import config, configs, execution_control, launch_guard, toolchain
 
@@ -197,6 +198,11 @@ def _terminate_process_tree(process: subprocess.Popen) -> None:
         process.wait()
 
 
+class _PrivateOutput(TypedDict, total=False):
+    stdout: int
+    stderr: int
+
+
 def _spawn_tool(cmd: list[str]) -> subprocess.Popen:
     """Start a tool in a process group that can be terminated as one unit.
 
@@ -206,6 +212,11 @@ def _spawn_tool(cmd: list[str]) -> subprocess.Popen:
     files, so no tool needs stdin. The environment is ``config.tool_environment()``.
     """
     environment = config.tool_environment()
+    private_output: _PrivateOutput = (
+        {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if config.isolated_tools_active()
+        else {}
+    )
     process = None
     try:
         with launch_guard.boundary():
@@ -215,10 +226,15 @@ def _spawn_tool(cmd: list[str]) -> subprocess.Popen:
                     stdin=subprocess.DEVNULL,
                     env=environment,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
+                    **private_output,
                 )
             else:
                 process = subprocess.Popen(
-                    cmd, stdin=subprocess.DEVNULL, env=environment, start_new_session=True
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    env=environment,
+                    start_new_session=True,
+                    **private_output,
                 )
         return process
     except BaseException:

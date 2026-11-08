@@ -520,6 +520,30 @@ class SequentialWorkerOwner(WorkerOwner):
     def finished(self) -> None:
         raise LifecycleUnavailable("worker_attempt_epoch_required")
 
+    def prepare_next_tool(self, control: Control) -> None:
+        """A finite plan may hand off only after its previous tool fully drained.
+
+        This is not a new attempt or lease. Ordinary Gate never takes this path.
+        """
+        with self._lock:
+            epoch = self._epoch
+            _require(epoch is not None)
+            assert epoch is not None
+            epoch.require_active()
+            binding = epoch._binding
+            _require(binding is not None and epoch._control is control)
+            assert binding is not None
+            _require(set(control.binding) == _CONTROL_BINDING)
+            _require(
+                all(control.binding[key] == binding[key] for key in _BINDING - {"contract_sha256"})
+            )
+            _require(self._launched and self._normal_return and self._drained)
+            _require(self._launch_thread is None and not control.stop_reason())
+            before = time.clock_gettime_ns(time.CLOCK_BOOTTIME)  # type: ignore[attr-defined]
+            _require(before < min(self._lease, self._hard, self._work_end))
+            _require(self._empty_children())
+            self._launched = self._drained = self._normal_return = False
+
     def run(
         self, cmd: list[str], seconds: int, observer: Callable[[int], None] | None, control: Control
     ) -> int:
