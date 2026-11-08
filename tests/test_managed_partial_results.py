@@ -71,7 +71,21 @@ def test_confirmed_stop_keeps_original_and_publishes_only_failed_result(
     output = Path(record.artifact_path)
     bound = json.loads(output.read_bytes())
     assert source.read_bytes() == original and output != source
-    assert bound == {**json.loads(original), "case_hash": t.handle.gate.plan["case_hash"]}
+    payload = bound.copy()
+    provenance = payload.pop("provenance")
+    assert payload == {**json.loads(original), "case_hash": t.handle.gate.plan["case_hash"]}
+    assert provenance["case_hash"] == t.handle.gate.plan["case_hash"]
+    assert provenance["case_snapshot"]["id"] == t.handle.gate.case["id"]
+    assert provenance["tools"] == {
+        "vardrgate_api_test": {
+            "sha256": t.handle.gate.plan["tool_sha256"],
+            "version": "unknown",
+            "hash_basis": "approved_plan_not_observed",
+        }
+    }
+    assert provenance["requires_new_review"] is True
+    assert provenance["execution_authority"] is False
+    assert provenance["independent_reproduction"] == "not_performed"
     assert record.pid is None and record.failure_reason == cause
     if os.name != "nt":
         assert output.stat().st_mode & 0o777 == 0o600
