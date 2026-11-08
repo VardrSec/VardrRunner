@@ -224,6 +224,11 @@ def compile_recon_runtime_plan(
             "invalid_recon_artifact",
         )
     plan = compile_recon_plan(case, execution, tool_sha256=HTTPX_SHA256, dnsx_sha256=DNSX_SHA256)
+    # DNSx file input otherwise expands ASN-shaped names through an external lookup.
+    require(
+        all(re.fullmatch(r"as-?[0-9]+", host) is None for host in case["hostnames"]),
+        "recon_asn_expansion_denied",
+    )
     plan.update(
         schema="vardr.finite-recon-plan/2",
         profile=RUNTIME_PROFILE,

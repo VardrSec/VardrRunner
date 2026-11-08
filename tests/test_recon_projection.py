@@ -408,6 +408,16 @@ def test_runtime_projection_preserves_v1_and_checks_all_answers(projection):
     assert encoded(compile_projection(case, execution)) == original
 
 
+@pytest.mark.parametrize("hostname", ["as123", "as-123"])
+def test_runtime_rejects_dnsx_asn_expansion(projection, hostname):
+    case, execution = projection
+    case["hostnames"] = [hostname]
+    case["candidates"] = [{**case["candidates"][0], "hostname": hostname}]
+    compile_projection(case, execution)  # Preserve the dormant v1 contract.
+    with pytest.raises(AuthorizationError, match="recon_asn_expansion_denied"):
+        compile_recon_runtime_plan(case, execution, tool_sha256="a" * 64, dnsx_sha256="b" * 64)
+
+
 def test_runtime_signed_binding_requires_explicit_capability_and_both_hashes(specimen, projection):
     case, execution = projection
     contract, receipt, plan, runtime = authorize(specimen, case, execution, runtime_profile=True)

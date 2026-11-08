@@ -191,7 +191,6 @@ def execute_recon(
                 "1",
                 "-timeout",
                 "1s",
-                "-stream",
                 "-json",
                 "-silent",
                 "-no-color",
