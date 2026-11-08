@@ -897,6 +897,17 @@ class TestMcpCommand:
         fake_mod.run.assert_called_once_with()
         assert result.exit_code == 0
 
+    def test_mcp_standalone_passes_explicit_mode(self, monkeypatch):
+        import sys
+        from unittest.mock import MagicMock
+
+        fake_mod = MagicMock()
+        monkeypatch.setitem(sys.modules, "mcp.server", MagicMock())
+        monkeypatch.setitem(sys.modules, "vardrrunner.mcp_server", fake_mod)
+        result = invoke("mcp", "--standalone")
+        fake_mod.run.assert_called_once_with(standalone=True)
+        assert result.exit_code == 0
+
     def test_mcp_without_the_extra_prints_install_hint(self, monkeypatch):
         import sys
 

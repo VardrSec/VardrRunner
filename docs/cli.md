@@ -386,13 +386,23 @@ Nothing updates on its own: only typing `vardrrunner update` installs anything.
 
 ```bash
 pip install 'vardrrunner[mcp]'   # one-time: the MCP server is an optional extra
-vardrrunner mcp                  # serve over stdio (clients launch this for you)
+vardrrunner mcp                  # serve connected tools over stdio
+vardrrunner mcp --standalone     # local read-only metadata; no Map configuration
 ```
 
 Runs a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio so an MCP
 client — Claude Code, Claude Desktop — can drive a VardrMap engagement with the same `vmap_`
 key this runner already uses. The agent's model is supplied by the client; this command only
 adapts VardrMap's API to MCP tools. See [ADR 0015](adr/0015-mcp-server.md).
+
+The explicit `--standalone` surface exposes only `list_local_workspaces` and
+`get_local_run(workspace_id, run_id)`. It reads the existing journal without creating
+or migrating it. Workspace labels, paths, target responses, credentials, error text
+and artifact contents are omitted. Run reads require the selected workspace and a
+standalone controlled-run binding. Lists are bounded and report `has_more`; recorded
+phases and artifact hashes are metadata, not independent verification. This mode
+has no authority, execution, queue, export or connected Map tools. It uses the same
+optional MCP dependency and stdio transport; default connected behavior is unchanged.
 
 Register it once with your client:
 

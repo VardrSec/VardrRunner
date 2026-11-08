@@ -7,6 +7,9 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Add opt-in `mcp --standalone` for read-only local workspace and scoped run metadata,
+  with no Map client, execution, authorization or file-export surface.
+
 - Add local `workspace draft-gate` to derive nonrunnable Gate case drafts from
   verified completed finite Recon evidence, preserving source provenance in the
   existing protected export bundle without Map, queueing or execution. See

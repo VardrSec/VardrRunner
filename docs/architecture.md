@@ -1,5 +1,12 @@
 # VardrRunner — Architecture
 
+Explicit `mcp --standalone` selects two local read tools before Map client setup.
+It reuses the existing noncreating workspace/journal readers and exact standalone
+workspace/run binding. Only fixed metadata is projected through the redactor;
+paths, free-form labels, response bodies and raw errors are omitted. It opens no
+artifact and registers no authority, execution, queue or export tools. Connected
+MCP remains the default; both modes use the same optional SDK and stdio transport.
+
 Guarded Gate `execution_in_progress` files are local checkpoints. Only an existing
 trusted native confirmed stop may promote their case-bound pending rows into a
 separate cancelled result; the original bytes remain unchanged. Normal return
@@ -678,4 +685,5 @@ source hashes and timing. Only original logical HTTPS candidates with HTTP statu
 observations produce draft specs; no response body, identity, owner/tenant or access
 decision is inferred. Empty identities/decisions require operator editing and a
 new, separate reviewed authorization. No Map/API, queue, execution, signing or new
-state store participates. This does not add a local coverage claim or local MCP.
+state store participates. This drafting command adds no local coverage claim;
+standalone MCP metadata access remains a separate explicit mode.

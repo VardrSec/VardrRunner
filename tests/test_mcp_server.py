@@ -921,3 +921,75 @@ def test_no_tool_can_approve_or_reject_a_proposal():
     assert "reject_proposal" not in tools
     # The propose tools exist, but applying a proposal is the operator's, not a tool.
     assert {"propose_scope_item", "propose_authorization", "propose_rate_ceiling"} <= tools
+
+
+def test_standalone_surface_reads_only_bound_metadata(tmp_path, monkeypatch):
+    from vardrrunner import config
+    from vardrrunner.journal import Journal
+    from vardrrunner.workspaces import Workspaces
+
+    path = tmp_path / "journal.sqlite3"
+    monkeypatch.setattr(config, "JOURNAL_FILE", path)
+    factory = MagicMock(side_effect=AssertionError("Map must not be constructed"))
+    srv = mcp_server.build_server(client_factory=factory, standalone=True)
+    tools = _tools(srv)
+    assert set(tools) == {"list_local_workspaces", "get_local_run"}
+    assert all(tool.annotations.read_only_hint is True for tool in tools.values())
+    assert _prompts(srv) == {}
+    assert _call(srv, "list_local_workspaces")["workspaces"] == []
+    assert not path.exists()
+
+    journal = Journal(path)
+    workspace = Workspaces(journal).create("Private local metadata")
+    profile = {
+        "origin": "standalone",
+        "controlled": True,
+        "private_path": str(tmp_path),
+        "response": "vmap_secret_canary",
+    }
+    record = journal.begin(
+        job_id="standalone:" + "a" * 32,
+        backend_url="",
+        engagement_id=workspace.workspace_id,
+        job_type="recon",
+        tool="recon",
+        target_source="explicit",
+        command_profile=profile,
+    )
+    listed = _call(srv, "list_local_workspaces")
+    assert listed["workspaces"] == [
+        {
+            "workspace_id": workspace.workspace_id,
+            "workspace_schema_version": 1,
+            "created_at": workspace.created_at,
+        }
+    ]
+    metadata = _call(
+        srv, "get_local_run", workspace_id=workspace.workspace_id, run_id=record.run_id
+    )
+    assert metadata == {
+        "workspace_id": workspace.workspace_id,
+        "run_id": record.run_id,
+        "job_type": "recon",
+        "phase": "discovered",
+        "target_count": 0,
+        "artifact_sha256": None,
+        "artifact_size": None,
+    }
+    assert "vmap_secret_canary" not in str(metadata) and str(tmp_path) not in str(metadata)
+    connected = journal.begin(
+        job_id="standalone:" + "b" * 32,
+        backend_url="https://map.example",
+        engagement_id=workspace.workspace_id,
+        job_type="recon",
+        tool="recon",
+        target_source="explicit",
+        command_profile=profile,
+    )
+    for selected_workspace, selected_run in (
+        ("c" * 32, record.run_id),
+        (workspace.workspace_id, connected.run_id),
+    ):
+        with pytest.raises(ToolError, match="Local run is unavailable in this workspace"):
+            _call(srv, "get_local_run", workspace_id=selected_workspace, run_id=selected_run)
+    factory.assert_not_called()

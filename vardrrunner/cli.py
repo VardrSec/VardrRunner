@@ -115,8 +115,12 @@ def _startup_cleanup(
 
 
 @app.command("mcp")
-def mcp() -> None:
-    """Run the MCP server so an AI agent (Claude Code, Claude Desktop) can drive VardrMap.
+def mcp(
+    standalone: bool = typer.Option(
+        False, "--standalone", help="Read local workspace/run metadata without Map or write tools."
+    ),
+) -> None:
+    """Serve connected Map tools, or opt into read-only standalone metadata.
 
     Serves over stdio. Requires the optional extra: `pip install vardrrunner[mcp]`.
     """
@@ -132,7 +136,10 @@ def mcp() -> None:
             "Install it with:  [bold]pip install 'vardrrunner\\[mcp]'[/bold]"
         )
         raise typer.Exit(1) from exc
-    mcp_server.run()
+    if standalone:
+        mcp_server.run(standalone=True)
+    else:
+        mcp_server.run()
 
 
 @app.command("init")
