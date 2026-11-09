@@ -2,32 +2,51 @@
 
 **The local automation runner for the VardrSec product family.**
 
-VardrRunner runs your security tooling on *your* machine and syncs the results to a
-VardrSec backend (today: [VardrMap](https://github.com/VardrSec/VardrMap)) over HTTP.
-It runs only when you invoke a command: execute a tool or pipeline directly, or use
-`jobs run` to claim queued jobs once, report progress, and upload results. It never
-installs a startup service or starts a background scan worker.
+VardrRunner runs security tooling on the operator's machine. Connected workflows
+exchange jobs and results with [VardrMap](https://github.com/VardrSec/VardrMap) over
+HTTP. The source-built Community distribution also supports standalone workspaces
+without Map, an account or a Map API key. Both use the same Runner engine.
 
-> **Why local?** Recon and scanning tools belong on the operator's box — their bandwidth,
-> their IP, their tool versions. The backend orchestrates and stores; the runner does the
-> work. The two are fully decoupled and only ever exchange JSON.
+Normal installation and startup launch no scans or background worker. Existing
+`jobs run` and direct commands remain explicitly invoked. The source-built Full
+distribution has a separate, operator-enabled managed worker; its availability
+does not grant permission to execute a job.
+
+> **Source and release status:** New Moon capabilities described here may require
+> the distribution's reviewed source pins; installing a published Runner package
+> does not establish that it contains them. See the [current acceptance ledger](https://github.com/VardrSec/VardrSec/blob/main/docs/new-moon-acceptance.md)
+> for supported boundaries and remaining safety/release gates.
+
+## Choose a workflow
+
+| Workflow | Requirements and entry point |
+|---|---|
+| Manual connected execution | Configure Map access, then explicitly run tools or `vardrrunner jobs run`. |
+| Standalone Mapless | Use the source-built [Mapless walkthrough](https://github.com/VardrSec/VardrSec/blob/main/docs/mapless.md): local workspace, reviewed authorization, bounded execution and portable evidence; no Map/PostgreSQL service. |
+| Managed Full | Follow [local managed setup](https://github.com/VardrSec/VardrSec/blob/main/docs/local-managed-setup.md) for explicit enrollment, approval, enablement, stop and recovery. Default startup remains inert. |
+
+The native package commands below retain their existing connected workflow.
+Platform, credential and tool-mode limits are documented separately; container
+support is not a claim of universal VPN access or failure-path acceptance.
 
 ---
 
 ## Features
 - **Manual queue execution** — `jobs run` claims and executes pending jobs once, then exits
-- **Manual invocation only** — no startup registration, detached daemon, or automatic queue polling
+- **Explicit execution by default** — ordinary setup installs no startup service and starts no detached worker; managed operation is a separate opt-in distribution workflow
 - **Tool runners** — `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu` (port discovery), `katana`
   (crawler), `gau` (archived URLs; reviewed container toolkit only),
-  each capturing output into an atomically unique run directory, every run bounded by a
-  timeout that terminates the complete child-process tree
+  each capturing output into an atomically unique run directory with bounded execution.
+  Supported process termination and platform limitations remain part of the acceptance boundary
 - **Pinned, verified tool installs** — `tools install --all` downloads exact versions of
   httpx, subfinder, nuclei, dnsx, naabu, katana, ffuf and dalfox into one folder, `~/.vardrmap/tools`, after
   checking each against a SHA-256 pinned in this package. The runner re-checks every
   managed binary before use and refuses to run one that has changed. Native Gau
   is excluded; use the [reviewed container toolkit](docs/container.md) for Gau
 - **Recon pipelines** — chain tools in one command: `recon` (subfinder → httpx → nuclei),
-  `deep` (adds dnsx resolution), `ports` (subfinder → dnsx → naabu), `quick`
+  `deep` (adds dnsx resolution), `ports` (subfinder → dnsx → naabu), `quick`.
+  These connected workflows are distinct from the standalone controlled finite Recon profile;
+  broader standalone discovery is not implied by their availability
 - **VardrGate authorization tests** — `vardrgate_api_test` jobs drive the local `vardrgate`
   binary over a CLI/JSON contract and attach the sanitized result to the job. Identity
   credentials may reference a secret (`value_env` / `value_keychain`) that is resolved on
@@ -43,10 +62,11 @@ installs a startup service or starts a background scan worker.
   raw targets, credentials, request bodies, or headers
 - **Small-team operations** — stable runner UUID/name, rotating JSON logs, strict production
   preflight, and explicitly invoked diagnostics; setup installs no startup service
-- **AI agent integration (MCP)** — `vardrrunner mcp` serves the engagement to an MCP client
-  (Claude Code, Claude Desktop): the agent reads scope, findings, assets, recon and jobs, and
-  queues scans or drafts findings with your approval. No tool can edit scope or delete, so
-  target-controlled output can't steer it. Optional extra: `pip install 'vardrrunner[mcp]'`
+- **AI agent integration (MCP)** — `vardrrunner mcp` serves engagement data to an MCP client.
+  Queue tools create pending proposals; operator approval in Map is required before work
+  is queued. Other tools can draft findings and write-ups. No approval or delete tool is
+  exposed. Target-controlled output remains untrusted; this is a permission boundary,
+  not immunity to prompt injection. Optional extra: `pip install 'vardrrunner[mcp]'`
 - **Reviewed authorization-case authoring** — `test-cases draft` turns observed API operations or an
   OpenAPI file into VardrGate drafts in a review file that is never overwritten; `test-cases save
   --reviewed` stores them. Drafts never contain credentials and never guess who should have access
@@ -58,9 +78,9 @@ installs a startup service or starts a background scan worker.
   free-disk reserve, and optional parallelism that never overlaps one engagement
 - **Live job events** — emits `started → targets_resolved → running → uploaded → done/failed`
   so the backend Terminal shows real-time logs
-- **Preflight (`doctor`)** — one command validates the whole machine (creds, URL, perms,
-  auth, identity, journal, disk, tools, pipelines) and exits non-zero on actionable failures, for
-  scripted host preflight
+- **Preflight (`doctor`)** — checks the selected workflow's configuration and prerequisites;
+  connected diagnostics include backend credentials and connectivity. Standalone
+  diagnostics do not require Map authentication
 - **Safe by default** — missing tools fail the job loudly, targets are normalized before
   use, risky target classes can be denied locally, and the API key is stored locally with
   restrictive permissions
@@ -70,13 +90,14 @@ disables provider TLS verification. The container toolkit is a development build
 the [container guide](docs/container.md).
 
 ## Requirements
-- Python **3.10+**
+- Python **3.10+** for native installation
 - The external tools you intend to run. `vardrrunner tools install --all` installs verified builds of `httpx`, `subfinder`, `nuclei`, `dnsx`, `naabu`, `katana`, `ffuf` and `dalfox`; `vardrgate` (for `vardrgate_api_test` jobs) comes from its repository. `nmap` is not part of the supported toolkit or any image: its integration stays off unless you set `VARDRRUNNER_ENABLE_NMAP=1` and install Nmap yourself under its own license terms; use `naabu` for port discovery. Other tools on your `PATH` can be used and are reported as unverified; Gau has no native archive or PATH fallback and runs only from the [reviewed container toolkit](docs/container.md)
 - For ffuf, supply a named wordlist in `~/.vardrmap/wordlists` (for example `common.txt` for `--wordlist common`); none ship with the runner
-- A VardrSec backend URL and an API key (`vmap_…` for VardrMap)
-- VardrMap **≥ v0.22.0** as the backend — the runner calls `/engagements/*` (see [CHANGELOG](CHANGELOG.md) v0.27.0)
+- **Connected commands only:** a VardrSec backend URL and API key (`vmap_…` for VardrMap)
+- **Legacy connected API baseline:** VardrMap **≥ v0.22.0** — the runner calls `/engagements/*` (see [CHANGELOG](CHANGELOG.md) v0.27.0). New managed features require the matching reviewed component versions, not merely this minimum
+- **Source-built Mapless:** use the distribution's documented Docker/Compose prerequisites and reviewed Runner/Gate pins; Map credentials and PostgreSQL are not prerequisites
 
-That is the baseline API requirement, not support for every newer feature. Shared
+The connected API minimum does not establish support for every newer feature. Shared
 playbooks, evidence reads and bound assessments require the matching Map endpoints
 and migration; deploy that backend first. These features ship in Runner 0.47.0.
 VardrGate jobs require a VardrGate build with `run --literal-job`
@@ -87,8 +108,11 @@ See [API assessment guidance](docs/cli.md#api-assessment-guidance).
 
 ## Container development
 
-The initial Compose packaging uses a non-root, explicitly invoked Runner container.
-See [container setup and limitations](docs/container.md). Native installation remains supported.
+The ordinary Runner container is non-root and explicitly invoked. Separate
+managed-worker packaging has its own reviewed lifecycle and privilege boundary;
+it is not enabled by ordinary startup. See [container setup and limitations](docs/container.md)
+and the distribution guides above. Native installation remains supported within
+its documented platform limits.
 
 ## Install
 
@@ -144,7 +168,7 @@ above does. Inside a venv you'll need it activated; `pipx`/`uv` avoid that entir
 
 ## Quick start
 ```bash
-vardrrunner init               # guided setup for manual use; no background startup
+vardrrunner init               # guided setup for manual connected use; no background startup
 vardrrunner tools install --all   # pinned, verified tools into ~/.vardrmap/tools
 vardrrunner                    # open the console: type `heartbeat`, `jobs list`, `exit`
 ```
@@ -155,9 +179,9 @@ Add tab completion with `pipx inject vardrrunner prompt_toolkit`. See
 [the console reference](docs/cli.md#console--type-commands-without-vardrrunner).
 
 Installation and normal setup create no startup task, launch no daemon, and do not offer
-background startup in a prompt. VardrRunner runs when you invoke it. Use `vardrrunner jobs run`
-to execute queued jobs manually. Install the program with `pipx install vardrrunner`;
-install scan dependencies with `tools install`.
+background startup in a prompt. Use `vardrrunner jobs run` to execute queued jobs manually.
+The separately enabled managed Full workflow does not change that command's meaning.
+Install the program with `pipx install vardrrunner`; install scan dependencies with `tools install`.
 
 If an older version (0.47.0 or earlier) installed automatic startup, upgrading does not
 remove it; see [removing a legacy startup service](docs/cli.md#upgrading-from-0470-or-earlier).
@@ -181,6 +205,8 @@ vardrrunner import nuclei --engagement <engagement-id> -f out.jsonl
 See **[docs/cli.md](docs/cli.md)** for the full command reference.
 
 ## Configuration
+
+This backend credential setup applies to connected workflows, not Mapless operation.
 
 **Desktop / dev:** `vardrrunner login` stores your API key in the **OS keychain** (macOS
 Keychain, Windows Credential Locker, Linux Secret Service), leaving only the backend URL in
@@ -212,12 +238,13 @@ The runner refuses to send your API key over plain HTTP to a non-local host, so 
 
 Environment credentials apply to the command you explicitly invoke. Use the OS keychain
 for stored credentials; VardrRunner does not install a service to keep them running.
+Managed distribution enrollment and secret custody follow their separate operator guide.
 
 ## Documentation
 - [docs/architecture.md](docs/architecture.md) — how the runner is structured and how it talks to the backend
 - [docs/development.md](docs/development.md) — local setup, testing, and contribution workflow
 - [docs/cli.md](docs/cli.md) — complete command and flag reference
-- [docs/adr/](docs/adr/) — Architecture Decision Records
+- [docs/adr/](docs/adr/) — Architecture Decision Records; dated decisions are not live acceptance status
 - [SECURITY.md](SECURITY.md) — private vulnerability reporting and support policy
 - [CHANGELOG.md](CHANGELOG.md) — version history
 
