@@ -16,8 +16,10 @@ contains the Runner CLI only: no Gate or scanning binaries, browser, wordlists o
 templates are bundled. Missing tools remain visible in doctor; this image alone
 does not satisfy full installation acceptance. An optional `toolkit` target adds Gate, libpcap (for naabu) and checksum-verified managed
 tools. Nmap is deliberately not installed. Python/Debian Trixie and the Gate Go build image use reviewed base digests.
-Python dependency ranges and apt packages still resolve during builds, so this is
-a development build; immutable published releases and reproducibility remain
+The shared base applies targeted apt/libapt and zlib security upgrades from the
+existing Trixie repositories and refuses package versions below the reviewed
+security floors. Python dependency ranges and apt packages still resolve during
+builds, so this is a development build; immutable published releases and reproducibility remain
 separate work. Native Runner's Python support and state paths are unchanged.
 
 Persist `/home/runner/.vardrmap` in a named volume; it contains configuration,
