@@ -1,32 +1,29 @@
-# NM-2 canonical exit reconciliation
+# NM-2 exit reconciliation — historical checkpoint
 
-Status: incomplete; no independent acceptance claimed.
+This page is a historical reference, not the current phase checklist. The earlier
+statement that no worker existed and NM-3 had not begun described an intermediate
+implementation. It must not be used to assess the current source-built platform.
 
-`VardrSec_New_Moon_Roadmap.md` in Library is the canonical charter (decision baseline 2026-11-01). It was read in full through Library and remains unchanged. The roadmap is approved direction, not an implementation authorization; later owner instructions authorize safe local work, defer Windows checks without closing them, condition publication on review/CI/security, retain migration review and waive database backup.
+The complete original checkpoint, including its ten exit clauses, transport
+limitations and then-current verification gaps, remains available at its
+[immutable source revision](https://github.com/VardrSec/VardrRunner/blob/84bac2d50b8c50b1dafdf1bb1604039e4d759873/docs/nm2-canonical-exit-status.md).
+Temporary development permissions, backup exceptions and machine-specific handoff
+requests in that record are not current operating instructions.
 
-This supersedes the earlier scoped handoff matrix as the phase denominator. Its eight-of-twelve local-row estimate must not be interpreted as NM-2 completion. The canonical exit explicitly requires a queued Map job executing under the approved worker in Docker Desktop. At present **zero of ten audit-split exit clauses are fully demonstrated end to end**: two lack the integrated worker implementation and eight have partial building blocks. This is acceptance readiness, not an effort estimate.
+## Current status and operating guidance
 
-| Clause | Canonical requirement | Current state and remaining work |
-| --- | --- | --- |
-| NM2-E01 | Queued Map job executes with approved worker running in Docker Desktop | **not implemented** — ManagedEntry/Issuer/Results/Stops remain unregistered; no operator-enabled Compose worker or managed production routes. Controlled execution is Windows-native only, so Linux Docker images currently refuse it. Approved container process-containment design and isolated Linux tests first; actual Windows Docker Desktop demonstration later. |
-| NM2-E02 | No execution when worker is disabled | **not implemented** — Current CLI runs only on explicit invocation, but worker enable/disable/readiness/health lifecycle does not exist. Absence of a worker is not an enabled/disabled acceptance test. Explicit least-privilege worker lifecycle, default disabled and observable; synthetic tests followed by Docker Desktop verification. |
-| NM2-E03 | Unauthorized/expired queued jobs fail closed in Strict | **partial** — Signed approval/contract, exact origin/principal/fence, time/scope/plan and grants deny invalid work in library paths. Legacy marked-job adapters refuse bypass. Production managed queue is not wired. Retain shared validator and demonstrate rejection through actual managed worker/queue with no side effects. |
-| NM2-E04 | Stop-work terminates active children within documented bounds | **partial** — Native Windows containment and historical fixtures exist; current managed reporting candidate needs Papachin verification. No controlled Linux/container containment; mock and loopback tests do not certify it. Reviewed Linux/container containment plus current-candidate native Windows and actual Docker Desktop bounded termination evidence. |
-| NM2-E05 | Disconnection passes tests | **partial** — Monotonic leases, no fallback, timeout/dropped-reply tests and read-only reconciliation are locally exercised. New bounded transport adds explicit no-redirect/no-retry/size/strict-JSON behavior. Exercise the integrated worker under disconnect; transport connect/read-idle waits are not a total wall-clock transfer deadline. |
-| NM2-E06 | Crash/restart passes tests | **partial** — Durable claim/result/stop intents and six fresh-process observation cases retain fences/files/PIDs without replay or reconstructed capability. Actual native owner-crash and worker restart need current environment verification. Current Windows/Papachin and container worker crash/restart checks; unknown containment remains held. |
-| NM2-E07 | Duplicate claims pass tests | **partial** — Single-winner atomic claims, unique job/ordinal tombstones, one-shot consume/ACK and ambiguous-send no-replay checks pass local SQLite/PostgreSQL tests. Verify identical invariants in integrated production route and worker competition; do not add speculative distributed scheduling. |
-| NM2-E08 | Revoked grants pass tests | **partial** — Engagement/origin-bound TTL/grant identity, revoke/expiry and final native launch writer checks exist; secrets stay local. Verify integrated container credential provider and current Windows path without host credential-store exposure. |
-| NM2-E09 | Budget exhaustion passes tests | **partial** — Concurrency, represented-origin target attempts and allocated duration atomically reserve/charge without refunding unknown attempts. PostgreSQL role/race tests pass. Exercise actual worker exhaustion; retain precise accounting labels and no unmeasured global RPS claim. |
-| NM2-E10 | Native fallback remains functional for documented exceptions | **partial** — Legacy/direct CLI compatibility tests remain green. New managed mode does not enable Linux controlled execution or controlled ffuf. Current native Windows execution and documented host/private/VPN exceptions require equivalent safety evidence; broad network/fresh-host certification belongs to its declared later gates. |
+- [New Moon acceptance ledger](https://github.com/VardrSec/VardrSec/blob/main/docs/new-moon-acceptance.md) — current delivery status and exact evidence boundaries.
+- [Architecture review](https://github.com/VardrSec/VardrSec/blob/main/docs/new-moon-architecture-review.md) — remaining safety and release dispositions, including NM-2 C09/C10.
+- [Managed worker operator guide](https://github.com/VardrSec/VardrSec/blob/main/docs/nm2-worker-operator.md) — supported status, stop and recovery procedures.
+- [Runner CLI reference](cli.md) — commands and compatibility behavior.
+
+Source-built Community acceptance does not waive unresolved NM-2 safety gates or
+authorize a release. Normal startup remains inert; worker availability and each
+job's execution authority are separate.
 
 ## Necessary bounded transport increment
 
-The existing fixture adapters use the generic API client plus instance-only policy. An explicit `VardrMapClient.managed_post` now provides one-shot HTTPS JSON with no redirects or retries, fresh cookie-free sessions, explicit header authentication preventing implicit netrc replacement, inherited proxy/CA/client-certificate configuration, strict finite JSON, and request/response caps. It remains callable only by explicit adapters; no managed route, worker or enrollment is registered. Generic client behavior remains unchanged.
-
-The current bounds are 1 MiB request and 256 KiB response; oversized evidence is refused, never split or replayed. Connect/read-idle timeouts are bounded, **not a total wall-clock transfer deadline**. A dripping peer can extend transport time; existing monotonic/signed managed permission ceilings must still prevent launch or renewal after expiry. This increment supplies no new execution right.
-
-Tests use synthetic keys, mocked sessions and verified loopback TLS with real authentication, receipt flows, bad certificates, redirects, ambiguous claims, strict JSON and body-size negatives. They establish neither Docker Desktop execution nor public/VPN/fresh-host certification.
-
-The principal implementation blocker is Linux/container controlled containment: `execution_control.available()` currently accepts only native Windows. Do not enable a worker with legacy/uncontrolled fallback, Docker socket, privileged mode, weakened TLS, or host credential exposure. Complete the reviewed containment/integration work and actual host acceptance before claiming the preferred deployment works.
-
-Independent review, Windows/Papachin, hosted CI/security/dependency/container checks, actual deployed migration comparison and consolidation remain open. NM-3 has not begun. Backup is waived. No publication, merge, deployment or acceptance.
+The original transport implementation and its limitations are recorded in the
+[historical transport section](https://github.com/VardrSec/VardrRunner/blob/84bac2d50b8c50b1dafdf1bb1604039e4d759873/docs/nm2-canonical-exit-status.md#necessary-bounded-transport-increment).
+Use current implementation documentation and the acceptance ledger for later
+integration evidence; do not infer a total transfer deadline from read-idle timeouts.
