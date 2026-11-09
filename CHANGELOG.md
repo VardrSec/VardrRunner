@@ -1789,3 +1789,8 @@ recorded here for continuity; their commits are present in this repo's history.
 Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
 Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
 No execution path is enabled.
+
+## Agent security audit (unreleased)
+
+- Ignore agent-local credential/session files while preserving shared instructions.
+- Reuse the pinned, checksum-verified Gitleaks history scan from VardrMap.
