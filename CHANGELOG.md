@@ -7,6 +7,10 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Allow the explicit persistent-worker recipe to reuse the qualified toolkit's
+  empty readiness directory only with its exact ownership and private mode.
+  Unexpected contents, links or permissions remain refused.
+
 - Apply targeted Trixie security updates for apt/libapt and zlib in the shared
   container base, with minimum-version guards. Keep base digests, native behavior
   and runtime privileges unchanged; rebuilt image evidence remains required.

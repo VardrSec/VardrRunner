@@ -15,9 +15,16 @@ RUN gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
 
 FROM ${RUNNER_BASE_IMAGE}
 USER 0:0
-RUN test ! -e /run/vardr-worker-ready \
-    && mkdir -m 0700 /run/vardr-worker-ready \
-    && chown 10000:10000 /run/vardr-worker-ready
+# The qualified toolkit already owns this empty image-layer directory.
+# Refuse unexpected ownership, modes, links or contents instead of replacing it.
+RUN if [ -e /run/vardr-worker-ready ] || [ -L /run/vardr-worker-ready ]; then \
+        test -d /run/vardr-worker-ready && test ! -L /run/vardr-worker-ready \
+        && test "$(stat -c %u:%g:%a /run/vardr-worker-ready)" = "10000:10000:700" \
+        && test -z "$(find /run/vardr-worker-ready -mindepth 1 -maxdepth 1 -print -quit)"; \
+    else \
+        mkdir -m 0700 /run/vardr-worker-ready \
+        && chown 10000:10000 /run/vardr-worker-ready; \
+    fi
 COPY --from=owner-build /vardr-worker-owner /usr/local/bin/vardr-worker-owner
 COPY vardrrunner /opt/runner/vardrrunner
 RUN python -I -c "import pathlib,shutil,vardrrunner; shutil.copytree('/opt/runner/vardrrunner', pathlib.Path(vardrrunner.__file__).parent, dirs_exist_ok=True)"
