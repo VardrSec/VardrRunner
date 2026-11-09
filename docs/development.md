@@ -778,3 +778,6 @@ opaque credentials, retained original hashes, truthful terminal outcomes and
 absence of direct queue fallback. These assertions need no target traffic,
 native fault campaign, new service or test harness. Existing cross-platform CI
 and installed distribution acceptance remain separate gates.
+
+Release SBOM generation is required: generation errors or an empty/invalid
+CycloneDX inventory fail the build before attestation/publication.
