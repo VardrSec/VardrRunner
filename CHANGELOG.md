@@ -7,6 +7,11 @@ Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+- Apply targeted Trixie security updates for apt/libapt and zlib in the shared
+  container base, with minimum-version guards. Keep base digests, native behavior
+  and runtime privileges unchanged; rebuilt image evidence remains required.
+  See [runtime package details](changelog/unreleased-runtime-package-fixes.md).
+
 - Include the existing optional MCP SDK in the development toolkit image and
   exercise bounded offline stdio metadata reads in container smoke. Keep the core
   image lean, default startup inert and distribution sessions explicitly exclusive.
