@@ -687,3 +687,15 @@ decision is inferred. Empty identities/decisions require operator editing and a
 new, separate reviewed authorization. No Map/API, queue, execution, signing or new
 state store participates. This drafting command adds no local coverage claim;
 standalone MCP metadata access remains a separate explicit mode.
+
+## NM-4 review and evidence boundaries
+
+Connected MCP submits inert queue proposals through Map's existing API. It cannot
+approve them; backend refusal never triggers a direct-queue fallback. Matching Map
+proposal endpoints must be available before this feature is enabled. Standalone
+MCP remains read-only and independent of Map.
+
+Artifact provenance reuses the original case hash, existing tool identity and
+redaction machinery. Redacted reviewed-input structure is a derivative; missing
+request inputs require fresh operator review. Metadata neither changes terminal
+outcomes nor restores authority, and does not claim independent reproduction.

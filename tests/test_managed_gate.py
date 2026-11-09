@@ -215,6 +215,8 @@ def test_shared_validation_consumption_and_local_only_artifact(specimen, tmp_pat
     monkeypatch.setattr(execution_control, "available", lambda: True)
 
     def inert_handler(self, targets, folder, config, **kwargs):
+        assert kwargs["tool_provenance"]["sha256"] == s.context.tool_sha256
+        assert kwargs["tool_provenance"]["hash_basis"] == "verified_runtime_binary"
         with launch_guard.boundary():
             result = folder / "vardrgate_result.json"
             result.write_text("{}")

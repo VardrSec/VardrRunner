@@ -769,3 +769,12 @@ revocation, replay refusal and evidence export. The affected authorization-runti
 and native SDK unit tests remain applicable. These are component checks; actual
 image/bootstrap containment and installed journey verification are separate. See
 [ADR 0044](adr/0044-explicit-local-worker.md).
+
+### NM-4 provenance checks
+
+Reuse existing handler, finite Recon, result/portable export and MCP tests for
+additive metadata and pending queue proposals. Required checks cover omitted
+opaque credentials, retained original hashes, truthful terminal outcomes and
+absence of direct queue fallback. These assertions need no target traffic,
+native fault campaign, new service or test harness. Existing cross-platform CI
+and installed distribution acceptance remain separate gates.

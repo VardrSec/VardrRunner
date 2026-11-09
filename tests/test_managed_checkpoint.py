@@ -62,6 +62,10 @@ def test_confirmed_stop_promotes_checkpoint_without_changing_original(
     )
     assert retained["error"] == "execution_cancelled"
     assert retained["case_hash"] == t.handle.gate.plan["case_hash"]
+    provenance = retained["provenance"]
+    assert provenance["tools"]["vardrgate_api_test"]["sha256"] == t.handle.gate.plan["tool_sha256"]
+    assert provenance["tools"]["vardrgate_api_test"]["hash_basis"] == "approved_plan_not_observed"
+    assert provenance["case_snapshot"]["id"] == t.handle.gate.case["id"]
     assert all(row["error"] == "execution_cancelled" for row in retained["executions"])
     assert all(row["reason"] == "execution_error" for row in retained["assessments"])
     assert t.handle.finalize_stopped(t.submit, t.finish) is True

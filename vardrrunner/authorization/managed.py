@@ -344,6 +344,11 @@ class ManagedGate:
                     request_guard=self.plan,
                     total_timeout=self.permission["max_duration_seconds"],
                     execution_deadline=self.until.timestamp(),
+                    tool_provenance={
+                        "sha256": self.context.tool_sha256,
+                        "version": "unknown",
+                        "hash_basis": "verified_runtime_binary",
+                    },
                 )
             require(output is not None, "missing_artifact")
             assert output is not None

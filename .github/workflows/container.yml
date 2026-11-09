@@ -25,6 +25,30 @@ jobs:
         run: |
           docker build --target toolkit --build-context gate=./.gate-source -t vardrrunner:toolkit .
           docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; assert "GODEBUG" not in os.environ; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and not shutil.which("nmap")'
+      - name: Verify non-root offline MCP stdio in the toolkit
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          python -m pip install '.[mcp]'
+          python - <<'PY'
+          import asyncio
+          from mcp import ClientSession, StdioServerParameters
+          from mcp.client.stdio import stdio_client
+          async def main():
+              server = StdioServerParameters(command="docker", args=[
+                  "run", "--rm", "-i", "--network", "none", "--user", "10001:10001",
+                  "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+                  "vardrrunner:toolkit", "mcp", "--standalone"])
+              async with asyncio.timeout(30):
+                  async with stdio_client(server) as (reader, writer):
+                      async with ClientSession(reader, writer, read_timeout_seconds=10) as session:
+                          await session.initialize()
+                          tools = await session.list_tools()
+                          assert {tool.name for tool in tools.tools} == {"list_local_workspaces", "get_local_run"}
+                          result = await session.call_tool("list_local_workspaces", {"limit": 1})
+                          assert not result.is_error and result.structured_content == {"workspaces": [], "shown": 0, "limit": 1, "has_more": False}
+          asyncio.run(main())
+          PY
       - name: Verify Nmap is absent from the tool-enabled image
         run: |
           docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint sh vardrrunner:toolkit -c '! command -v nmap && ! dpkg -s nmap >/dev/null 2>&1 && ! dpkg -s nmap-common >/dev/null 2>&1 && test -z "$(find / -xdev -name "nmap*" -not -path "/proc/*" 2>/dev/null | head -1)"'

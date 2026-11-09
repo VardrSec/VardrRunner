@@ -124,9 +124,9 @@ RUN gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
     -D_FORTIFY_SOURCE=2 -o /vardr-worker-owner /src/worker_owner.c
 
 FROM base AS toolkit
-# Existing signing dependency stays in the explicitly selected toolkit.
+# Existing optional authorization/MCP extras stay in the explicitly selected toolkit.
 USER root
-RUN python -m pip install --no-cache-dir '/opt/runner[authorization]'
+RUN python -m pip install --no-cache-dir '/opt/runner[authorization,mcp]'
 # Nmap is deliberately not installed: its license terms are unresolved for distribution. libpcap is for naabu.
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends libpcap0.8 ca-certificates \

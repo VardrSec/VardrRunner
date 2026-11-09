@@ -292,7 +292,12 @@ def test_vardrgate_execute_resolves_env_secret(monkeypatch, tmp_path, approve_ga
         out.write_text('{"findings":[]}')
 
     with patch("vardrrunner.runner.run_vardrgate", side_effect=fake_run):
-        handlers.VardrGateHandler().execute([], tmp_path, cfg)
+        handlers.VardrGateHandler().execute(
+            [],
+            tmp_path,
+            cfg,
+            tool_provenance={"sha256": "f" * 64, "hash_basis": "verified_runtime_binary"},
+        )
 
     cred = captured["job"]["config"]["test_case"]["identities"][0]["credential"]
     assert cred["value"] == "resolved-token" and "value_env" not in cred
@@ -305,6 +310,69 @@ def test_vardrgate_execute_resolves_env_secret(monkeypatch, tmp_path, approve_ga
         json.dumps(cfg.test_case, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     assert json.loads(retained)["case_hash"] == expected
+    assert json.loads(retained)["provenance"]["case_hash"] == expected
+    assert json.loads(retained)["provenance"]["tools"]["vardrgate_api_test"]["sha256"] == "f" * 64
+    from vardrrunner import manifests
+
+    hostile = {
+        "request": {
+            "method": "GET",
+            "url": "https://user:opaque-userinfo@a/path?custom=opaque-query",
+            "headers": {"X-Custom": "opaque-header"},
+            "body": {"custom": "opaque-body"},
+        },
+        "identities": [
+            {
+                "id": "owner",
+                "credential": {"type": "query", "name": "custom", "value": "opaque-value"},
+            }
+        ],
+        "expected_access": [{"identity_id": "owner", "decision": "allow"}],
+    }
+    projected = manifests.evidence_provenance(hostile, "a" * 64, {})
+    assert not any(
+        value in json.dumps(projected)
+        for value in (
+            "opaque-userinfo",
+            "opaque-query",
+            "opaque-header",
+            "opaque-body",
+            "opaque-value",
+        )
+    )
+    assert projected["logical_target"] == "https://a/path"
+    assert projected["case_snapshot"]["expected_access"] == hostile["expected_access"]
+    assert projected["requires_operator_inputs"] and projected["requires_new_review"]
+    assert projected["independent_reproduction"] == "not_performed"
+    simple = manifests.case_snapshot(
+        {"request": {"method": "GET", "url": "https://a/path", "body": None}}
+    )
+    assert (
+        simple["requires_operator_inputs"] is False
+        and simple["case_snapshot"]["request"]["body"] is None
+    )
+
+    anonymous = manifests.case_snapshot(
+        {
+            "identities": [
+                {
+                    "id": "anonymous",
+                    "credential": {
+                        "type": "static_header",
+                        "header": "",
+                        "value": "",
+                        "value_env": None,
+                        "value_keychain": "",
+                    },
+                }
+            ]
+        }
+    )
+    assert anonymous["requires_operator_inputs"] is False
+    assert anonymous["case_snapshot"]["identities"][0]["credential"] == {"type": "static_header"}
+    userinfo = manifests.case_snapshot({"request": {"url": "https://user:opaque-only@a/path"}})
+    assert userinfo["requires_operator_inputs"] and userinfo["logical_target"] == "https://a/path"
+    assert "opaque-only" not in json.dumps(userinfo)
 
 
 def test_httpx_upload_summary(tmp_path):

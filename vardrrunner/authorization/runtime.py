@@ -93,6 +93,11 @@ def execute_gate(
         request_guard=plan,
         total_timeout=timeout,
         execution_deadline=deadline.timestamp(),
+        tool_provenance={
+            "sha256": actual_digest,
+            "version": "unknown",
+            "hash_basis": "verified_runtime_binary",
+        },
     )
     if before_finish is not None:
         require(output is not None, "missing_artifact")

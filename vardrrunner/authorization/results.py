@@ -138,6 +138,19 @@ def retain_stopped_artifact(handle, directory: Path) -> None:
     if raw["error"] == "execution_in_progress":
         _cancel_checkpoint(raw, handle.gate.case)
     raw["case_hash"] = handle.gate.plan["case_hash"]
+    from vardrrunner import manifests
+
+    raw["provenance"] = manifests.evidence_provenance(
+        handle.gate.case,
+        raw["case_hash"],
+        {
+            "vardrgate_api_test": {
+                "sha256": handle.gate.plan["tool_sha256"],
+                "version": "unknown",
+                "hash_basis": "approved_plan_not_observed",
+            }
+        },
+    )
     data = encoded(raw)
     require(len(data) <= maximum, "managed_artifact_size")
     output = directory / "vardrgate_stopped_result.json"

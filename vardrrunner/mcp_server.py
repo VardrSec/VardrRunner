@@ -3,8 +3,8 @@
 Reachable from any MCP client (Claude Code, Claude Desktop) as `vardrrunner mcp`.
 It gives an agent read access to an engagement — its scope, authorizations,
 findings and their history, assets, API surface, recon, jobs, reports and client
-deliverables — and a small set of guarded write tools: queue a scan job or
-pipeline, preview what a job would target, draft a finding, draft a
+deliverables — and a small set of guarded write tools: propose a scan job or
+pipeline for operator approval, preview what a job would target, draft a finding, draft a
 per-finding write-up, and propose a scope / authorization / rate-ceiling change
 for the operator to approve. It also serves the versioned methodology checklists that
 ship with the package. Six prompts package the workflows an operator repeats on
@@ -59,9 +59,10 @@ MAX_LIMIT = 500
 INSTRUCTIONS = (
     "Operate a VardrMap security engagement. Read tools report an engagement's scope, "
     "authorizations, findings and their history, assets, API surface, recon, jobs, reports "
-    "and client deliverables, plus versioned methodology checklists. Write tools queue scan "
-    "jobs or pipelines, draft findings and write-ups, and propose scope/authorization/rate "
-    "changes; the client asks the operator to approve each one. The prompts (brief, triage, untested, methodology, retest, api_playbook) are the "
+    "and client deliverables, plus versioned methodology checklists. Queue tools create pending "
+    "job or pipeline proposals; only an operator approving them in VardrMap queues work. "
+    "Other writes draft findings/write-ups and propose scope/authorization/rate changes; "
+    "the client asks the operator to approve each write. The prompts (brief, triage, untested, methodology, retest, api_playbook) are the "
     "common workflows; each one gathers what it needs through the read tools.\n\n"
     "A methodology checklist is a planning aid, never a coverage claim. An item's `method` "
     "field says how it is tested — by a job type, or by hand — not whether it has been. "
@@ -80,9 +81,9 @@ INSTRUCTIONS = (
     "the operator's job. You may *propose* one — propose_scope_item, propose_authorization, "
     "propose_rate_ceiling create a pending proposal the operator approves in the console, and "
     "it does nothing until they do. Always give each proposal a reason and a source. You have "
-    "no tool to approve one, by design. Staying in scope is the operator's responsibility, as "
-    "with Burp or nmap: a queued job that falls outside scope comes back with warnings but "
-    "still runs.\n\n"
+    "no tool to approve one, by design. Job/pipeline proposals are also inert until operator "
+    "approval in VardrMap; client confirmation alone does not queue them. Existing job policy "
+    "remains advisory apart from its documented blocking controls.\n\n"
     "An engagement's max_request_rate (on get_engagement) is its request-rate ceiling in "
     "requests per second, or null for none. The backend applies it to httpx, nuclei, katana "
     "and ffuf automatically, so a scan stays within a program's stated rate; you may pass a "
@@ -111,7 +112,9 @@ _WRITES = (
     "them (propose_scope_item, propose_authorization, propose_rate_ceiling) with a reason and "
     "source; each becomes a pending proposal the operator approves. Before queueing anything, "
     "say what you intend to queue and why, and use preview_job to "
-    "show how many targets it would hit; the operator approves each write in the client. "
+    "show how many targets it would hit; queue_job/queue_pipeline then create only pending "
+    "proposals. Wait for operator approval in VardrMap before treating work as queued. "
+    "Other writes require operator approval in the client. "
     "Respect the engagement's max_request_rate (get_engagement): the backend applies it to "
     "httpx, nuclei, katana and ffuf automatically, and you may set a lower config.rate, but "
     "never queue a disruptive or rate-exceeding job on a program that forbids it."
@@ -680,24 +683,39 @@ def build_server(
         tool_type: str,
         target_source: str = "scope",
         config: dict[str, Any] | None = None,
+        reason: str = "",
+        source: str = "",
+        authorization_contract_required: bool = False,
     ) -> dict[str, Any]:
-        """Queue one scan job. A local VardrRunner picks it up and runs the tool.
+        """Propose one scan job for operator approval in VardrMap; queues nothing now.
 
         tool_type is one of: httpx, subfinder, nuclei, dnsx, naabu, katana, gau,
         ffuf, dalfox, vardrgate_api_test (nmap exists only when the operator opted in). target_source is "scope" or "recon". Any scope/window/
-        authorization concerns ride back in a `warnings` array; the job still queues.
+        authorization concerns are re-evaluated when a full-access operator approves the proposal.
+
+        Set authorization_contract_required for a managed Gate job. Operator approval
+        queues it; a separate signed execution contract is still required.
 
         To cap request rate, pass config {"rate": <requests per second>} for httpx, nuclei,
         katana or ffuf. The engagement's max_request_rate (see get_engagement) is applied
         automatically to those tools, so a job stays within a program's stated rate even
         with no rate set; a rate above the ceiling is refused.
         """
-        body = {"tool_type": tool_type, "target_source": target_source, "config": config or {}}
-        return _call(lambda: _get_client().post(f"/engagements/{engagement_id}/jobs", json=body))
+        body: dict[str, Any] = {
+            "tool_type": tool_type,
+            "target_source": target_source,
+            "config": config or {},
+        }
+        if authorization_contract_required:
+            body["authorization_contract_required"] = True
+        proposal = _propose(engagement_id, "queue_job", body, reason, source)
+        return {**proposal, "queued": False, "requires_operator_approval": True}
 
     @mcp.tool(annotations=write)
-    def queue_pipeline(engagement_id: str, stages: list[dict[str, Any]]) -> dict[str, Any]:
-        """Queue an ordered chain of jobs where each stage waits on the previous one.
+    def queue_pipeline(
+        engagement_id: str, stages: list[dict[str, Any]], reason: str = "", source: str = ""
+    ) -> dict[str, Any]:
+        """Propose 1–8 ordered stages; only operator approval in VardrMap queues them.
 
         stages is a list of {"tool_type": ..., "target_source": ..., "config": {...}}.
         Example: a content-discovery chain is subfinder(scope) → httpx(recon) →
@@ -706,11 +724,8 @@ def build_server(
         A stage's config takes the same {"rate": <requests per second>} key as queue_job,
         and the engagement's max_request_rate is applied per stage the same way.
         """
-        return _call(
-            lambda: _get_client().post(
-                f"/engagements/{engagement_id}/pipelines", json={"stages": stages}
-            )
-        )
+        proposal = _propose(engagement_id, "queue_pipeline", {"stages": stages}, reason, source)
+        return {**proposal, "queued": False, "requires_operator_approval": True}
 
     @mcp.tool(annotations=read)
     def list_proposals(engagement_id: str, status: str = "pending") -> dict[str, Any]:
@@ -1108,7 +1123,8 @@ def build_server(
                 "what was concluded rather than repeating the work.\n"
                 "- Name the check that would prove the fix landed, and which of the two "
                 "routes above you are proposing.\n"
-                "- If queueing: preview_job first, queue once the operator agrees, and follow "
+                "- If queueing: preview_job first, submit a pending queue proposal, wait for operator "
+                "approval in VardrMap, then follow "
                 "it with list_jobs and get_job_events until it finishes.\n"
                 "- Judge the outcome from what you can read: whether an equivalent finding "
                 "comes back in list_findings after the run, and what the job's own events "
