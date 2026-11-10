@@ -69,4 +69,4 @@ then obtain a separate Gate authorization. Recon never approves a Gate case or
 creates further execution authority.
 
 The existing whole-plan consumption, cancellation, deadline and held-failure
-rules apply across both stages. See [the decision](adr/0045-finite-recon-execution.md).
+rules apply across both stages. See the decision.

@@ -43,7 +43,7 @@ permissions and retained backups; restoring an old ledger is not replay-safe.
 | Binary/config change | Bind actual binary SHA-256 and normalized execution options; require the guarded Gate flag. |
 | Credentials leak through a contract or journal | Use local approved references; journal stores identifiers/digests/counts. General detection of secrets hidden in arbitrary application content is not claimed. |
 
-Fences do not stop network traffic. NM-2 must supply authenticated enrollment,
+Fences do not stop network traffic. Controlled execution requires authenticated enrollment,
 server-owned claim/fence persistence, leases/disconnection rules and process-tree
 cancellation before a managed worker can advertise these capabilities. A caller-set
 UUID or boolean is not that protocol; test injection is explicitly synthetic.

@@ -53,3 +53,17 @@ CLAUDE.md
 /.private-notes/
 /internal-notes/
 /VardrSec-Internal-Notes/
+
+# Private planning, decision records and acceptance receipts stay outside this repository.
+/docs/adr/
+/docs/evidence/
+/docs/*roadmap*
+/docs/*handoff*
+/docs/*checkpoint*
+/docs/*development-notes*
+/docs/architecture.md
+/docs/development.md
+
+# Unpublished development fragments belong in local notes; public changes go in CHANGELOG.md.
+/changelog/nm*.md
+/changelog/unreleased*.md

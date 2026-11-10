@@ -10,16 +10,12 @@ its matching image. Explicit v2 admission selects **1–32 healthy attempts** wi
 fresh execution objects for each job. The v2 image refuses v1 admission; no
 protocol downgrade or automatic enablement occurs. Deployment, operator
 enablement, public admission and host reconciliation belong to the distribution.
-The first one-attempt Desktop slice passed separately; actual v2 Linux/Docker and
-Windows Docker Desktop acceptance remains open.
-
-The owner's clarified normal behavior is persistent availability until explicit
-operator stop. A **default-off v3 candidate** now implements that behavior beside
-the finite modes. It uses a separate `Dockerfile.worker.persistent` image and
-`vardr.worker-admission/3`, with `mode:"persistent"`. Default startup remains off.
-The owner approved its STOP-only reporting lifetime until revocation or physical
-retirement for isolated testing on 2026-11-06. The trusted-host false-exit risk and
-independent acceptance gates remain; see [ADR0043](adr/0043-proposed-linux-worker-lifecycle-owner.md).
+Persistent v3 provides availability until the operator explicitly stops it.
+It uses the separate `Dockerfile.worker.persistent` image and
+`vardr.worker-admission/3`, with `mode:"persistent"`. Normal startup remains off.
+STOP-only reporting remains valid until revocation or physical retirement.
+The host is trusted: a false exit report can release accounting prematurely.
+See the [support limits](limitations.md) and distribution operator instructions.
 
 In v3, a known local credential-policy denial before the claim callback sends no
 claim and advances no issued sequence. The worker may inspect other queued jobs;
@@ -53,7 +49,7 @@ testing but do not replace the fixed reviewed container profile.
 The entrypoint requires the actual lifecycle-owner connection before discovering
 or claiming work. A public admission file, environment variable or boolean cannot
 enable Linux controlled execution. The live owner must match the admitted startup
-nonce and runtime identity. See [ADR 0043](adr/0043-proposed-linux-worker-lifecycle-owner.md)
+nonce and runtime identity. See [support limits](limitations.md)
 for the approved development direction, privilege transition and remaining proof
 obligations.
 
@@ -149,7 +145,7 @@ automatic crash restart.
 
 Pure component tests model late discovery and more than 32 jobs. Actual supported
 Linux and Docker Desktop proofs, the complete failure matrix and retained
-ADR 0043 security gates remain required.
+The documented security gates remain required.
 
 ## Failure and recovery
 

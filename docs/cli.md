@@ -41,10 +41,10 @@ databases refuse to avoid separate WAL names. Legitimate SQLite writers remain a
 POSIX retains its observed-file guard. This does not make inspection filesystem
 non-mutating or close the POSIX/sidecar replacement gates.
 
-Opt-in NM-2 source builds add `vardrrunner jobs run --controlled [--yes]` with
+Opt-in controlled execution supports `vardrrunner jobs run --controlled [--yes]` with
 matching Map execution-control endpoints, and `vardrrunner jobs stop RUN_ID` to
 request local emergency stop of that journal run. A stop request is not confirmed
-termination. Ordinary invocation keeps existing behavior. See [ADR 0026](adr/0026-controlled-cancellation.md)
+termination. Ordinary invocation keeps existing behavior. See [support limits](limitations.md)
 for lease, ownership, platform and partial-evidence limits. No worker is enabled.
 
 For `vardrgate_api_test` jobs, reviewed identities can additionally declare
@@ -75,7 +75,7 @@ old `--program` and `-p` names were removed in v0.52.0.
 
 ## Console — type commands without `vardrrunner`
 
-A bare `vardrrunner` at a terminal opens an interactive console (ADR 0017):
+A bare `vardrrunner` at a terminal opens an interactive console:
 
 ```text
 PS> vardrrunner
@@ -175,7 +175,7 @@ Until v0.52.0 this was `vardrrunner login vardrmap`.
 cleartext to `~/.vardrmap/config.json`. It prints three routes: use `VARDRMAP_API_KEY`
 (recommended for servers; nothing touches disk), install a keyring backend, or pass
 `--allow-plaintext-credentials` to accept it deliberately. See
-[ADR 0009](adr/0009-fail-closed-credential-storage.md).
+[support limits](limitations.md).
 
 **Prefer the prompt for the key.** Passing `--key` puts a live credential into your shell
 history — on PowerShell it persists to `(Get-PSReadlineOption).HistorySavePath`, and on
@@ -219,7 +219,7 @@ Approve the credential references a queued `vardrgate_api_test` case may use. A
 reference is resolved only when it is approved here for the job's engagement and for
 every origin the case contacts (request, setup steps, preflights, write verifier).
 Approvals store names, never values, in the owner-only config file. See
-[ADR 0023](adr/0023-approved-gate-credential-references.md).
+[support limits](limitations.md).
 
 ```bash
 vardrrunner credentials approve --engagement <id> --origin https://api.example.com --env OWNER_TOKEN
@@ -325,7 +325,7 @@ downloads nor installs updates. The JSON/text version row records that release
 discovery was skipped.
 
 `--platform` additionally requires a Map backend implementing the v1 `GET /ready`
-contract (Map ADR 0003). It reports `platform database` and `platform migrations`;
+contract. It reports `platform database` and `platform migrations`;
 both must pass for a healthy result. A 503 is read as an explicit unready state,
 without retrying; 404, redirects, malformed/unsupported or inconsistent responses,
 timeouts and TLS failures fail the requested check. Response/error text is not
@@ -393,7 +393,7 @@ vardrrunner mcp --standalone     # local read-only metadata; no Map configuratio
 Runs a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio so an MCP
 client — Claude Code, Claude Desktop — can drive a VardrMap engagement with the same `vmap_`
 key this runner already uses. The agent's model is supplied by the client; this command only
-adapts VardrMap's API to MCP tools. See [ADR 0015](adr/0015-mcp-server.md).
+adapts VardrMap's API to MCP tools. See [support limits](limitations.md).
 
 The explicit `--standalone` surface exposes only `list_local_workspaces` and
 `get_local_run(workspace_id, run_id)`. It reads the existing journal without creating
@@ -658,7 +658,7 @@ never automatic replay. Hashes establish recorded integrity, not host attestatio
 
 Linux/Docker execution is refused; no uncontrolled fallback or worker is enabled.
 Other tools, general recon pipelines, issuer enrollment and Full/Mapless installers
-are not delivered by this increment. See [ADR 0039](adr/0039-standalone-workspace-gate.md)
+are not delivered by this increment. See [support limits](limitations.md)
 for reference-trust and verification limits. Existing connected commands are unchanged.
 
 ### Provision, authorize, execute and export
@@ -775,7 +775,7 @@ CreateDirectory2W/CreateFile3 APIs. Every ancestor must have an exact trusted ow
 (current user, SYSTEM or Administrators). Reparse paths, unsupported namespaces,
 sharing conflicts and unsupported owners refuse without fallback. New output ACLs
 are protected and verified, and handles remain pinned through manifest publication.
-Native ACL/race acceptance is still open; this does not claim full NM-3 portability.
+Native export retains the platform and filesystem limits documented above.
 Existing Windows execution and metadata commands retain their behavior.
 
 The CLI converts output to a Python `Path` and resolves it for export. Dot and
@@ -824,7 +824,7 @@ Container Gau also records four reviewed source substitutions for TLS, provider 
 Its detail adds `reviewed source patches`. An untrusted or
 wrong-host provider certificate, initialization failure or fetch/decode error
 fails the lookup through Runner's normal error path; valid empty responses still
-work. The native Gau archive is excluded: `tools install gau` is refused, `tools install --all` skips it, and Runner will not execute a PATH or archive-installed Gau. See [ADR 0021](adr/0021-gau-patched-source.md).
+work. The native Gau archive is excluded: `tools install gau` is refused, `tools install --all` skips it, and Runner will not execute a PATH or archive-installed Gau. See [support limits](limitations.md).
 
 `install` is safe to rerun and reports what each tool needed:
 
@@ -1194,20 +1194,20 @@ Terminal records them. Stop-work is the only policy condition that halts.
 Recognized job types are the recon tools (`httpx`, `subfinder`, `nuclei`,
 `dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`; `nmap` only when opted in) plus `vardrgate_api_test`, which runs a VardrGate API authorization
 test via the local `vardrgate` binary and uploads the result to the job. See
-[ADR 0006](adr/0006-vardrgate-api-test-handler.md).
+[support limits](limitations.md).
 
 For `vardrgate_api_test`, an identity credential may reference a secret instead of
 embedding it — `value_env` (an environment variable on the runner) or
 `value_keychain` (an OS-keychain account) — resolved locally at execution so the
 secret never reaches the backend. A missing referenced secret fails the job. See
-[ADR 0007](adr/0007-local-secret-resolution.md).
+[support limits](limitations.md).
 
 Before claiming such a job the runner refuses a case containing `${...}` anywhere and
 any reference not approved with `credentials approve` for the job's engagement and
 every origin the case contacts; the failure reason includes the approval command. The
 pre-run preview lists each identity's reference names. The resolved job is passed to
 `vardrgate run --literal-job`, which requires a VardrGate build with that flag. See
-[ADR 0023](adr/0023-approved-gate-credential-references.md).
+[support limits](limitations.md).
 
 ---
 
@@ -1272,7 +1272,7 @@ Gate artifacts include case_hash for Map's binding. Deploy the matching Map
 backend before publishing this Runner release; old artifacts upload with
 inconclusive assessments. Local private-target opt-in remains required.
 
-## NM-1 reference interface
+## Authorization file interface
 
 `python -m vardrrunner.authorization --help` exposes separate opt-in `plan`,
 `approve`, `state`, `issue` and `validate` prototypes. Install the optional
@@ -1290,7 +1290,7 @@ The internal guarded adapter also refuses an expired launch after local preparat
 and caps the process timeout by the signed execution contract's own expiry. No
 legacy CLI option or behavior changes.
 
-## Owned engagement capacity (local NM-2 increment)
+## Owned engagement capacity
 
 ### Explicit managed metadata reconciliation
 
@@ -1320,7 +1320,7 @@ starts before claim HTTP and covers later preparation and tool permission, using
 the strictest signed/local/budget deadline. It does not bound preclaim review or
 post-tool upload/finalization; existing graceful/forced cleanup is additional.
 Unused allocations are never refunded. Combine independent flags only where
-their profiles are supported. See ADR 0030 for timing and platform limitations.
+their profiles are supported. See [support limits](limitations.md) for timing and platform limitations.
 Unknown owned attempts remain fenced; rerunning a command cannot reset their
 allocated time or reopen their ownership.
 
@@ -1331,7 +1331,7 @@ requests; repeats charge again. Requires Map `0034targetbudget` and explicit own
 policy. Missing/mismatched charge receipts refuse execution. Spent allowance is
 never refunded or silently reset. This counts no arbitrary manual work and adds
 no duration budget, worker or global RPS promise. Flags can combine with separately
-configured concurrency and expiring-grant controls. See ADR 0029.
+configured concurrency and expiring-grant controls. See [support limits](limitations.md).
 
 For separately configured Map engagement capacity, explicitly invoke
 `jobs run --controlled --concurrency-budget`. Requires matching unreleased Map
@@ -1339,9 +1339,9 @@ For separately configured Map engagement capacity, explicitly invoke
 No fallback occurs without a reservation receipt. Slots count owned attempts
 through finalization, not manual/direct work, requests, targets or duration.
 Uncertain attempts retain slots. This enables no worker; Linux/Docker and ffuf
-controlled execution remain unsupported. See ADR 0028 for limits.
+controlled execution remain unsupported. See [support limits](limitations.md) for limits.
 
-## Expiring Gate reference grants (local NM-2 increment)
+## Expiring Gate reference grants
 
 Issue an explicit grant in a separate namespace; this command reads no secret:
 
@@ -1375,47 +1375,13 @@ missing paired config/journal state and clock rollback fail closed. No automated
 repair is provided. Ambiguous protected attempts retain their journal fence and
 partial files for explicit operator review.
 
-The NM-2 consumption acknowledgement prototype is library-only. No CLI flag,
-queue command or recovery action enables it; its one-shot send/ACK and retained
-uncertainty rules are described in [ADR 0034](adr/0034-managed-consumption-barrier.md).
-
-Managed result finalization and receipt reconciliation remain explicit library
-operations only. No existing recovery command reconstructs a capability or retries
-managed work. See [ADR 0035](adr/0035-managed-result-finalization.md).
-
 A guarded Gate `execution_in_progress` artifact is a local checkpoint. Normal
 return rejects it as unfinished. Only trusted native confirmed stop may retain
 its genuine observations in a separate cancelled copy bound to the reviewed case;
 the original checkpoint bytes remain unchanged. This adds no publication retry,
 stop proof, grace period or execution time.
 
-Managed known-stop reporting remains an explicit library operation. No CLI or
-automatic recovery path infers termination from a PID or retries a stop report.
-See [ADR 0036](adr/0036-managed-known-stop-receipts.md).
-
-Claim observation and reconciliation after lost capabilities remain explicit
-library operations. No CLI command initiates observation or resumes managed work.
-See [ADR 0037](adr/0037-managed-claim-observation.md).
-
-The bounded managed JSON primitive remains library-only. No CLI command enables
-a worker, enrolls credentials or selects new managed routes. Existing commands
-retain their behavior.
-
-The library-only managed transport honors the configured API base prefix used by
-the existing Full distribution. This adds no CLI command, worker or enrollment.
-
-### Dormant finite recon projection (NM-3)
-
-No recon command or default capability is added. Existing authorization CLI
-planning and Gate execution remain Gate-only. The offline projection is described
-in [architecture](architecture.md#dormant-finite-recon-projection-nm-3);
-validation of a signed projection does not authorize an executable recon path.
-
-Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
-Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
-No execution path is enabled.
-
-### Offline worker-state inspection (NM-2 candidate)
+### Offline worker-state inspection
 
 `vardrrunner worker-state --journal PATH --identity PATH --runner-id UUID
 --runtime-id UUID --runtime-sha256 SHA256 --admission-sha256 SHA256` requires all
@@ -1455,7 +1421,7 @@ when an old image lacks it; it must not assume e8 images support it or replace
 missing output with zero. Stop/re-enable remains an unimplemented, separate
 lifecycle candidate; this command enables no worker and closes no platform gate.
 
-### Offline first-worker state inspection (NM-2 candidate)
+### Offline first-worker state inspection
 
 `vardrrunner worker-bootstrap-state --journal PATH --identity PATH --runner-id UUID`
 reads explicit absolute paths in the same state directory. It uses the existing
@@ -1471,7 +1437,7 @@ no HTTP or credential request. Normal SQLite read-only WAL sidecars still
 apply. Even `clear` is only a local fact; the distribution must independently
 verify the complete original installation and no previous lifecycle effects.
 
-### Explicit original worker reconciliation (NM-2 candidate)
+### Explicit original worker reconciliation
 
 `vardrrunner worker-reconcile --journal PATH --identity PATH --runner-id UUID
 --runtime-id UUID --runtime-sha256 SHA256 --admission-sha256 SHA256` requires the
@@ -1530,14 +1496,14 @@ The explicit Linux/Docker local worker consumes the six-file public authorizatio
 bundle through the native owner `--local` entrypoint. It runs one fixed Gate job,
 with no Map credential or signing key. Ordinary `workspace gate` retains its
 platform checks. Distribution owns the explicit overlay and optional evidence
-copy from `/exports/result`; see [ADR 0044](adr/0044-explicit-local-worker.md).
+copy from `/exports/result`; see [support limits](limitations.md).
 
 For a Mapless installation, use `vardrrunner doctor --standalone --offline --json`.
 `--standalone` omits Map credentials/authentication; `--offline` separately skips
 release discovery. Local state, permissions and tool checks remain. The standalone
 and platform profiles cannot be combined. Diagnostics do not authorize jobs.
 
-### NM-4 queue review and portable provenance
+### Queue review and portable provenance
 
 Connected MCP `queue_job` and `queue_pipeline` create pending Map proposals, not
 jobs. Set `authorization_contract_required: true` for a managed Gate proposal;
