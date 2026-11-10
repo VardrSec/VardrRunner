@@ -110,24 +110,11 @@ instructions; a startup setting is not per-job consent.
 These legacy settings do not replace the stronger restrictions in a controlled
 execution contract. See the CLI reference for the exact command-specific behavior.
 
-## Documentation and development
+## Documentation
 
 [CLI](docs/cli.md) · [Container use](docs/container.md) ·
 [Managed worker](docs/managed-worker.md) · [Finite Recon](docs/finite-recon.md) ·
-[Architecture](docs/architecture.md) · [Development](docs/development.md) ·
 [Changelog](CHANGELOG.md)
-
-```sh
-pip install -e '.[dev]'
-ruff check vardrrunner tests
-ruff format --check vardrrunner tests
-mypy vardrrunner
-pytest tests
-```
-
-Preserve existing commands and security controls. Tests that require real tools
-or platform privileges retain their explicit prerequisites; a skip is not a pass.
-Do not use a production engagement as a development fixture.
 
 ## License
 

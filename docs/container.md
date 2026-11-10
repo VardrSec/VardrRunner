@@ -39,7 +39,7 @@ Dockerfile, image build argument or committed Compose file. Environment credenti
 are visible to Docker administrators. Containers do not inherit the host keychain.
 VardrGate credential references are approved with `credentials approve` run in a
 container that mounts the same state volume; approvals are stored there by name
-only (ADR 0023). Tool processes receive an allowlisted environment (ADR 0022).
+only. Tool processes receive an allowlisted environment.
 Do not mount a host home directory or Docker socket. No ports need to be published.
 
 Use an HTTPS backend URL reachable **from the container**. `localhost` refers to
@@ -84,7 +84,7 @@ The original module checksum/revision and original/patched file hashes are
 recorded separately from the honestly marked `(devel)` main module. Its upstream
 license is retained. Status adds `reviewed source patches`; a failed binary hash
 still blocks execution. Native archive installation does not acquire these fixes.
-See [ADR 0021](adr/0021-gau-patched-source.md) for source and acceptance boundaries.
+See the [support limits](limitations.md) for platform boundaries.
 It sets `VARDRRUNNER_TOOLS_DIR=/opt/vardrtools`; that directory and its
 integrity receipt are root-owned image content and remain visible when a state
 volume is mounted. This environment setting affects only tools, not credentials,
@@ -97,7 +97,7 @@ binary SHA256 and hashes of retained `provenance/TOOL/` build metadata. It does
 not claim an upstream archive checksum. Ordinary managed verification still hashes
 the executable and fails closed on tampering; status reports `verified source
 build`. The helper is restricted to the root image-build directory and is removed
-from the final image. See [ADR 0020](adr/0020-container-source-katana.md).
+from the final image.
 This changes the development toolkit's existing build, not its tool count or the
 undecided alpha shipping scope. Other tool vulnerabilities, release provenance and
 broader mode acceptance remain open. No release image is published.

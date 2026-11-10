@@ -1,373 +1,20 @@
 # Changelog
-All notable changes to VardrRunner are documented here.
-This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
 
-- Align public documentation with retained guides and remove references to private working records.
-
-- Allow the explicit persistent-worker recipe to reuse the qualified toolkit's
-  empty readiness directory only with its exact ownership and private mode.
-  Unexpected contents, links or permissions remain refused.
-
-- Apply targeted Trixie security updates for apt/libapt and zlib in the shared
-  container base, with minimum-version guards. Keep base digests, native behavior
-  and runtime privileges unchanged; rebuilt image evidence remains required.
-  See [runtime package details](changelog/unreleased-runtime-package-fixes.md).
-
-- Include the existing optional MCP SDK in the development toolkit image and
-  exercise bounded offline stdio metadata reads in container smoke. Keep the core
-  image lean, default startup inert and distribution sessions explicitly exclusive.
-  See [Docker MCP details](changelog/unreleased-docker-mcp.md).
-
-- Connected MCP queue tools now create pending Map proposals for operator approval;
-  older Map refusal never falls back to direct queueing. Matching Map proposal
-  endpoints are required before use. No approval or execution tool is added.
-- Add redacted reviewed-input and tool identity metadata to Gate/Recon artifacts.
-  Original case hashes, terminal outcomes and execution authority stay unchanged;
-  omitted inputs require operator review before independent reproduction.
-
-- Add opt-in `mcp --standalone` for read-only local workspace and scoped run metadata,
-  with no Map client, execution, authorization or file-export surface.
-
-- Add local `workspace draft-gate` to derive nonrunnable Gate case drafts from
-  verified completed finite Recon evidence, preserving source provenance in the
-  existing protected export bundle without Map, queueing or execution. See
-  [local draft details](changelog/unreleased-local-gate-drafts.md).
-
-- Add explicit `doctor --standalone` for local state/tool diagnostics without Map
-  credentials or API calls. Combine with `--offline` to skip release discovery;
-  retain ordinary Full checks and refuse the incompatible platform combination.
-
-- Add explicit finite Recon authorization/execution using existing managed DNSx
-  and HTTPx, one signed ledger ordinal, a shared monotonic deadline and the
-  existing owner/journal/export. Validate every DNS address and preserve original
-  Host/SNI over a fixed permitted IPv4 transport. Keep Gate defaults, dormant
-  Recon /1, legacy commands, privileges and default-off startup unchanged.
-
-- Add an explicit one-shot local Gate worker in the existing toolkit image, using
-  the worker-only native owner and signed standalone ledger. Require native DONE
-  before completion; preserve successful runs when optional evidence export is held.
-
-- Add explicit workspace issuer provisioning, terminal-reviewed single-use Gate
-  authorization and public-bundle execution with optional existing redacted export.
-  Keep private signing custody separate from execution state and bind public
-  issuer keys to the provisioned authority hash. Preserve existing file contracts,
-  control requirements, grants and legacy commands.
-
-- Promote a case-bound guarded Gate progress checkpoint only after trusted native
-  confirmed stop, retaining original bytes and failed-only publication. Reject a
-  stale progress checkpoint on normal return; deadlines and stop authority stay
-  unchanged.
-
-- Preserve validated released history when the next claim commits but its reply
-  is lost: inspection recognizes only that original selected-only retirement,
-  without advancing the local cursor or creating an attempt acknowledgement.
-
-- Recognize the original selected-only physical retirement after a lost first
-  claim reply, preserving local cursor zero and refusing substituted observation
-  bindings without creating an acknowledgement or local attempt.
-- Reconcile physical worker retirement after a verified native stop while
-  preserving the stopped process's historical PID and terminal receipt.
-
-- Add explicit offline `worker-bootstrap-state` for an installed Runner journal.
-  Reuse the original schema and full local-holds audit; missing storage remains
-  incomplete and a prior worker history never qualifies as initial state.
-
-- Add the narrowly certified closed-preclaim parent0 retirement branch using one
-  original-key unbound last0 observation. Preserve every no-send tombstone and
-  issued ancestry; update only the parent, retain real nonzero association counts
-  and leave global-holds engines unchanged. Cohort/DB drift or unrelated holds
-  remain held. Component/image/platform validation stays separately gated.
-
-- Add explicit `worker-reconcile` selection of one original persistent-worker
-  proposal/history head, reusing one original-key observation and existing local
-  receipt reconciliation. Preserve `worker-state/1`; bind the noncreating writer
-  to the originally selected DB identity and recheck candidate association before
-  RPC/metadata writes. Already-retired and genuinely empty state stay offline.
-  Actual stop/re-enable remains a separate NM-2 gate; this new command requires
-  a matching qualified image and enables no work automatically.
-
-- Add explicit offline `worker-state` inspection for an existing persistent-worker
-  identity/journal and exact Runner/runtime/admission binding. Reuse the full audit
-  in one read-only WAL snapshot; incomplete facts are held with null counts.
-  Distinguish genuine unissued parent0 from original-key-linked retirement without
-  constructors, startup cleanup, credential lookup or network. A cooperative
-  inspection budget changes no execution authority, startup limit or history cap;
-  old images and actual stop/re-enable remain separately gated.
-
-- Keep the persistent worker channel open when Python's optional idle window
-  closes. Recheck native readiness and full local holds in a bounded no-send
-  wait instead of returning cleanly before PID 1 selects its idle branch.
-  Preserve count completion, unlimited availability and every existing deadline;
-  pure scheduling models do not close physical platform acceptance.
-
-- Classify an optional persistent-v3 idle cutoff as native exit 124 when its
-  owner state is unambiguous. Latch Runner into a nonspawning, no-RPC wait with a
-  checked five-second shutdown-only reserve after the valid ACK idle bound.
-  Preserve claim cutoffs, per-job deadlines, EOF cleanup and unknown-state holds;
-  model/compiler checks do not close actual platform acceptance.
-
-- Hold v3 reuse after a local stop-journal callback fails in the refresh loop,
-  including when later renewal succeeds. Bound clean idle-channel EOF cleanup
-  by a separate immutable five-second BOOTTIME deadline; repeated EOF or later
-  frames cannot revive it. Healthy persistent idle and finite protocols keep
-  their existing behavior. Physical disconnect acceptance remains open.
-
-- Keep v3 available after source-proven local credential denials before claim.
-  Retain provisional selections without consuming an issued sequence; start each
-  immutable owner epoch only after the final trusted preclaim checks. Unknown
-  replies and custody/clock/owner/storage failures retain their holds. Late-denied
-  jobs keep their unique tombstones and require a new queued job after remediation.
-
-- Retain persistent-v3 admission and attempt history in the existing journal,
-  with exact original-key observation/reconciliation and canonical receipt
-  bindings. Physical retirement preserves missing ACKs and spent allowances;
-  full startup audits reject missing or changed evidence.
-
-- Prepare explicit persistent-v3 worker availability until operator stop, with
-  optional finite session controls and unchanged fresh per-job authority and
-  termination checks. Preserve matching finite images/protocols; use exact int64
-  decimal sequences, per-attempt clock anchors, and normal drained failed-result
-  continuation only. The owner approved persistent STOP reporting for isolated
-  testing; default startup and independent platform/security gates remain.
-- Retain bounded, case-bound Gate cancellation evidence only after confirmed
-  native cleanup and an existing stop cause. Preserve the original Gate artifact,
-  publish a separate failed-result copy without overwriting files, and retain
-  ambiguous result/finish holds. Cancelled work never advances the healthy queue
-  or widens execution/grace deadlines; ordinary/manual behavior is unchanged.
-- Add explicitly selected v2 managed batches of 1–32 healthy attempts in one
-  admitted incarnation. Capture immutable lease epochs, join the exact refresh
-  thread, require native drain/DONE and a durable original-token idle release
-  before another claim. Preserve append-only journal links, unknown-send holds,
-  spent allowances and legacy one-shot operation. Physical v2 acceptance is open.
-- Bind read-only v3 observation to the original runtime sequence. Revalidate full
-  retained retirement evidence during startup audits; missing or abbreviated
-  proof retains its hold. Physical retirement never invents claim, consume,
-  DONE or idle-release acknowledgements.
-
-- Handle clean worker-channel EOF after DONE while waiting for the exact Runner
-  child to become waitable. Preserve packet validation, active-attempt refusal and
-  all deadlines; only the tracked child's normal exit zero establishes success.
-  Add bounded benign socket/close regressions to the existing compiler stage.
-
-- Link worker runtime/enrollment fingerprints in the original claim-send journal
-  transaction. Recognize exact authenticated v2 unbound-retirement receipts for
-  untouched local intents, and failed completion of the original retained result.
-  Preserve send/ACK history, artifacts, spent allowances and all tombstones;
-  legacy unlinked records and unresolved credentials remain held.
-
-- Bind each managed-worker incarnation to an immutable admission-expiry ceiling
-  with a fixed 150-second host-reporting opportunity. Refuse claims whose full
-  allocation cannot fit, and cap every native lease/hard deadline before that
-  runway. Pauses cannot move the ceiling forward; reporting availability and VM
-  suspend acceptance remain separate gates.
-- Seed an empty UID/GID-10000 readiness directory at worker-image build time for
-  a fresh per-incarnation local metadata volume. Docker's copy API cannot read
-  the earlier tmpfs path; preserve both refused trials. Add no runtime capability
-  or secret mount. Corrected platform proof remains pending.
-- Add the explicit managed-worker candidate over existing claim, contract, grant,
-  budget and receipt services. The worker-only PID-1 owner drops its three approved
-  bootstrap capabilities before work; live private-channel/kernel readiness is
-  required for Linux control. Initial scope is one attempt per admitted container.
-  Normal startup/manual/Mapless behavior stays unchanged; platform acceptance is open.
-- Add `audit reconcile-managed RUN_ID` for authenticated terminal observation and
-  exact local metadata retirement. Preserve artifacts, spent allowances and ACK
-  history; unresolved transport/database state stays held. Retire only proven
-  zero-RPC local denials and invocation-owned duplicate-claim placeholders.
-- Record the owner-reviewed worker-only PID-1 lifecycle and protected host
-  stop-report design. Its bounded implementation/testing is authorized; no worker,
-  privilege, protocol or startup behavior is enabled by this documentation.
-- Add signed future-version/schema rejection proof without consuming the existing
-  authorization contract. Reconcile agent guidance and ADR 0016 with the owner's
-  explicitly enabled New Moon worker direction; activation and containment remain
-  gated and no runtime behavior changes in this increment.
-- Reconcile reference-interface documentation with the existing native standalone
-  Gate command. State the missing operator context and key/trust preparation
-  prerequisites explicitly; no issuer, enrollment or execution behavior changes.
-- Use canonical journal/WAL paths and pin Windows database/ancestor identities
-  through SQLite connection close. Share this boundary with workspace reads and
-  credential grants; refuse hardlinked Windows journals. POSIX replacement and
-  strict non-mutating snapshot acceptance remain open.
-- Preserve journal-linked evidence during age-based direct-run cleanup, including
-  unfinished work, uncertain uploads and completed records. Unreadable or
-  ambiguous retention state leaves evidence in place. Automatic deletion requires
-  confined descriptor-relative operations; Windows and Python 3.10 defer cleanup.
-- Exercise local workspace creation and inspection across separate CLI processes
-  with Map credentials, real keychain access, network calls and tool launches
-  unavailable. Remove the obsolete branch-only Windows diagnostic workflow while
-  retaining its behavioral regressions in normal CI. Allow explicit dispatch of
-  that existing CI suite on a candidate branch.
-
-- Combine the published standalone Gate/workspace and dormant recon candidates
-  on their shared public base. Preserve Gate reservation callbacks and reject
-  recon before those callbacks. This is a new candidate, not recovered historical
-  source; integrate journal/export `3dd3b4f` while inventory `c1bfc18` stays separate.
-  Integrate the reviewed
-  launch-failure cleanup from 1320e5a without enabling execution profiles.
-
-- Add an explicit native Windows `workspace gate` consumer for existing signed
-  standalone fixed-Gate permission, reusing the validator, ledger, native control
-  and local evidence/audit. No issuance, enrollment, Map fallback or worker.
-  Keep uncertain consumption/PIDs and refuse unsupported execution platforms.
-
-- Reconcile workspace journal and portable-export candidates; apply the existing
-  observed-file guard to read-only export journal reads. Native acceptance remains open.
-- Refuse observed special journal objects before SQLite connections, avoiding
-  pre-existing FIFO hangs while preserving regular-file, leaf-alias and WAL
-  behavior. Concurrent replacement and filesystem I/O deadlines remain unproven.
-
-- Add bounded `workspace list --limit` metadata discovery from the existing local
-  journal without initialization/migration or Map credentials. Existing creation,
-  known-ID lookup, authority and execution behavior remain unchanged.
-
-- Add explicit local `workspace create` and `workspace show` metadata in the
-  existing SQLite journal, without Map authentication or execution authority.
-  Preserve connected commands, execution records and existing audit/export.
-
-
-- Disable DNSx's automatic version check during adapter execution. This removes
-  that auxiliary request; no standalone recon profile or network authority is added.
-- Clean up private Gate job data when executable resolution or preflight inspection
-  fails before launch. Preserve the original exception and existing cleanup-error
-  handling. See [launch cleanup note](changelog/unreleased-gate-launch-cleanup.md).
-
-- Verify that unsupported signed authorization, approval and envelope versions
-  are refused before consuming a contract; a subsequent valid contract remains usable.
-  See [the NM-1 regression note](changelog/unreleased-nm1-contract-version-regressions.md).
-- Clarify portable-export path normalization and test the real CLI conversion;
-  raw adapter rejection cases do not imply rejection of every CLI spelling alias.
-
-
-- Add synthetic evidence-export regression for active/revoked reference grants
-  and live ledger safety state. Export preserves those stores and excludes their
-  files/state; no production behavior or authority-restoration feature is added.
-
-- Add local `audit export-run` for a single terminal run's redacted JSON evidence
-  copy, original audit provenance and relative-path manifest. This partial NM-3
-  increment uses POSIX directory-FD controls or a candidate Windows 11 24H2+
-  handle adapter on local fixed NTFS. Native Windows security acceptance remains open.
-
-- Filter local audit history and metadata export by exact engagement/workspace ID
-  with `--engagement` (`-e`), using the existing journal and export schema.
-
-- Report unavailable Windows symlink fixtures as unproven only on WinError 1314;
-  retain real link rejection checks and add an explicit synthetic guard assertion.
-
-- Bind isolated recovery-test child profiles to disposable scratch on Windows,
-  preserving the explicit environment allowlist and source-origin assertions.
-
-- Record independently reviewed historical secret-scan false positives by exact
-  commit fingerprint, preserving future-commit detection and default rules.
-
-- Make the tool-environment allowlist test independent of inherited proxy-variable
-  casing without changing subprocess environment behavior or network settings.
-
-- Preserve a configured simple API base prefix (including Full's `/backend`) in
-  explicit managed requests without changing signed origin binding. Continue to
-  reject ambiguous prefixes, redirects and retries. No activation change.
-
-- Add an explicit bounded one-shot managed JSON transport with strict finite JSON,
-  TLS verification, no retries/redirects and fixed errors. No production route or
-  worker activation; canonical Docker Desktop exit remains open. See ADR 0038.
-
-- Add explicit capability-free managed claim observation bound to the original
-  enrolled principal and fingerprints. Require existing durable native proof for
-  receipt reconciliation; no retry, lease renewal or runtime activation. See ADR 0037.
-
-- Add unregistered managed known-stop receipts with one-shot durable sends and
-  explicit observation. Preserve PIDs as audit metadata and hold unknown
-  containment; no refund, replay or worker activation. See ADR 0036.
-
-- Add explicit managed result/terminal receipts and observation-only reconciliation
-  after known native return. Preserve one-shot sends, uncertainty fences, charges
-  and legacy recovery; no CLI/worker activation. See ADR 0035.
-
-- Add an unregistered one-shot managed consumption ACK barrier with durable
-  send/ACK observations, exact contract binding and no retry after uncertainty.
-  Preserve reservations and native platform guards; no upload/completion or
-  production activation. See ADR 0034.
-
-- Add an unregistered one-shot managed pre-claim entry and durable journal
-  handoff fence. Validate local preparation before RPC, preserve the original
-  claim clock and grant identity/expiry, and defer managed recovery without
-  replay, upload or completion. See ADR 0033; no CLI/queue activation.
-
-- Compose nested launch rechecks and add an optional verified absolute lease cap.
-  Add an unregistered managed Gate library composition reusing shared validation,
-  strict existing budget receipts, durable consumption, grants and native control.
-  No CLI/queue activation or managed upload/completion is enabled.
-
-- Add a test-only verified loopback HTTPS transport around the existing API
-  client. Disposable trust and bounded no-redirect/no-retry settings apply only
-  to fixture instances; runtime defaults and supported execution stay unchanged.
-
-- Add a test-only managed HTTP probe composing shared authorization validation,
-  the durable ledger and an inert final-launch guard. No runtime adapter, CLI,
-  queue, tool execution or supported-platform behavior is enabled.
-
-- Preserve the authorization ledger's trusted clock high-water mark after denied
-  issue/consume attempts. Recheck elapsed permission after writer locks and before
-  reservation so delayed or rolled-back clocks cannot revive expired contracts.
-
-- Add opt-in native Windows fault evidence for real loopback control loss/delay
-  and ambiguous owned finalization, with accounting and journal replay checks.
-  Test coverage only; execution behavior and supported profiles are unchanged.
-
-- Add explicit `--controlled --duration-budget SECONDS`, bound cumulative Map
-  allocation receipt and monotonic deadline composition. Requires unreleased Map
-  `0035durationbudget`. Default calls stay unchanged; cleanup/transport scope is
-  documented separately from the finite permission window.
-  Owned claims and monitor entry are single-use, including unknown responses and
-  failed monitor setup, so retries cannot renew permission or create parallel windows.
-
-- Add explicit `--controlled --target-budget` for fixed Gate plans, bound Map
-  cumulative origin-attempt receipts and guarded dispatch. Requires unreleased Map
-  `0034targetbudget` and owner configuration. Default paths remain unchanged.
-
-- Add explicit `jobs run --controlled --concurrency-budget` and mandatory Map
-  reservation receipt. Requires matching unreleased Map `0033concurrencybudget`
-  and owner configuration; default calls remain unchanged.
-
-- Add opt-in expiring/revocable Gate reference grants, claim/provider/launch
-  revalidation and conservative protected recovery. Preserve signed deadlines
-  across grant-lock waits; legacy approvals are unchanged. See
-  [the increment note](changelog/unreleased-expiring-reference-grants.md).
-
-- Add opt-in `jobs run --controlled` and `jobs stop RUN_ID`: owned control leases,
-  graceful/forced process-tree cancellation and conservative partial-state recovery.
-  Requires matching unreleased Map execution-control migration/endpoints. No worker,
-  default CLI behavior, distribution pin or Strict authorization claim changes.
-
-- Cap opt-in guarded execution by the execution contract's own expiry, approval
-  expiry and testing-window end. Recheck the deadline after credential/job-file
-  preparation; an expired contract cannot launch Gate. Container CI uses NM-1 Gate.
-- NM-1 opt-in standalone execution reuses the Gate handler with a private request
-  projection, actual binary binding and durable single use; legacy argv is unchanged.
-- Add isolated NM-1 reference authorization contracts, bounded reusable operator
-  approvals, fixed-request Gate plans and conformance/security fixtures. Existing
-  CLI, queue and evidence behavior is unchanged; see ADR 0025.
-
-### Changed
-- **Nmap is outside the supported toolkit; naabu is the supported port-discovery tool.**
-  The `toolkit` container image no longer installs `nmap` (libpcap stays for naabu), and the
-  Nmap integration (`run nmap`, the `nmap` job type, its handler and allowlist entry) is now
-  off unless the operator sets `VARDRRUNNER_ENABLE_NMAP=1` and supplies their own Nmap, under
-  its own license terms. By default `doctor`, `tools` and `status` no longer list Nmap, a queued
-  `nmap` job fails as unsupported with a message naming naabu, and the methodology checklists
-  suggest naabu instead of nmap. Naabu's command line never enables its Nmap hooks. The
-  container workflow asserts that no Nmap package or file is in the image. Nothing else
-  changes: no credential, scope, approval or execution control is relaxed, and Nmap XML
-  parsing remains available to the opt-in path. Upgrade note: an installation that relied on
-  `nmap` must set the variable and keep its own installation.
-
-### Documentation
-- Agent instructions consolidated: `AGENTS.md` is the single source for Claude Code and
-  Codex and keeps every execution, credential, integrity, MCP and Map/Gate contract rule;
-  `CLAUDE.md` imports it. Wiring and smoke-test guidance moved to `docs/development.md`.
-  No behavior change.
+- Support standalone workspaces, reviewed Gate cases, portable evidence exports
+  and bounded DNS/HTTPS Recon through the matching Full/Mapless distribution.
+- Add finite authorization, expiring credential grants, controlled cancellation,
+  target/duration budgets and concurrency controls.
+- Support explicitly enabled managed workers with durable journals and
+  authenticated original-run reconciliation. Unknown work remains held.
+- Add review-only Gate drafts, operator-approved queue proposals and redacted
+  provenance in exports.
+- Preserve hash-verified tool installation and binary integrity checks.
+- Upgrade runtime security packages, protect agent-local credentials, retain
+  secret scanning and make required release SBOM failures visible.
+- Correct documented environment-variable names and clarify platform limits.
+- Separate public user documentation from private planning and validation notes.
 
 ## [0.54.0] — 2026-10-30
 
@@ -401,11 +48,11 @@ VardrGate build with `run --literal-job` and approved credential references. See
 - Use HTTPS over HTTP/1.1 for build-time Go module/checksum downloads after repeated
   upstream HTTP/2 stream failures. TLS and checksum verification remain enforced;
   no runtime networking setting or tool version changes. See the
-  [build reliability note](changelog/unreleased-container-downloads.md).
+  build reliability note.
 
 - Rebuild the existing container Nuclei with go-jose 4.1.6 for CVE-2026-116587 and
   require that exact dependency in its verified source-build receipt. Native tool pins are unchanged.
-  See [the remediation note](changelog/unreleased-container-go-jose.md).
+  See the remediation note.
 
 - Add a report-only CI step that runs `govulncheck` (live database, symbol reachability) against
   the shipped Go binaries in the toolkit image, including Naabu, and writes the result to the job
@@ -427,19 +74,19 @@ VardrGate build with `run --literal-job` and approved credential references. See
 - Fix container Gau's provider TLS verification and zero-exit provider failures
   through four reviewed source substitutions with explicit patched-source
   provenance; retain extensionless URLs in JSON output. Preserve valid empty results and native archive pins. See
-  [details](changelog/unreleased-container-gau-security.md).
+  details.
 
 - Extend recorded source builds to existing container Naabu 2.6.1 with patched
   Go dependencies and its existing libpcap boundary. Preserve native archives
-  and unprivileged TCP-connect behavior. See [details](changelog/unreleased-container-naabu.md).
+  and unprivileged TCP-connect behavior. See details.
 
 - Extend the recorded container source build to existing DNSx 1.3.1 with patched
   Go/x/net/compress and a real isolated DNS lookup regression. Preserve native
-  archives and the nine-tool baseline. See [details](changelog/unreleased-container-dnsx.md).
+  archives and the nine-tool baseline. See details.
 
 - Build the existing container Katana with patched dependencies and recorded source
   origin, retaining runtime integrity checks and native archive installation.
-  See [details](changelog/unreleased-container-katana.md).
+  See details.
 
 - Refresh the container's Python/Debian Trixie base and Gate's Go 1.27.3 build
   image with reviewed digests, and update the verified Subfinder pin to 2.17.0.
@@ -453,7 +100,7 @@ VardrGate build with `run --literal-job` and approved credential references. See
 - Add a non-root, one-shot development container; startup prints help, persistent
   state persists independently. Add an optional tool-enabled target with Gate,
   nmap/libpcap and verified managed tools in VARDRRUNNER_TOOLS_DIR. See
-  [container notes](changelog/unreleased-container.md).
+  container notes.
 
 - Add opt-in `doctor --platform` for Map's v1 `/ready` database/migration
   contract and `doctor --offline` to skip release discovery while checking the
@@ -465,7 +112,7 @@ VardrGate build with `run --literal-job` and approved credential references. See
   declared principal preflight alongside caller diagnostics. Preserve additive
   semantic/readback metadata in the existing result upload and unresolved hash.
   Requires companion Gate evidence and Map semantic upload support. See
-  [unreleased notes](changelog/unreleased-gate-evidence.md).
+  unreleased notes.
 
 ## [0.53.0] — 2026-10-24
 
@@ -765,7 +412,7 @@ MCP phase 6 — versioned methodology checklists, with coverage kept out of the 
   recorded manual work evidences it as well as a job does). A test asserts both methodologies
   contain items of each kind so the distinction cannot become decorative, and the field's
   former name `evidence` is refused at load because it invited reading "tested by hand" as
-  "unevidenced". See [ADR 0015 § Amendment (v0.45.0)](docs/adr/0015-mcp-server.md).
+  "unevidenced". See ADR 0015 § Amendment (v0.45.0).
 - **Scope is stated per methodology.** The WSTG entry is a category-level planning guide over
   the guide's twelve top-level categories; OWASP identifies individual scenarios separately as
   `WSTG-<version>-<category>-<number>` (e.g. `WSTG-v42-INFO-02`), and scenario-level mapping is
@@ -811,7 +458,7 @@ MCP phases 4/5 — the engagement reads the prompts were missing, and case/repor
   assertions only a person can honestly make. Saving a case declares a human reviewed it, which
   is the whole purpose of `--reviewed`; a deliverable revision is immutable and is what reaches
   the client. The server drafts and reads in both areas and stops where a human has to commit.
-  See [ADR 0015 § Amendment (v0.44.0)](docs/adr/0015-mcp-server.md).
+  See ADR 0015 § Amendment (v0.44.0).
 
 ## [0.43.0] — 2026-10-09
 
@@ -892,7 +539,7 @@ Four MCP prompts for the workflows every engagement repeats. See
   content in the agent's context, while findings, recon URLs and scanner output come from the
   targets under test, so none of that is embedded; the agent gathers it through the read tools,
   where it is already framed as untrusted data. A test asserts expansion never touches the API
-  client. See [ADR 0015 § Amendment (v0.42.0)](docs/adr/0015-mcp-server.md).
+  client. See ADR 0015 § Amendment (v0.42.0).
 
 No tool, endpoint or backend change: the prompts drive the tools v0.40.0 already exposed.
 
@@ -932,7 +579,7 @@ correctly. **Requires VardrMap v0.39.0.** See [`changelog/v0.41.0.md`](changelog
 
 Optional MCP server so an AI agent can drive an engagement. See
 [`changelog/v0.40.0.md`](changelog/v0.40.0.md) and
-[ADR 0015](docs/adr/0015-mcp-server.md).
+ADR 0015.
 
 ### Added
 
@@ -1020,7 +667,7 @@ other tool is unaffected.
 
 Pinned, verified tool installs in one folder. See
 [`changelog/v0.37.0.md`](changelog/v0.37.0.md) and
-[ADR 0014](docs/adr/0014-pinned-verified-tool-installs.md).
+ADR 0014.
 
 ### Added
 
@@ -1062,10 +709,10 @@ Pinned, verified tool installs in one folder. See
 
 - **ADR index completed.** ADRs 0010–0013 (execution journal, runner identity and service
   management, compatibility and safety controls, guided setup) were written across v0.32.0–
-  v0.35.0 but never added to [`docs/adr/README.md`](docs/adr/README.md), so four accepted
+  v0.35.0 but never added to `docs/adr/README.md`, so four accepted
   decisions were unreachable from the index.
 - **`tests/test_credentials_posture.py` added to the test table** in
-  [`docs/development.md`](docs/development.md) — it was the only test file missing.
+  `docs/development.md` — it was the only test file missing.
 - **`CLAUDE.md` module map completed.** `target_safety.py`, `errors.py`, `policy.py`,
   `credentials.py` and `redaction.py` were all missing from the orientation list.
 - **Corrected the credential summary in `CLAUDE.md`**, which still described a "plaintext
@@ -1111,8 +758,7 @@ Reliability and supply-chain hardening for concurrent and unattended runners. Se
 
 ## [0.36.0] — 2026-08-18
 
-Completes roadmap §16 (target safety), the one part of Phase 4 that shipped
-without its security half. See [`changelog/v0.36.0.md`](changelog/v0.36.0.md).
+Add target classification and explicit local deny rules. See [`changelog/v0.36.0.md`](changelog/v0.36.0.md).
 
 ### Added
 
@@ -1145,9 +791,9 @@ without its security half. See [`changelog/v0.36.0.md`](changelog/v0.36.0.md).
 
 ## [0.35.0] — 2026-08-18
 
-Phase 5 completes the enterprise-for-small-teams roadmap with guided setup and final
+Add guided setup and final
 host-lifecycle hardening. See [`changelog/v0.35.0.md`](changelog/v0.35.0.md) and
-[ADR 0013](docs/adr/0013-guided-setup-and-host-lifecycle.md).
+ADR 0013.
 
 ### Added
 
@@ -1174,10 +820,10 @@ host-lifecycle hardening. See [`changelog/v0.35.0.md`](changelog/v0.35.0.md) and
 
 ## [0.34.0] — 2026-08-18
 
-Phase 4 of the enterprise-grade roadmap: explicit runner/backend compatibility,
+Add explicit runner/backend compatibility,
 local resource policy, target-shape validation, bounded queue concurrency, and opt-in
 release checks. See [`changelog/v0.34.0.md`](changelog/v0.34.0.md) and
-[ADR 0012](docs/adr/0012-compatibility-and-local-safety-controls.md).
+ADR 0012.
 
 ### Added
 
@@ -1204,10 +850,10 @@ release checks. See [`changelog/v0.34.0.md`](changelog/v0.34.0.md) and
 
 ## [0.33.0] — 2026-08-18
 
-Phase 3 of the enterprise-grade roadmap: stable runner identity, structured daemon logs,
+Add stable runner identity, structured daemon logs,
 native user-service management, and production readiness checks. See
 [`changelog/v0.33.0.md`](changelog/v0.33.0.md) and
-[ADR 0011](docs/adr/0011-runner-identity-and-service-management.md).
+ADR 0011.
 
 ### Added
 
@@ -1231,9 +877,9 @@ native user-service management, and production readiness checks. See
 
 ## [0.32.0] — 2026-08-18
 
-Phase 2 of the enterprise-grade roadmap: durable execution, crash reconciliation, run
+Add durable execution, crash reconciliation, run
 manifests, and local audit export. See [`changelog/v0.32.0.md`](changelog/v0.32.0.md) and
-[ADR 0010](docs/adr/0010-durable-execution-journal.md).
+ADR 0010.
 
 ### Added
 
@@ -1286,9 +932,9 @@ Phase 1 completion and integration hardening. See
 
 ## [0.31.0] — 2026-08-17
 
-Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See
+Improve credential storage fails closed. See
 [`changelog/v0.31.0.md`](changelog/v0.31.0.md) and
-[ADR 0009](docs/adr/0009-fail-closed-credential-storage.md).
+ADR 0009.
 
 ### Changed
 
@@ -1323,7 +969,7 @@ Phase 1c of the enterprise-grade roadmap: credential storage fails closed. See
 
 ## [0.30.0] — 2026-08-17
 
-Phase 1b of the enterprise-grade roadmap: one sanitization layer in front of
+Add one sanitization layer in front of
 every trust boundary. See [`changelog/v0.30.0.md`](changelog/v0.30.0.md).
 
 ### Added
@@ -1353,9 +999,9 @@ every trust boundary. See [`changelog/v0.30.0.md`](changelog/v0.30.0.md).
 
 ## [0.29.0] — 2026-08-17
 
-Phase 1a of the enterprise-grade roadmap: the runner can now tell a halt order
+Improve the runner can now tell a halt order
 from a lost race. See [`changelog/v0.29.0.md`](changelog/v0.29.0.md) and
-[ADR 0008](docs/adr/0008-error-classification-and-policy-handling.md).
+ADR 0008.
 
 ### Fixed
 
@@ -1494,7 +1140,7 @@ First release published to PyPI. See [`changelog/v0.28.0.md`](changelog/v0.28.0.
 ## [0.25.0] — 2026-07-08
 
 ### Added
-- **`vardrgate_api_test` job handler.**  VardrRunner can now run VardrGate API authorization tests as jobs. The handler shells out to the `vardrgate run --job … --out …` binary (added to the tool allowlist as `vardrgate`), captures the sanitized result JSON, and uploads it to the job via `POST /jobs/{id}/upload`. The job is self-contained — the test case travels in the job config, so there are no scope/recon targets to resolve. VardrRunner imports no VardrGate internals; the coupling is the CLI/JSON contract only. See [ADR 0006](docs/adr/0006-vardrgate-api-test-handler.md).
+- **`vardrgate_api_test` job handler.**  VardrRunner can now run VardrGate API authorization tests as jobs. The handler shells out to the `vardrgate run --job … --out …` binary (added to the tool allowlist as `vardrgate`), captures the sanitized result JSON, and uploads it to the job via `POST /jobs/{id}/upload`. The job is self-contained — the test case travels in the job config, so there are no scope/recon targets to resolve. VardrRunner imports no VardrGate internals; the coupling is the CLI/JSON contract only. See ADR 0006.
 - **`VardrGateConfig`.**  Typed, validated config for the new job type (`test_case`, `execution`, optional `policy_id`).
 
 ### Changed
@@ -1656,7 +1302,7 @@ Secure credentials + broader recon coverage. See
   the backend URL kept in `config.json`. Key resolution is `VARDRMAP_API_KEY` env > keychain >
   legacy config file. On a headless box with no keyring backend it falls back to the plaintext
   config file with a warning, so servers keep working. See
-  [docs/adr/0004-credential-storage.md](docs/adr/0004-credential-storage.md).
+  docs/adr/0004-credential-storage.md.
 - **`vardrrunner logout`** — removes the stored key from the keychain and config file, leaves
   the API URL in place, and warns if `VARDRMAP_API_KEY` is still set in the environment.
 ### Changed
@@ -1704,7 +1350,7 @@ First feature release from the standalone repo. See
   lifecycle (`_execute_one`): capability check → config → targets → claim → events → upload
   → done/fail. Every tool now gets identical claim/event/failure handling, and adding a tool
   is a one-file change. See
-  [docs/adr/0002-tool-handler-registry.md](docs/adr/0002-tool-handler-registry.md).
+  docs/adr/0002-tool-handler-registry.md.
 - **Direct `run` commands share the typed-config/handler path.** `run httpx|subfinder|nuclei|nmap`
   now validate their options through the same configs and reuse the same handlers as jobs and
   pipelines, so `run nmap --timing 9` is rejected (not silently clamped) and `run nuclei
@@ -1735,7 +1381,7 @@ First release from the standalone repository. See
 ### Changed
 - Extracted VardrRunner into its own repository from the VardrMap monorepo, preserving
   full commit history via `git subtree split`. See
-  [docs/adr/0001-extract-vardrrunner-from-vardrmap.md](docs/adr/0001-extract-vardrrunner-from-vardrmap.md).
+  docs/adr/0001-extract-vardrrunner-from-vardrmap.md.
 - **Corrected the package version** from a misleading `0.1.0` to `0.18.0` (the package
   already carried v0.17.x of features). Version is now single-sourced from
   `vardrrunner/__init__.py` and read dynamically by `pyproject.toml`; the heartbeat reports it.
@@ -1790,8 +1436,3 @@ recorded here for continuity; their commits are present in this repo's history.
 Dormant recon follow-up: distinguish `vardr.finite-recon-plan/1` from the unchanged
 Gate schema; recheck the shared recon deadline at final ledger issuance/consumption.
 No execution path is enabled.
-
-## Agent security audit (unreleased)
-
-- Ignore agent-local credential/session files while preserving shared instructions.
-- Reuse the pinned, checksum-verified Gitleaks history scan from VardrMap.

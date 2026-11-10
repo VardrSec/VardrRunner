@@ -1,4 +1,4 @@
-# NM-1 contract conformance
+# Authorization contract interface
 
 The schemas describe decoded payloads/envelopes; signature, time, scope, plan
 recompilation, grants and durable-state checks are additional mandatory rules.
@@ -44,7 +44,7 @@ Use `python -m vardrrunner.authorization --help`. `plan` binds an explicit binar
 journal/control context; `validate` never executes targets. `state` is a trusted
 local prototype operation, not a queue endpoint. No existing CLI/MCP command changes.
 Tests alone may inject simulated verified managed status; the file interface refuses
-it. Live managed leases and cancellation remain NM-2, not an advertised capability.
+it. File validation alone does not provide a live lease, cancellation or execution authority.
 
 Approval signatures attest the issuer/operator assertion, not legal permission,
 biological human action or trusted execution. Protect approval keys from agents
