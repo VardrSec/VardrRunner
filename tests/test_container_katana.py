@@ -32,6 +32,8 @@ def _source_build(tmp_path, monkeypatch, name):
     (source / "build-info.txt").write_text("\n".join(lines) + "\n")
     (source / "go.mod").write_text("module synthetic-build\n")
     (source / "go.sum").write_text("synthetic checksum fixture\n")
+    for filename in ("dependency-notices.tar.gz", "GO-LICENSE"):
+        (source / filename).write_bytes(b"synthetic retained legal artifact\n")
     if name == "gau":
         upstream = {**helper["GAU_UPSTREAM"], "Origin": {"Hash": helper["GAU_COMMIT"]}}
         (source / "upstream-module.json").write_text(json.dumps(upstream))
@@ -94,6 +96,7 @@ def test_source_build_records_origin_and_keeps_runtime_hash_checks(source_build)
         assert entry["origin"]["upstream_module"]["Sum"] == helper["GAU_UPSTREAM"]["Sum"]
         assert set(entry["origin"]["source_patches"]) == {"flags", "worker", "main", "output"}
     assert Path(toolchain.resolve(name, name)) == tools / name
+    assert {"dependency-notices.tar.gz", "GO-LICENSE"} <= set(entry["origin"]["provenance_sha256"])
     for filename, digest in entry["origin"]["provenance_sha256"].items():
         assert (
             hashlib.sha256((tools / "provenance" / name / filename).read_bytes()).hexdigest()

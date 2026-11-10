@@ -213,7 +213,15 @@ def patch_gau(build: Path) -> None:
 def install_source(source: Path, name: str) -> None:
     """Keep ordinary managed hash checks, with explicit source rather than archive origin."""
     build = BUILDS[name]
-    names = (name, name + ".sha256", "build-info.txt", "go.mod", "go.sum")
+    names = (
+        name,
+        name + ".sha256",
+        "build-info.txt",
+        "go.mod",
+        "go.sum",
+        "dependency-notices.tar.gz",
+        "GO-LICENSE",
+    )
     check_files(source, names, binary=name)
     supplement = gau_provenance(source) if name == "gau" else {}
     expected = (source / (name + ".sha256")).read_text(encoding="utf-8").split()[0]
@@ -265,9 +273,13 @@ def install_source(source: Path, name: str) -> None:
         provenance = config.tools_dir() / "provenance" / name
         provenance.mkdir(parents=True, exist_ok=False)
         hashes = {}
-        for filename in ("go.mod", "go.sum", "build-info.txt") + (
-            gau_files() if name == "gau" else ()
-        ):
+        for filename in (
+            "go.mod",
+            "go.sum",
+            "build-info.txt",
+            "dependency-notices.tar.gz",
+            "GO-LICENSE",
+        ) + (gau_files() if name == "gau" else ()):
             shutil.copyfile(source / filename, provenance / filename)
             hashes[filename] = hashlib.sha256((provenance / filename).read_bytes()).hexdigest()
         origin = {

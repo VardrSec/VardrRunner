@@ -167,3 +167,14 @@ both native wheels and container images. It records top-level managed-tool
 notices only. The toolkit also retains Gate's Apache-2.0 license at
 `/usr/share/licenses/vardrgate/LICENSE`. These files do not establish complete
 transitive notices or corresponding-source delivery.
+
+## Source-built Go tool notices
+
+Each source-built Go tool retains `GO-LICENSE` and `dependency-notices.tar.gz`
+under `/opt/vardrtools/provenance/TOOL/`. The existing `source.json` records their
+SHA-256 hashes alongside build information and module checksums. The compressed
+archive preserves legal text paths from that builder's downloaded Go module
+cache; it may include modules beyond those linked into the binary. It is retained
+as data and is never extracted or executed by Runner. Existing regular-file and
+size limits apply. This collection does not establish license compatibility,
+complete dependency notice coverage or corresponding-source delivery.
