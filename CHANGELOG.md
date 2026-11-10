@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Include managed-tool top-level notices in the wheel and runtime images, and
+  retain Gate's license beside the toolkit binary. Transitive review remains separate.
+
 - Support standalone workspaces, reviewed Gate cases, portable evidence exports
   and bounded DNS/HTTPS Recon through the matching Full/Mapless distribution.
 - Add finite authorization, expiring credential grants, controlled cancellation,
