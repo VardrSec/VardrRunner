@@ -1,11 +1,12 @@
 # Changelog
-
 All notable changes to VardrRunner are documented here.
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Per-version detail notes live in [`changelog/`](changelog/).
 
 ## [Unreleased]
+
+- Align public documentation with retained guides and remove references to private working records.
 
 - Allow the explicit persistent-worker recipe to reuse the qualified toolkit's
   empty readiness directory only with its exact ownership and private mode.

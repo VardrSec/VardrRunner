@@ -293,8 +293,7 @@ adds real HTTP proxy loss/delay and ambiguous owned-finalization coverage. Run
 with Map's existing Windows test Python and Runner's existing `.venv` available;
 redirect `TEMP`/`TMP` to disposable scratch. It creates its own SQLite database,
 synthetic authentication, grant catalog and three-process trees. It is explicitly
-opt-in, outside normal pytest discovery. See [native fault coverage](nm2-native-faults.md)
-for the case matrix, transport-timeout injection and evidence limits.
+opt-in, outside normal pytest discovery. These optional fault probes are not prerequisites for ordinary use.
 
 Container development: see [the container guide](container.md) for build, persistent state, credentials and trust configuration.
 
@@ -635,8 +634,7 @@ CI/security and migration gates remain open. No production route is registered.
 
 ## NM-2 recovery audit
 
-The [checklist audit](nm2-checklist-audit.md) distinguishes the scoped handoff
-evidence matrix from the missing complete approved checklist. Fresh-process tests
+Historical handoff audits are not current phase or release acceptance. Fresh-process tests
 in `tests/test_managed_observations.py` verify exact result/stop receipt closure,
 missing-receipt holds and abrupt observer interruption with no network, process
 creation or PID signaling. They do not certify native Windows owner-crash
@@ -649,8 +647,7 @@ origin/path requirements, inherited proxy/CA settings, bounded bodies and strict
 finite JSON. Map's explicit `test_managed_tls.py` cases run real verified sockets
 and authenticated result/stop receipt flows against this production-code method.
 No real target is dispatched. Full regression coverage and static gates remain
-required. The [canonical exit status](nm2-canonical-exit-status.md) supersedes the
-derived handoff matrix; Docker worker/native Windows acceptance stays open.
+required. These transport tests do not establish platform or release acceptance.
 
 The API prefix tests preserve `/backend` and nested simple configured bases while
 rejecting encoded/traversal/query ambiguity. Map's verified TLS fixture emulates

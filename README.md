@@ -99,13 +99,13 @@ instructions; a startup setting is not per-job consent.
 | `VARDRMAP_URL` | Connected backend URL |
 | `VARDRMAP_API_KEY` | Connected API key; never commit it |
 | `VARDRRUNNER_TOOL_TIMEOUT` | Per-tool timeout, default 1800 seconds |
-| `VARDRUNNER_NAME` | Optional heartbeat/display name |
-| `VARDRUNNER_MAX_TARGETS` | Queue target ceiling, default 500; 1–100000 |
-| `VARDRUNNER_MAX_ARTIFACT_MB` | Upload ceiling, default 100 MiB; 1–10240 |
-| `VARDRUNNER_MAX_CONCURRENT_JOBS` | Parallel engagement groups, default 1; 1–8 |
-| `VARDRUNNER_MIN_FREE_DISK_MB` | Free-space reserve, default 512 MiB; 0 disables |
-| `VARDRUNNER_DENY_TARGETS` | Explicit local target restrictions |
-| `VARDRUNNER_ALLOW_DENIED_TARGETS` | Explicit audited override of local deny rules |
+| `VARDRRUNNER_NAME` | Optional heartbeat/display name |
+| `VARDRRUNNER_MAX_TARGETS` | Queue target ceiling, default 500; 1–100000 |
+| `VARDRRUNNER_MAX_ARTIFACT_MB` | Upload ceiling, default 100 MiB; 1–10240 |
+| `VARDRRUNNER_MAX_CONCURRENT_JOBS` | Parallel engagement groups, default 1; 1–8 |
+| `VARDRRUNNER_MIN_FREE_DISK_MB` | Free-space reserve, default 512 MiB; 0 disables |
+| `VARDRRUNNER_DENY_TARGETS` | Explicit local target restrictions |
+| `VARDRRUNNER_ALLOW_DENIED_TARGETS` | Explicit audited override of local deny rules |
 
 These legacy settings do not replace the stronger restrictions in a controlled
 execution contract. See the CLI reference for the exact command-specific behavior.
