@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Retain downloaded Go module legal texts and the Go license with each source-built
+  tool’s existing hashed provenance, without changing compiled tools.
+
 - Include managed-tool top-level notices in the wheel and runtime images, and
   retain Gate's license beside the toolkit binary. Transitive review remains separate.
 
