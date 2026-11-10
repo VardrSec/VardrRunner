@@ -159,6 +159,7 @@ RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in
 ENV XDG_CONFIG_HOME=/home/runner/.vardrmap \
     XDG_CACHE_HOME=/home/runner/.vardrmap/tool-cache
 COPY --from=gate-build /out/vardrgate /usr/local/bin/vardrgate
+COPY --from=gate-build /src/LICENSE /usr/share/licenses/vardrgate/LICENSE
 COPY --from=local-owner-build /vardr-worker-owner /usr/local/bin/vardr-worker-owner
 RUN chmod 0555 /usr/local/bin/vardr-worker-owner \
     && mkdir -m 0700 /run/vardr-worker-ready \

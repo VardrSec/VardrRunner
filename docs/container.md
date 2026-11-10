@@ -159,3 +159,11 @@ enablement is added. The existing container smoke workflow uses the SDK to
 initialize, list the two local tools and inspect an empty fresh container; it sends
 no target requests and mounts no existing data. SDK context exit closes the session
 and removes its ephemeral `--rm` container.
+
+## License files
+
+The installed Python package includes `vardrrunner/THIRD_PARTY_NOTICES.txt` in
+both native wheels and container images. It records top-level managed-tool
+notices only. The toolkit also retains Gate's Apache-2.0 license at
+`/usr/share/licenses/vardrgate/LICENSE`. These files do not establish complete
+transitive notices or corresponding-source delivery.
