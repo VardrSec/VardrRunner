@@ -16,7 +16,8 @@ assert xdg_config == root and xdg_cache == root / "tool-cache"
 assert (Path.home() / ".config").resolve() == root.resolve()
 assert not os.access(config.tools_dir(), os.W_OK)
 for name in ("katana", "dnsx", "naabu", "httpx", "subfinder", "ffuf", "nuclei"):
-    expected = "verified source build" + ("; reviewed source patches" if name == "nuclei" else "")
+    patched = name in {"dnsx", "httpx", "naabu", "nuclei"}
+    expected = "verified source build" + ("; reviewed source patches" if patched else "")
     status = toolchain.status(name, name)
     assert status.source == "managed" and status.detail == expected, (name, status)
     assert (config.tools_dir() / "provenance" / name / "source.json").is_file()
