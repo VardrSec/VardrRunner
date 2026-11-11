@@ -7,5 +7,6 @@
 !vardrrunner/**
 !container/
 !container/go_tool_install.py
+!container/libpcap-source.txt
 **/__pycache__/
 **/*.pyc

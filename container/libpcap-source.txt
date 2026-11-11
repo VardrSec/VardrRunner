@@ -1,0 +1,18 @@
+libpcap 1.10.7 security source rebuild
+
+Original Debian source: libpcap 1.10.7-1
+https://tracker.debian.org/news/1795623/accepted-libpcap-1107-1-source-into-unstable/
+Fixes include CVE-2026-0799 and CVE-2026-6554.
+
+The original descriptor and source archives are pinned by SHA-256 in the
+Dockerfile and retrieved from Debian's immutable snapshot. They are rebuilt
+with existing Trixie packages, not installed as unstable binary packages.
+The source change only selects debhelper compatibility 13 and records the
+local +vardr1 rebuild; upstream executable source is unchanged. Broad upstream
+tests are disabled; exported-symbol checks remain enabled.
+
+The original and modified Debian source, upstream signature, build metadata,
+recipe and SHA256SUMS accompany this notice. The retained upstream signature
+file is not a claim of verified signer trust; exact SHA-256 pins bind inputs.
+See /usr/share/doc/libpcap0.8t64/copyright for the package's license terms.
+This delivery covers libpcap, not every runtime/toolchain package.

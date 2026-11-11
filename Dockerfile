@@ -26,6 +26,37 @@ WORKDIR /home/runner
 ENTRYPOINT ["vardrrunner"]
 CMD ["--help"]
 
+# Rebuild the upstream security release on the same Trixie ABI; no sid packages.
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS libpcap-build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential bison flex debhelper libbluetooth-dev libdbus-1-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+ADD --checksum=sha256:d6868b85a03361f45be66a95bb49e9c12a37b41e1e377834631e63e6ae05c0bb https://snapshot.debian.org/file/1744bda81b7d5ecc02f43f0af90bb7fe99469cc5 libpcap_1.10.7-1.dsc
+ADD --checksum=sha256:68fa62cffb974f4275641ce14c2e2d75739251f30e00e6a0900903b247d76a03 https://snapshot.debian.org/file/b95b0204a7ee243d4f972065328a89d492a42a44 libpcap_1.10.7.orig.tar.xz
+ADD --checksum=sha256:e2781d2daea2b4bfedc18fe7588a8e7a960c622eb786dfe5c23c756d08992c55 https://snapshot.debian.org/file/b787d6fd4cecf76ab8de5bc4c836e124bc22e4a9 libpcap_1.10.7.orig.tar.xz.asc
+ADD --checksum=sha256:22934aca1eebbed28e67b63d8c7198ab8978327ca1e2e0a25d8e490fb24c0362 https://snapshot.debian.org/file/62eb0fe1c49833b58db3d41519631fb87070fe03 libpcap_1.10.7-1.debian.tar.xz
+COPY Dockerfile /build/runner.Dockerfile
+COPY container/libpcap-source.txt /build/libpcap-source.txt
+RUN --network=none dpkg-source --no-check -x libpcap_1.10.7-1.dsc source
+WORKDIR /build/source
+RUN sed -i 's/debhelper-compat (= 14)/debhelper-compat (= 13)/' debian/control \
+    && { printf 'libpcap (1.10.7-1+vardr1) trixie; urgency=high\n\n  * Rebuild the upstream security release for Trixie with debhelper compat 13.\n\n -- VardrSec local build <local@invalid>  Wed, 11 Nov 2026 00:00:00 +0000\n\n'; cat debian/changelog; } > /tmp/changelog \
+    && mv /tmp/changelog debian/changelog
+# Qualify offline BPF behavior separately; do not run the broad upstream suite.
+ENV DEB_BUILD_OPTIONS='nocheck parallel=2'
+RUN --network=none mkdir -p /out/packages /out/source \
+    && (dpkg-buildpackage -us -uc -B > /tmp/package-build.log 2>&1 || (tail -n 70 /tmp/package-build.log; exit 1)) \
+    && cp ../libpcap0.8t64_*.deb /out/packages/ \
+    && debian/rules clean >> /tmp/package-build.log 2>&1 \
+    && dpkg-source --build . >> /tmp/package-build.log 2>&1 \
+    && cp ../libpcap_*.dsc ../libpcap_*.tar.xz ../libpcap_*.asc ../libpcap_*.buildinfo ../libpcap_*.changes ../runner.Dockerfile ../libpcap-source.txt /out/source/ \
+    && chmod 0644 /out/source/* \
+    && cd /out/source && sha256sum ./* > SHA256SUMS
+
+FROM scratch AS libpcap-source-delivery
+COPY --from=libpcap-build /out/source/ /
+
 # Optional tool-enabled target; the default final target remains CLI-only.
 # Supply the pinned Gate source as BuildKit's named `gate` context.
 FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS gate-build
@@ -203,6 +234,9 @@ RUN python -m pip install --no-cache-dir '/opt/runner[authorization,mcp]'
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends libpcap0.8 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=libpcap-build /out/packages/ /tmp/libpcap-security/
+RUN dpkg --install /tmp/libpcap-security/*.deb && rm -rf /tmp/libpcap-security
+COPY --from=libpcap-build /out/source/ /usr/share/doc/libpcap0.8t64/vardr-source/
 ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 COPY --from=katana-build /out/ /tmp/katana-build/
 COPY --from=dnsx-build /out/ /tmp/dnsx-build/
