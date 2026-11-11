@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Verify retained OS backport source checksums in the actual toolkit image,
+  alongside the combined crypto and OS security build.
+
 - Backport the maintained util-linux mount/descriptor security fixes and their
   header/flag follow-ups, retaining the Trixie ABI and corresponding source.
 

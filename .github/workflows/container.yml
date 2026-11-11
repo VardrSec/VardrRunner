@@ -7,7 +7,7 @@ on:
 jobs:
   container:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -25,6 +25,13 @@ jobs:
         run: |
           docker build --target toolkit --build-context gate=./.gate-source -t vardrrunner:toolkit .
           docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; assert "GODEBUG" not in os.environ; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and not shutil.which("nmap")'
+      - name: Verify retained OS backport sources in the toolkit
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --entrypoint sh vardrrunner:toolkit -ec '
+              for package in libsqlite3-0 ncurses-bin util-linux libpcap0.8t64; do
+                (cd "/usr/share/doc/$package/vardr-source" && sha256sum -c SHA256SUMS)
+              done'
       - name: Verify non-root offline MCP stdio in the toolkit
         timeout-minutes: 1
         shell: bash
