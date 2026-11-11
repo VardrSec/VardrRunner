@@ -1,3 +1,25 @@
+FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS ncurses-build
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential debhelper libgpm-dev pkgconf autoconf-dickey && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+ADD --checksum=sha256:546930a8992ae3325d8c38378f290265d969cf6333cfae9648ac6d69e1e8a8a6 https://deb.debian.org/debian/pool/main/n/ncurses/ncurses_6.5+20250216-2.debian.tar.xz ncurses_6.5+20250216-2.debian.tar.xz
+ADD --checksum=sha256:00539cc2bc6bb84be1b8a8a5decf606682e14b6f39b76b9aa090e65d2c2d4580 https://deb.debian.org/debian/pool/main/n/ncurses/ncurses_6.5+20250216-2.dsc ncurses_6.5+20250216-2.dsc
+ADD --checksum=sha256:b37baafa436e7133bb12a185cb8f60e1599b1947e9f0181c76f3190acf28b6eb https://deb.debian.org/debian/pool/main/n/ncurses/ncurses_6.5+20250216.orig.tar.gz ncurses_6.5+20250216.orig.tar.gz
+ADD --checksum=sha256:64f4d17923322176c44079f18f170e2164a59d551d7e4e9c1a6e4eebedc5dd6f https://deb.debian.org/debian/pool/main/n/ncurses/ncurses_6.5+20250216.orig.tar.gz.asc ncurses_6.5+20250216.orig.tar.gz.asc
+RUN --network=none dpkg-source --no-check -x ncurses_6.5+20250216-2.dsc source
+COPY container/infocmp-bound.patch /build/source/debian/patches/vardr-infocmp-bound.patch
+WORKDIR /build/source
+RUN printf '\nvardr-infocmp-bound.patch\n' >> debian/patches/series && dpkg-source --before-build . && { printf 'ncurses (6.5+20250216-2+vardr1) trixie; urgency=high\n\n  * Bound infocmp analysis copy (CVE-2025-69720).\n\n -- VardrSec local build <local@invalid>  Wed, 11 Nov 2026 00:00:00 +0000\n\n'; cat debian/changelog; } > /tmp/changelog && mv /tmp/changelog debian/changelog
+ENV DEB_BUILD_OPTIONS='nocheck parallel=2'
+ENV DEB_BUILD_PROFILES='nobiarch'
+RUN --network=none dpkg-buildpackage -us -uc -B > /build/package-build.log 2>&1 || (tail -n 70 /build/package-build.log; exit 1)
+RUN mkdir -p /out/packages /out/source && cp ../ncurses-bin_*.deb /out/packages/ && debian/rules clean >> /build/package-build.log 2>&1 && dpkg-source --build . >> /build/package-build.log 2>&1 && cp ../ncurses_*.dsc ../ncurses_*.tar.* ../ncurses_*.buildinfo ../ncurses_*.changes /out/source/
+COPY Dockerfile /out/source/Dockerfile
+COPY container/ncurses-source.txt /out/source/ncurses-source.txt
+RUN chmod 0644 /out/source/* && cd /out/source && sha256sum ./* > SHA256SUMS
+
+FROM scratch AS ncurses-source-delivery
+COPY --from=ncurses-build /out/source/ /
+
 # Rebuild the fixed SQLite source on Trixie; build tools are discarded.
 FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS sqlite-build
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -42,6 +64,10 @@ COPY --from=sqlite-build /out/packages/ /tmp/sqlite-security/
 RUN --network=none dpkg --install /tmp/sqlite-security/*.deb \
     && apt-get check && rm -rf /tmp/sqlite-security
 COPY --from=sqlite-build /out/source/ /usr/share/doc/libsqlite3-0/vardr-source/
+COPY --from=ncurses-build /out/packages/ /tmp/ncurses-security/
+RUN --network=none dpkg --install /tmp/ncurses-security/*.deb \
+    && apt-get check && rm -rf /tmp/ncurses-security
+COPY --from=ncurses-build /out/source/ /usr/share/doc/ncurses-bin/vardr-source/
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

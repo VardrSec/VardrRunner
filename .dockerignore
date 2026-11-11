@@ -12,3 +12,6 @@
 **/*.pyc
 
 !container/sqlite-source.txt
+
+!container/infocmp-bound.patch
+!container/ncurses-source.txt

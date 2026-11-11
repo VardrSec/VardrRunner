@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Backport the upstream infocmp analysis bound to the existing Trixie ncurses
+  source; retain original/modified source without replacing runtime libraries.
+
 - Rebuild the fixed SQLite runtime on Trixie and retain its original/modified
   source; package the original Go module source collection as inert legal data.
 
