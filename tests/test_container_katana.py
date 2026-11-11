@@ -1,8 +1,10 @@
 """Source-built image tools retain hash verification and honest provenance."""
 
 import hashlib
+import io
 import json
 import runpy
+import tarfile
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -73,6 +75,34 @@ def _source_build(tmp_path, monkeypatch, name):
             )
             (source / f"{key}.original.go").write_bytes(before)
             (source / f"{key}.patched.go").write_bytes(after)
+    if name == "nuclei":
+        pgp = helper["nuclei_openpgp"]
+        license_data = b"synthetic retained license"
+        archive = source / pgp.FILES[0]
+        with tarfile.open(archive, "w") as tar:
+            entry = tarfile.TarInfo("LICENSE")
+            entry.size = len(license_data)
+            tar.addfile(entry, io.BytesIO(license_data))
+        for filename, constant in zip(
+            pgp.FILES[:3], ("SOURCE_SHA256", "PATCH_SHA256", "ZIP_SHA256"), strict=True
+        ):
+            path = source / filename
+            if not path.exists():
+                path.write_bytes(b"synthetic review evidence")
+            monkeypatch.setattr(pgp, constant, hashlib.sha256(path.read_bytes()).hexdigest())
+        (source / pgp.FILES[3]).write_bytes(license_data)
+        with (source / "build-info.txt").open("a") as stream:
+            stream.write(f"\tdep\t{pgp.MODULE}\t{pgp.VERSION}\n\t=>\t{pgp.REPLACEMENT}\t(devel)\n")
+        events = [
+            {"Action": "pass", "Test": test, "Package": pgp.MODULE + "/github"}
+            for test in (
+                "TestGitService_CreateSignedCommitWithKey",
+                "TestExpiredLegacySigningKeyRejected",
+                "TestCryptoCompatibilityAudit",
+            )
+        ]
+        events.append({"Action": "pass", "Package": pgp.MODULE + "/github"})
+        (source / "openpgp-tests.json").write_text("\n".join(json.dumps(e) for e in events))
     tools = tmp_path / "tools"
     monkeypatch.setenv("VARDRRUNNER_TOOLS_DIR", str(tools))
     probe = Mock()
@@ -100,7 +130,9 @@ def test_source_build_records_origin_and_keeps_runtime_hash_checks(source_build)
     assert entry["origin"]["kind"] == "go-module-source"
     assert "asset_sha256" not in entry  # It must not claim an upstream archive check.
     assert entry["origin"]["module"] == helper["BUILDS"][name]["module"]
-    expected = "verified source build" + ("; reviewed source patches" if name == "gau" else "")
+    expected = "verified source build" + (
+        "; reviewed source patches" if name in ("gau", "nuclei") else ""
+    )
     assert toolchain.status(name, name).detail == expected
     if name == "gau":
         assert entry["origin"]["modules"][helper["BUILDS"][name]["module"]] == {
@@ -253,3 +285,60 @@ def test_vulnerable_decompressor_provenance_is_rejected(source_build, module, ol
         helper["install_source"](source, name)
     probe.assert_not_called()
     assert not (tools / "tools.lock.json").exists()
+
+
+@pytest.mark.parametrize("kind", ["path", "module", "version", "missing", "source", "test"])
+def test_nuclei_rejects_unreviewed_replacement_or_missing_evidence(tmp_path, monkeypatch, kind):
+    source, _, _, name, _ = _source_build(tmp_path, monkeypatch, "nuclei")
+    pgp = helper["nuclei_openpgp"]
+    info = source / "build-info.txt"
+    text = info.read_text()
+    if kind == "path":
+        info.write_text(text.replace(pgp.REPLACEMENT, "/src/arbitrary"))
+    elif kind == "module":
+        info.write_text(text.replace(pgp.MODULE, "example.invalid/arbitrary"))
+    elif kind == "version":
+        info.write_text(text.replace(pgp.VERSION, "v30.0.0"))
+    elif kind == "missing":
+        info.write_text("\n".join(line for line in text.splitlines() if "=>" not in line))
+    elif kind == "source":
+        (source / pgp.FILES[0]).write_bytes(b"tampered")
+    else:
+        (source / "openpgp-tests.json").write_text('{"Action":"fail"}\n')
+    with pytest.raises(ValueError):
+        helper["install_source"](source, name)
+
+
+@pytest.mark.parametrize("fault", ["archive", "manifest", "original", "range", "output"])
+def test_openpgp_prepare_rejects_tampered_inputs_and_invalid_ranges(tmp_path, monkeypatch, fault):
+    import zipfile
+
+    pgp = helper["nuclei_openpgp"]
+    archive = tmp_path / "upstream.zip"
+    original = b"synthetic source\n"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr(pgp.MODULE + "@" + pgp.VERSION + "/LICENSE", original)
+    changes_dir = tmp_path / "changes"
+    changes_dir.mkdir()
+    (changes_dir / "backport.patch").write_bytes(b"synthetic patch")
+    change = {
+        "before_sha256": hashlib.sha256(original).hexdigest(),
+        "after_sha256": hashlib.sha256(original).hexdigest(),
+        "edits": [],
+    }
+    if fault == "original":
+        change["before_sha256"] = "0" * 64
+    elif fault == "range":
+        change["edits"] = [{"start": 0, "end": len(original) + 1, "replacement": ""}]
+    manifest = changes_dir / "changes.json"
+    manifest.write_text(json.dumps({"LICENSE": change}))
+    monkeypatch.setattr(pgp, "ZIP_SHA256", hashlib.sha256(archive.read_bytes()).hexdigest())
+    monkeypatch.setattr(pgp, "CHANGES_SHA256", hashlib.sha256(manifest.read_bytes()).hexdigest())
+    monkeypatch.setattr(pgp, "PATCH_SHA256", hashlib.sha256(b"synthetic patch").hexdigest())
+    monkeypatch.setattr(pgp, "SOURCE_SHA256", "0" * 64)
+    if fault == "archive":
+        archive.write_bytes(b"tampered archive")
+    elif fault == "manifest":
+        manifest.write_text("{}")
+    with pytest.raises(ValueError):
+        pgp.prepare(archive, changes_dir, tmp_path / "source", tmp_path / "evidence")
