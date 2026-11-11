@@ -109,8 +109,26 @@ jobs:
             echo "## Reachable Go advisories (govulncheck, live database)"
             for b in dnsx ffuf gau httpx katana naabu nuclei subfinder vardrgate; do
               echo "### $b"
-              "$(go env GOPATH)/bin/govulncheck" -mode=binary "$RUNNER_TEMP/bins/$b" 2>&1 \
-                | grep -E "^Vulnerability|Found in|Fixed in|No vulnerabilities|Your code" \
-                || echo "scan did not complete"
+              status=0
+              "$(go env GOPATH)/bin/govulncheck" -mode=binary "$RUNNER_TEMP/bins/$b" \
+                > "$RUNNER_TEMP/bins/$b.govulncheck.txt" 2>&1 || status=$?
+              cat "$RUNNER_TEMP/bins/$b.govulncheck.txt"
+              case "$status" in
+                0) echo "Scan completed: no reachable findings" ;;
+                3) echo "Scan completed: reachable findings require review" ;;
+                *) echo "Scan failed: govulncheck exit $status" ;;
+              esac
+              printf '%s\n' "$status" > "$RUNNER_TEMP/bins/$b.govulncheck.exit"
             done
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve complete Go reachability reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: toolkit-go-reachability
+          path: |
+            ${{ runner.temp }}/bins/*.govulncheck.txt
+            ${{ runner.temp }}/bins/*.govulncheck.exit
+          if-no-files-found: error
+          retention-days: 7
