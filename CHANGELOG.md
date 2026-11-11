@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Ship Dalfox dependency notices, locked source references and the four
+  unmodified MPL dependency sources as inert package data; tool binaries stay
+  unchanged.
+
 - Rebuild libpcap 1.10.7 for the toolkit runtime to fix unsafe BPF memory access
   and unbounded jumps, retaining its corresponding source and package notices.
 
