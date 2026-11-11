@@ -63,7 +63,17 @@ FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0de
 ENV GODEBUG=http2client=0
 WORKDIR /src
 COPY --from=gate . .
-RUN CGO_ENABLED=0 go build -trimpath -o /out/vardrgate ./cmd/vardrgate
+RUN CGO_ENABLED=0 go build -trimpath -o /out/vardrgate ./cmd/vardrgate \
+    && go mod verify \
+    && mkdir -p /out/provenance \
+    && go version -m /out/vardrgate > /out/provenance/build-info.txt \
+    && cp go.mod go.sum LICENSE /out/provenance/ \
+    && cp /usr/local/go/LICENSE /out/provenance/GO-LICENSE
+# Preserve the exact builder's legal payloads; downstream audit matches only
+# linked module identities, never counts unrelated cache entries as coverage.
+RUN cd /go/pkg/mod \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/gate-module-notices \
+    && tar --null -T /tmp/gate-module-notices -czf /out/provenance/dependency-notices.tar.gz
 
 # Upstream module/checksum HTTP/2 streams repeatedly failed; keep verified HTTPS over HTTP/1.1.
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS katana-build
@@ -81,7 +91,7 @@ RUN go mod init vardrrunner-katana-build \
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
@@ -100,7 +110,7 @@ RUN go mod init vardrrunner-dnsx-build \
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
@@ -121,7 +131,7 @@ RUN go mod init vardrrunner-naabu-build \
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
@@ -157,7 +167,7 @@ RUN go get golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.20.2 \
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
@@ -170,7 +180,7 @@ RUN go mod init vardrrunner-httpx-build     && go get github.com/projectdiscover
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
@@ -183,7 +193,7 @@ RUN go mod init vardrrunner-subfinder-build     && go get github.com/projectdisc
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
@@ -195,7 +205,7 @@ RUN go mod init vardrrunner-ffuf-build     && go get github.com/ffuf/ffuf/v2@v2.
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
@@ -232,7 +242,7 @@ RUN go get github.com/projectdiscovery/ldapserver@v1.0.2-0.20240723071106-7cb3f5
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
@@ -274,6 +284,7 @@ ENV XDG_CONFIG_HOME=/home/runner/.vardrmap \
     XDG_CACHE_HOME=/home/runner/.vardrmap/tool-cache
 COPY --from=gate-build /out/vardrgate /usr/local/bin/vardrgate
 COPY --from=gate-build /src/LICENSE /usr/share/licenses/vardrgate/LICENSE
+COPY --from=gate-build /out/provenance/ /opt/vardrtools/provenance/vardrgate/
 COPY --from=local-owner-build /vardr-worker-owner /usr/local/bin/vardr-worker-owner
 RUN chmod 0555 /usr/local/bin/vardr-worker-owner \
     && mkdir -m 0700 /run/vardr-worker-ready \
