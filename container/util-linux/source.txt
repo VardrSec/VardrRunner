@@ -1,0 +1,18 @@
+util-linux security source backport
+
+Base: Debian Trixie util-linux 2.41.5-0+deb13u1.
+Retains the current ABI and package feature configuration, applying the
+remaining upstream stable/v2.41 mount-hook, restricted-source resolution
+and descriptor-close-on-exec security changes for CVE-2026-76642,
+CVE-2026-78408 and CVE-2026-78410. Debian's existing loopdev and source
+canonicalization patches are retained, not duplicated.
+
+Also includes the vendor's missing-header and RESOLVE_NO_SYMLINKS 0x04
+follow-ups. Each retained patch names its exact upstream commit.
+Only mount, util-linux and their five exact-version sibling libraries
+(libmount1, libblkid1, libsmartcols1, libuuid1, liblastlog2-2) enter the
+runtime. Other packages and build dependencies stay in the builder.
+Original/modified Debian source, build metadata, patches, recipe, package
+copyright and checksums accompany the runtime. Original input SHA-256
+values are build guards, not a claim of verified PGP signer trust.
+A custom package suffix does not itself resolve scanner findings.

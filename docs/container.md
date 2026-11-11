@@ -271,3 +271,19 @@ retained in `/usr/share/doc/ncurses-bin/vardr-source/`. The
 `ncurses-source-delivery` build target exports the same source materials.
 No unstable binary packages or repositories are introduced. A custom package
 version does not itself resolve version-based scanner findings.
+
+## util-linux source delivery
+
+The image rebuilds the existing Trixie util-linux source with the remaining
+upstream stable mount-hook, source-resolution and descriptor-close-on-exec
+security changes. Existing Debian patches are retained; upstream's missing
+header and corrected symlink-resolution flag are included. Runtime ABI and
+feature configuration remain unchanged. `mount`, `util-linux` and their five
+exact-version sibling libraries are replaced together, preserving Debian
+dependency constraints. Other build products remain in the builder.
+
+`/usr/share/doc/util-linux/vardr-source/` retains original/modified Debian
+source, patch identities, build metadata, recipe and checksums. Existing
+package copyright remains installed. The `util-linux-source-delivery` build
+target exports the same materials. A custom package version does not itself
+clear vulnerability findings.

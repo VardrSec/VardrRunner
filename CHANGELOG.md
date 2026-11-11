@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Backport the maintained util-linux mount/descriptor security fixes and their
+  header/flag follow-ups, retaining the Trixie ABI and corresponding source.
+
 - Backport the upstream infocmp analysis bound to the existing Trixie ncurses
   source; retain original/modified source without replacing runtime libraries.
 
