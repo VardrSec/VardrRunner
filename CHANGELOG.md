@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Rebuild the fixed SQLite runtime on Trixie and retain its original/modified
+  source; package the original Go module source collection as inert legal data.
+
+
 ## [0.55.0] — source version prepared, not published
 
 This section records the changes assigned to source version 0.55.0. It does not

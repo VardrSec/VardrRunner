@@ -238,3 +238,25 @@ grant text was not located; Android is outside Runner's supported platforms.
 This collection does not establish complete toolchain/base-image source delivery
 or license compatibility. Keep the existing top-level notices and package
 copyright files alongside it.
+
+## SQLite source delivery
+
+The runtime image rebuilds Debian SQLite 3.54.1 source with Trixie's build-only
+Tcl 9.0 dependency. Upstream executable source, the legacy `libsqlite3.so.0`
+SONAME and Debian feature flags are retained. No unstable repository/binary
+package is installed. Only `libsqlite3-0` enters the runtime; its only runtime
+dependency is libc6. Existing application roles and privileges are unchanged.
+
+`/usr/share/doc/libsqlite3-0/vardr-source/` contains original and modified Debian
+source, build metadata, the image recipe, provenance and `SHA256SUMS`. Existing
+package copyright remains installed. The four upstream inputs are hash-pinned
+to Debian's immutable snapshot. This covers SQLite, not every image component.
+A `sqlite-source-delivery` build target exports the same materials separately.
+
+## Original Go dependency sources
+
+The Python package retains `notices/go-module-sources.tar.gz` beside the Dalfox
+notice/source archive. It supplies 17 original Go module source versions with
+checksums and metadata. These are inert source ZIPs, not installed or executed
+code. Cache supersets and dual-licensed material remain explicitly identified;
+this archive is not complete compiler/base-image source or legal acceptance.

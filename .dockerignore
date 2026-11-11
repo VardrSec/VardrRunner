@@ -10,3 +10,5 @@
 !container/libpcap-source.txt
 **/__pycache__/
 **/*.pyc
+
+!container/sqlite-source.txt
