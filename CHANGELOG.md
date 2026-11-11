@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.55.0] — source version prepared, not published
+
+This section records the changes assigned to source version 0.55.0. It does not
+announce a published package, image or release. See
+[`changelog/v0.55.0.md`](changelog/v0.55.0.md) for capabilities and operating limits.
+
 - Ship Dalfox dependency notices, locked source references and the four
   unmodified MPL dependency sources as inert package data; tool binaries stay
   unchanged.
@@ -33,6 +39,9 @@
   secret scanning and make required release SBOM failures visible.
 - Correct documented environment-variable names and clarify platform limits.
 - Separate public user documentation from private planning and validation notes.
+
+- Reconcile CLI, container and limitations documentation with standalone and
+  controlled execution, and route Full and Mapless users to the distribution guides.
 
 ## [0.54.0] — 2026-10-30
 
