@@ -195,6 +195,16 @@ def test_source_helper_refuses_to_replace_an_existing_install(source_build):
     assert (tools / "tools.lock.json").read_bytes() == receipt
 
 
+def test_deprecated_split_openpgp_is_refused_before_execution(source_build):
+    source, tools, probe, name, _ = source_build
+    with (source / "build-info.txt").open("a") as stream:
+        stream.write(f"\tdep\tgolang.org/x/crypto/openpgp\tv0.1.0-deprecated\th1:{'A' * 43}=\n")
+    with pytest.raises(ValueError, match="Deprecated split OpenPGP"):
+        helper["install_source"](source, name)
+    probe.assert_not_called()
+    assert not (tools / "tools.lock.json").exists()
+
+
 @pytest.mark.parametrize("name", ["katana", "dnsx", "naabu", "httpx", "subfinder", "nuclei"])
 def test_stale_crypto_module_is_refused_before_execution(tmp_path, monkeypatch, name):
     source, tools, probe, _, _ = _source_build(tmp_path, monkeypatch, name)

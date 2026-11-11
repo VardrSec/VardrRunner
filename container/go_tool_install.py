@@ -286,6 +286,8 @@ def install_source(source: Path, name: str) -> None:
             modules[fields[1]] = {"version": fields[2], "checksum": fields[3]}
     if name in OPENPGP_TOOLS and not replacement_seen:
         raise ValueError("Required OpenPGP source replacement is missing")
+    if "golang.org/x/crypto/openpgp" in modules:
+        raise ValueError("Deprecated split OpenPGP module is not a remediation")
     entry = toolchain.load_manifest()["tools"][name]
     root = modules.get(build["module"], {})
     version = "(devel)" if name == "gau" else "v" + entry["version"]
