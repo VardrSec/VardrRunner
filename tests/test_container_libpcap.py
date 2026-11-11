@@ -24,6 +24,7 @@ def test_supervisor_runs_all_cases_with_timeout_and_rejects_child_failure(monkey
 
 def test_supervisor_binds_one_library_identity(monkeypatch, capsys):
     scope = runpy.run_path(str(SCRIPT))
+    monkeypatch.setattr(scope["os"], "getuid", lambda: 10001, raising=False)
     monkeypatch.setattr(scope["sys"], "argv", [str(SCRIPT)])
 
     def run(args, **kwargs):
@@ -50,6 +51,7 @@ def test_supervisor_binds_one_library_identity(monkeypatch, capsys):
     result = json.loads(capsys.readouterr().out)
     assert {r["case"] for r in result["cases"]} == set(scope["CASES"])
     assert result["package"] == "libpcap0.8t64 1.10.7-1+vardr1 amd64"
+    assert result["uid"] == 10001
 
 
 def test_workflow_keeps_native_checks_offline_and_bounded():
