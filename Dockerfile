@@ -63,7 +63,7 @@ FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0de
 ENV GODEBUG=http2client=0
 WORKDIR /src
 COPY --from=gate . .
-RUN CGO_ENABLED=0 go build -trimpath -o /out/vardrgate ./cmd/vardrgate \
+RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /out/vardrgate ./cmd/vardrgate \
     && go mod verify \
     && mkdir -p /out/provenance \
     && go version -m /out/vardrgate > /out/provenance/build-info.txt \

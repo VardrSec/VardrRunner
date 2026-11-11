@@ -22,3 +22,9 @@ def test_gate_provenance_is_retained_with_exact_binary_metadata():
     assert "go mod verify" in gate
     assert "/out/provenance/dependency-notices.tar.gz" in gate
     assert "COPY --from=gate-build /out/provenance/ /opt/vardrtools/provenance/vardrgate/" in docker
+
+
+def test_gate_binary_ignores_ambient_vcs_metadata():
+    docker = (ROOT / "Dockerfile").read_text()
+    gate = docker.split("AS gate-build\n", 1)[1].split("\nFROM ", 1)[0]
+    assert "go build -trimpath -buildvcs=false -o /out/vardrgate" in gate
