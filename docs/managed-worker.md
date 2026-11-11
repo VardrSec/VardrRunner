@@ -114,7 +114,7 @@ retries that attempt or refunds its charges. Reaching the batch or finite idle
 limit also exits. Always-running supervision and automatic restarts are not
 implemented or silently enabled by this candidate.
 
-## Persistent v3 candidate
+## Persistent v3
 
 Persistent admission binds the same physical identity plus a separate immutable
 admission hash. Its default `limits` are `max_attempts:null` and
@@ -143,9 +143,9 @@ stopped partial results and control/lease loss cannot use that path. Unknown wor
 still ends the incarnation or remains held; persistent availability adds no
 automatic crash restart.
 
-Pure component tests model late discovery and more than 32 jobs. Actual supported
-Linux and Docker Desktop proofs, the complete failure matrix and retained
-The documented security gates remain required.
+Use the [support limits](limitations.md) and the matching distribution's
+[platform guide](https://github.com/VardrSec/VardrSec/blob/main/docs/platforms.md).
+Selecting persistent admission does not expand those platform or safety boundaries.
 
 ## Failure and recovery
 

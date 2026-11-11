@@ -67,10 +67,12 @@ docker build --target toolkit --build-context gate=/path/to/pinned-gate -t vardr
 ```
 
 The default `core` target remains CLI-only and needs no Gate context. `toolkit`
-compiles Gate and retains all nine managed tools. Five use the existing verified
-archive installer. Katana 1.8.0, DNSx 1.3.1 and Naabu 2.6.1 use Go-checksummed upstream source
-with Go 1.27.3, x/net 0.60.0 and compress 1.18.7; Katana also selects pgx 5.9.2,
-and Naabu selects x/crypto 0.57.0. Naabu enables CGO and uses libpcap-dev only
+compiles Gate and retains all nine managed tools. Dalfox uses the existing
+verified archive installer. Katana, DNSx, Naabu, Gau, HTTPx, Subfinder, ffuf and
+Nuclei use Go-checksummed upstream source with Go 1.27.3. Reviewed overrides
+include x/net 0.62.0 and compress 1.18.7; Katana selects pgx 5.9.2 and Naabu
+selects x/crypto 0.58.0. Per-tool versions and overrides are recorded in the
+Dockerfile and retained build provenance. Naabu enables CGO and uses libpcap-dev only
 in its build stage; the runtime retains its existing libpcap0.8 package. This adds
 no raw-socket privileges; bounded TCP-connect operation remains unprivileged.
 These remediate bundled runtime/dependencies. Native archive pins and installation

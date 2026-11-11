@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Correct toolkit source/archive packaging details and managed-worker support guidance.
+
 - Retain downloaded Go module legal texts and the Go license with each source-built
   tool’s existing hashed provenance, without changing compiled tools.
 
