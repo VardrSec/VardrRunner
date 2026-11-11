@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Pin container Go builders to 1.27.4 and require matching managed-tool build
+  provenance, incorporating the upstream fix for GO-2026-6859. Fresh image
+  vulnerability evidence is still required before release; this does not waive
+  remaining findings or change native archive pins.
+
 ## [0.55.0] — source version prepared, not published
 
 This section records the changes assigned to source version 0.55.0. It does not

@@ -76,7 +76,7 @@ docker build --target toolkit --build-context gate=/path/to/pinned-gate -t vardr
 The default `core` target remains CLI-only and needs no Gate context. `toolkit`
 compiles Gate and retains all nine managed tools. Dalfox uses the existing
 verified archive installer. Katana, DNSx, Naabu, Gau, HTTPx, Subfinder, ffuf and
-Nuclei use Go-checksummed upstream source with Go 1.27.3. Reviewed overrides
+Nuclei use Go-checksummed upstream source with Go 1.27.4. Reviewed overrides
 include x/net 0.62.0 and compress 1.18.7; Katana selects pgx 5.9.2 and Naabu
 selects x/crypto 0.58.0. Per-tool versions and overrides are recorded in the
 Dockerfile and retained build provenance. Naabu enables CGO and uses libpcap-dev only

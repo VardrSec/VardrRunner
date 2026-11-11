@@ -13,6 +13,20 @@ from vardrrunner import toolchain
 helper = runpy.run_path(str(Path(__file__).parents[1] / "container/go_tool_install.py"))
 
 
+def test_container_builders_match_provenance_compiler():
+    root = Path(__file__).parents[1]
+    digest = "08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c"
+    expected = f"golang:{helper['COMPILER'].removeprefix('go')}@sha256:{digest}"
+    for filename in ("Dockerfile", "Dockerfile.worker", "Dockerfile.worker.persistent"):
+        builders = [
+            line.split()[1]
+            for line in (root / filename).read_text().splitlines()
+            if line.startswith("FROM golang:")
+        ]
+        assert builders, filename
+        assert all(builder == expected for builder in builders), filename
+
+
 def _source_build(tmp_path, monkeypatch, name):
     build = helper["BUILDS"][name]
     version = toolchain.load_manifest()["tools"][name]["version"]
@@ -21,7 +35,7 @@ def _source_build(tmp_path, monkeypatch, name):
     binary = b"synthetic source-build fixture"
     (source / name).write_bytes(binary)
     (source / (name + ".sha256")).write_text(hashlib.sha256(binary).hexdigest() + "  binary\n")
-    lines = [f"/out/{name}: go1.27.3"]
+    lines = [f"/out/{name}: go1.27.4"]
     modules = {build["module"]: "v" + version, **build["patches"]}
     for module, module_version in modules.items():
         kind = "mod" if module == build["module"] else "dep"
@@ -117,7 +131,7 @@ def test_unverified_source_artifact_never_executes_or_installs(source_build, mut
         "binary": (name, "synthetic", "corrupted"),
         "version": ("build-info.txt", "(devel)" if name == "gau" else "v" + version, "v0.0.0"),
         "dependency": ("build-info.txt", "v0.62.0", "v0.55.0"),
-        "compiler": ("build-info.txt", "go1.27.3", "go1.26.0"),
+        "compiler": ("build-info.txt", "go1.27.4", "go1.27.3"),
         "checksum": (name + ".sha256", "  binary", "invalid-checksum"),
         "module_hash": ("build-info.txt", "h1:", "invalid:"),
         "replacement": ("build-info.txt", "\tdep\t", "\t=>\t"),

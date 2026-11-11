@@ -75,7 +75,7 @@ BUILDS["nuclei"] = {
         "google.golang.org/grpc": "v1.83.2",
     },
 }
-COMPILER = "go1.27.3"
+COMPILER = "go1.27.4"
 BUILDS["gau"] = {
     "module": "github.com/lc/gau/v2",
     "patches": {
