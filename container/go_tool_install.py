@@ -19,7 +19,7 @@ BUILDS = {
             "github.com/yuin/goldmark": "v1.7.17",
             "github.com/jackc/pgx/v5": "v5.9.2",
             "golang.org/x/net": "v0.62.0",
-            "github.com/klauspost/compress": "v1.18.7",
+            "github.com/klauspost/compress": "v1.20.2",
         },
     },
     "dnsx": {
@@ -27,7 +27,7 @@ BUILDS = {
         "patches": {
             "github.com/yuin/goldmark": "v1.7.17",
             "golang.org/x/net": "v0.62.0",
-            "github.com/klauspost/compress": "v1.18.7",
+            "github.com/klauspost/compress": "v1.20.2",
         },
     },
 }
@@ -37,7 +37,7 @@ BUILDS["naabu"] = {
         "github.com/yuin/goldmark": "v1.7.17",
         "golang.org/x/net": "v0.62.0",
         "golang.org/x/crypto": "v0.58.0",
-        "github.com/klauspost/compress": "v1.18.7",
+        "github.com/klauspost/compress": "v1.20.2",
     },
 }
 BUILDS["httpx"] = {
@@ -45,7 +45,7 @@ BUILDS["httpx"] = {
     "patches": {
         "github.com/yuin/goldmark": "v1.7.17",
         "golang.org/x/net": "v0.62.0",
-        "github.com/klauspost/compress": "v1.18.7",
+        "github.com/klauspost/compress": "v1.20.2",
     },
 }
 BUILDS["subfinder"] = {
@@ -53,7 +53,7 @@ BUILDS["subfinder"] = {
     "patches": {
         "github.com/yuin/goldmark": "v1.7.17",
         "golang.org/x/net": "v0.62.0",
-        "github.com/klauspost/compress": "v1.18.7",
+        "github.com/klauspost/compress": "v1.20.2",
     },
 }
 BUILDS["ffuf"] = {
@@ -75,12 +75,16 @@ BUILDS["nuclei"] = {
         "google.golang.org/grpc": "v1.83.2",
     },
 }
+# Fixed decompressor versions required by the exact toolkit build provenance.
+for _tool in ("katana", "dnsx", "naabu", "httpx", "subfinder", "ffuf", "nuclei"):
+    BUILDS[_tool]["patches"]["github.com/andybalholm/brotli"] = "v1.2.7"
+BUILDS["nuclei"]["patches"]["github.com/klauspost/compress"] = "v1.20.2"
 COMPILER = "go1.27.4"
 BUILDS["gau"] = {
     "module": "github.com/lc/gau/v2",
     "patches": {
         "golang.org/x/net": "v0.62.0",
-        "github.com/klauspost/compress": "v1.18.7",
+        "github.com/klauspost/compress": "v1.20.2",
         "github.com/sirupsen/logrus": "v1.9.3",
         "github.com/valyala/fasthttp": "v1.34.0",
     },

@@ -236,3 +236,20 @@ def test_nuclei_rejects_missing_or_unreviewed_dependencies(tmp_path, monkeypatch
     probe.assert_not_called()
     assert not (tools / name).exists()
     assert not (tools / "tools.lock.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("module", "old_version"),
+    [("github.com/andybalholm/brotli", "v1.2.0"), ("github.com/klauspost/compress", "v1.18.7")],
+)
+def test_vulnerable_decompressor_provenance_is_rejected(source_build, module, old_version):
+    source, tools, probe, name, _ = source_build
+    expected = helper["BUILDS"][name]["patches"].get(module)
+    if expected is None:
+        pytest.skip("This tool does not require this dependency override")
+    info = source / "build-info.txt"
+    info.write_text(info.read_text().replace(f"{module}\t{expected}", f"{module}\t{old_version}"))
+    with pytest.raises(ValueError):
+        helper["install_source"](source, name)
+    probe.assert_not_called()
+    assert not (tools / "tools.lock.json").exists()
