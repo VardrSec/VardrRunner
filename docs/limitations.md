@@ -1,5 +1,13 @@
 # Execution and support limits
 
+## Execution modes
+
+Legacy manual `jobs run` and direct commands are not equivalent to controlled
+execution: Map's scope/testing-window warnings are advisory in that manual path,
+while stop-work refusal and Runner's local restrictions still apply. Controlled
+and managed jobs must satisfy their signed plan and execution limits. Review the
+selected workflow rather than assuming every command enforces the same boundary.
+
 Normal startup is inert. Explicitly enabled managed availability does not grant
 job authority: each job must independently satisfy its contract, local credential
 grants, target/duration/concurrency limits and cancellation controls.

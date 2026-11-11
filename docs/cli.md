@@ -8,10 +8,14 @@ installed qualification remain separate from source implementation.
 Windows database/ancestor replacement pins and canonical WAL reads are implemented;
 POSIX pathname replacement and SQLite snapshot non-mutation remain open safety gates.
 Read-only SQLite access is not a strict filesystem non-mutation guarantee.
-These limits leave the required Full/Mapless, Docker and cross-platform acceptance
-open. Earlier test evidence applies only to its recorded source revision.
+Use the distribution's [Full installation](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md)
+or [Mapless walkthrough](https://github.com/VardrSec/VardrSec/blob/main/docs/mapless.md)
+for the supported pinned Compose paths. Their installed qualification and remaining
+limits are separate from these native command boundaries; earlier test evidence
+applies only to its recorded source revision.
 
-The separately prepared persistent-v3 worker remains inactive. Its original-key
+The separately prepared persistent-v3 worker is inactive by default and requires
+explicit distribution enrollment and enablement. Its original-key
 observation and metadata reconciliation preserve existing audit commands and
 never recreate execution authority or replay an uncertain request. Finite v1/v2
 receipts retain their original meaning; they do not prove persistent availability.
@@ -539,7 +543,9 @@ VardrMap **before** paging, so they cover the whole inventory rather than one pa
 VardrMap v0.39.0 or newer; against an older backend the reads fail with a clear message instead of
 reporting a first-page sample as the total. Large recon or
 asset tables never flood the agent. A queued job that falls outside scope still returns
-warnings and still runs — staying in scope is the operator's call, exactly as elsewhere.
+warnings in the legacy manual workflow; those warnings do not enforce scope.
+Controlled and managed execution additionally require their signed target and
+execution restrictions. A pending AI queue proposal is not approval to execute.
 
 Requires a configured key (as for any authenticated command). The command exits with an
 install hint if the `mcp` extra is missing.
@@ -602,8 +608,10 @@ These create/show/list commands record metadata only. They do not configure scop
 approve a contract, select an active engagement, run a tool or enable a worker.
 Existing connected commands retain their meaning and still require Map as
 documented. Workspace state shares the existing local journal; `audit` continues
-to inspect/export run evidence. Full Mapless execution and portable workspace
-export are not delivered by this metadata increment.
+to inspect/export run evidence. Creating metadata alone grants no execution
+permission: use the separate authorization/execution commands below, or the
+distribution Mapless walkthrough for its container custody and transfer controls.
+Run evidence export is not a complete workspace backup.
 
 ### Local Recon-to-Gate drafts
 
@@ -640,7 +648,7 @@ vardrrunner workspace gate <workspace-id> --approval approval.json --contract co
   --output NEW_PRIVATE_DIRECTORY
 ```
 
-This separate consumer requires native Windows, the authorization runtime extra,
+Direct native use requires Windows and the authorization runtime extra, plus
 existing operator-selected public standalone trust, a signed human approval and
 single-use contract bound to this workspace and the actual Runner identity. Use
 the existing explicit file-based authorization workflow; this command creates no
@@ -656,10 +664,13 @@ export through existing `audit` commands. Output directories must be new; partia
 files, uncertain PIDs and spent consumption remain for explicit reconciliation,
 never automatic replay. Hashes establish recorded integrity, not host attestation.
 
-Linux/Docker execution is refused; no uncontrolled fallback or worker is enabled.
-Other tools, general recon pipelines, issuer enrollment and Full/Mapless installers
-are not delivered by this increment. See [support limits](limitations.md)
-for reference-trust and verification limits. Existing connected commands are unchanged.
+Ordinary Linux/Docker invocation without the live native lifecycle-owner context
+is refused. Use the distribution's separate `runner --controlled` adapter for its
+documented container path, rather than invoking this command as a substitute. It neither
+provisions an issuer nor runs general recon pipelines. Use the authorization
+commands below for issuance and the distribution walkthrough for Full/Mapless
+installation. See [support limits](limitations.md) for reference-trust and
+verification limits. Existing connected commands are unchanged.
 
 ### Provision, authorize, execute and export
 
@@ -689,7 +700,7 @@ reviewed case, shows the exact HTTP scope and credential reference names, and
 requires a terminal operator to type `APPROVE`. It approves expiring reference
 grants for every contacted origin, without reading their secret values, and
 issues one strict execution. `--execution` defaults to the existing bounded Gate
-options; the approval/reference lifetime is 1–86400 seconds (default900).
+options; the approval/reference lifetime is 1–86400 seconds (default 900).
 Reapproval changes reference-grant identity, so do not reapprove an in-flight
 attempt. A stopped/revoked local authority is never silently reset.
 
@@ -706,7 +717,9 @@ control, expiring grants and journal. Optional `--export` calls the same
 refused export does not undo execution or make the permission reusable. Use
 `audit list --engagement <workspace-id>` and `audit show <run-id>` to recover the
 recorded outcome. Unsupported process-control platforms still refuse; this CLI
-adds no Linux process-group fallback, automatic worker or recon executor.
+adds no Linux process-group fallback or automatic worker. An explicitly issued
+`--profile recon` bundle selects the separate [finite Recon](finite-recon.md)
+consumer; it does not authorize general recon pipelines.
 
 ---
 

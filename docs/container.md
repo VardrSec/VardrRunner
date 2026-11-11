@@ -1,8 +1,15 @@
 # Container packaging (development)
 
-The initial VardrSec Compose distribution uses a Linux Runner container. Native
+The VardrSec Compose distribution uses a Linux Runner container. Native
 installation remains supported, especially for host VPNs, OS keychains and tools
 requiring host networking. This source build is not a published distribution image.
+
+For a complete installation, follow the distribution's
+[Full guide](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md)
+or [Mapless guide](https://github.com/VardrSec/VardrSec/blob/main/docs/mapless.md).
+Those paths select compatible component pins, retain installation state and handle
+trust or standalone issuer custody. The component-only builds below are for
+development; they are not an alternate installation or update procedure.
 
 Build from this repository:
 
@@ -73,7 +80,9 @@ Nuclei use Go-checksummed upstream source with Go 1.27.3. Reviewed overrides
 include x/net 0.62.0 and compress 1.18.7; Katana selects pgx 5.9.2 and Naabu
 selects x/crypto 0.58.0. Per-tool versions and overrides are recorded in the
 Dockerfile and retained build provenance. Naabu enables CGO and uses libpcap-dev only
-in its build stage; the runtime retains its existing libpcap0.8 package. This adds
+in its build stage. The toolkit runtime installs the locally rebuilt libpcap
+1.10.7 Debian package and retains its source-delivery files under
+`/usr/share/doc/libpcap0.8t64/vardr-source/`. This adds
 no raw-socket privileges; bounded TCP-connect operation remains unprivileged.
 These remediate bundled runtime/dependencies. Native archive pins and installation
 are unchanged.
