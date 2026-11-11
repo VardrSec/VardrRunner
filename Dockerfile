@@ -139,7 +139,7 @@ FROM base AS gau-patch
 USER root
 ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 COPY --from=gau-source /out/ /build/
-COPY container/go_tool_install.py /build/go_tool_install.py
+COPY container/go_tool_install.py container/nuclei_openpgp.py /build/
 RUN python /build/go_tool_install.py --patch-gau
 
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS gau-build
@@ -199,15 +199,31 @@ RUN cd /go/pkg/mod \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
+# A bounded local backport, pinned to the original module ZIP and exact patch.
+FROM base AS nuclei-openpgp-source
+USER root
+WORKDIR /build
+ADD --checksum=sha256:34ccb01d56786a8f7eb876e82f33dc79034c9bd2ce863e182cae6544861a2a3d https://proxy.golang.org/github.com/google/go-github/v30/@v/v30.1.0.zip /build/upstream.zip
+COPY container/nuclei_openpgp.py /build/
+COPY container/nuclei-openpgp/ /build/changes/
+RUN --network=none python /build/nuclei_openpgp.py /build/upstream.zip /build/changes /build/source /out
+
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS nuclei-build
 WORKDIR /src
+COPY --from=nuclei-openpgp-source /build/source/ /src/go-github-v30-patched/
+COPY --from=nuclei-openpgp-source /out/ /out/
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-nuclei-build     && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/crypto@v0.58.0 golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
+RUN go mod init vardrrunner-nuclei-build \
+    && go mod edit -replace github.com/google/go-github/v30=/src/go-github-v30-patched \
+    && go get github.com/ProtonMail/go-crypto@v1.5.2 \
+    && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/crypto@v0.58.0 golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei     && go version -m /out/nuclei > /out/build-info.txt     && sha256sum /out/nuclei > /out/nuclei.sha256     && cp go.mod go.sum /out/
 
 # Upstream corrected this dependency's license to MIT without changing code.
 RUN go get github.com/projectdiscovery/ldapserver@v1.0.2-0.20240723071106-7cb3f5bd9b7d \
     && go mod verify \
+    && test "$(go list -m -f '{{.Version}}' github.com/ProtonMail/go-crypto)" = v1.5.2 \
+    && go test -json github.com/google/go-github/v30/github -run 'TestGitService_|TestCryptoCompatibilityAudit|TestExpiredLegacySigningKeyRejected' -count=1 > /out/openpgp-tests.json \
     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei \
     && go version -m /out/nuclei > /out/build-info.txt \
     && sha256sum /out/nuclei > /out/nuclei.sha256 \
@@ -246,10 +262,10 @@ COPY --from=subfinder-build /out/ /tmp/subfinder-build/
 COPY --from=ffuf-build /out/ /tmp/ffuf-build/
 COPY --from=nuclei-build /out/ /tmp/nuclei-build/
 COPY --from=gau-build /out/ /tmp/gau-build/
-COPY container/go_tool_install.py /tmp/go_tool_install.py
+COPY container/go_tool_install.py container/nuclei_openpgp.py /tmp/
 RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu", "gau", "httpx", "subfinder", "ffuf", "nuclei")]' \
     && python /tmp/go_tool_install.py \
-    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/nuclei-build /tmp/go_tool_install.py \
+    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/nuclei-build /tmp/go_tool_install.py /tmp/nuclei_openpgp.py \
     && chmod -R a+rX /opt/vardrtools \
     && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
     && ln -s /home/runner/.vardrmap /home/runner/.config
