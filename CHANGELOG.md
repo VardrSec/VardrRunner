@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Rebuild libpcap 1.10.7 for the toolkit runtime to fix unsafe BPF memory access
+  and unbounded jumps, retaining its corresponding source and package notices.
+
 - Select the upstream license-corrected LDAP dependency in the Nuclei source build
   and require its reviewed version in build provenance.
 

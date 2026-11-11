@@ -186,3 +186,24 @@ license correction changes only `LICENSE` to MIT. The existing provenance guard
 requires that module version; notice archives can also contain unused older cache
 entries, so use `build-info.txt` to identify the linked revision. This does not
 change the native Nuclei archive or clear other transitive obligations.
+
+## Toolkit libpcap source
+
+The toolkit retains Naabu and upgrades its dynamically linked libpcap runtime
+to a source rebuild of Debian 1.10.7-1 on the existing Trixie ABI. No unstable
+repository or binary packages are added. Build-only packages stay in a discarded
+stage; the CLI-only core target does not install libpcap. Runtime UID,
+capabilities, network configuration and tool binaries are unchanged.
+
+`/usr/share/doc/libpcap0.8t64/vardr-source/` retains original and modified Debian
+source, recipe, build metadata, provenance and `SHA256SUMS`. Existing package
+copyright files remain installed. To export just this source from the Runner
+checkout, choose a new output directory outside the checkout:
+
+```text
+docker build --target libpcap-source-delivery --output type=local,dest=../libpcap-source .
+```
+
+All four source inputs are hash-pinned. The retained upstream signature file is
+not an assertion that signer trust was verified. This source delivery covers
+libpcap; it does not clear all remaining runtime vulnerabilities or licenses.
