@@ -180,3 +180,9 @@ cache; it may include modules beyond those linked into the binary. It is retaine
 as data and is never extracted or executed by Runner. Existing regular-file and
 size limits apply. This collection does not establish license compatibility,
 complete dependency notice coverage or corresponding-source delivery.
+
+The Nuclei source build selects ldapserver revision `7cb3f5bd9b7d`, whose upstream
+license correction changes only `LICENSE` to MIT. The existing provenance guard
+requires that module version; notice archives can also contain unused older cache
+entries, so use `build-info.txt` to identify the linked revision. This does not
+change the native Nuclei archive or clear other transitive obligations.

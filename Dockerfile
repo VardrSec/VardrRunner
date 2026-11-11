@@ -174,6 +174,14 @@ ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum
 RUN go mod init vardrrunner-nuclei-build     && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/crypto@v0.58.0 golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei     && go version -m /out/nuclei > /out/build-info.txt     && sha256sum /out/nuclei > /out/nuclei.sha256     && cp go.mod go.sum /out/
 
+# Upstream corrected this dependency's license to MIT without changing code.
+RUN go get github.com/projectdiscovery/ldapserver@v1.0.2-0.20240723071106-7cb3f5bd9b7d \
+    && go mod verify \
+    && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei \
+    && go version -m /out/nuclei > /out/build-info.txt \
+    && sha256sum /out/nuclei > /out/nuclei.sha256 \
+    && cp go.mod go.sum /out/
+
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \

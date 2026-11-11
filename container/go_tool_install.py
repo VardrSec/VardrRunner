@@ -63,6 +63,7 @@ BUILDS["ffuf"] = {
 BUILDS["nuclei"] = {
     "module": "github.com/projectdiscovery/nuclei/v3",
     "patches": {
+        "github.com/projectdiscovery/ldapserver": "v1.0.2-0.20240723071106-7cb3f5bd9b7d",
         "github.com/go-jose/go-jose/v4": "v4.1.6",
         "github.com/yuin/goldmark": "v1.7.17",
         "github.com/getkin/kin-openapi": "v0.149.0",

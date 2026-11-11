@@ -197,17 +197,24 @@ def test_gau_builder_applies_only_reviewed_source_substitutions(gau_build, tmp_p
     probe.assert_not_called()
 
 
-@pytest.mark.parametrize("version", [None, "v4.1.4", "v4.1.5"])
-def test_nuclei_rejects_missing_or_vulnerable_go_jose(tmp_path, monkeypatch, version):
+@pytest.mark.parametrize(
+    ("module", "version"),
+    [("github.com/go-jose/go-jose/v4", value) for value in (None, "v4.1.4", "v4.1.5")]
+    + [
+        ("github.com/projectdiscovery/ldapserver", value)
+        for value in (None, "v1.0.2-0.20240219154113-dcc758ebc0cb")
+    ],
+)
+def test_nuclei_rejects_missing_or_unreviewed_dependencies(tmp_path, monkeypatch, module, version):
     source, tools, probe, name, _ = _source_build(tmp_path, monkeypatch, "nuclei")
     path = source / "build-info.txt"
-    module = "github.com/go-jose/go-jose/v4"
+    reviewed = helper["BUILDS"]["nuclei"]["patches"][module]
     lines = []
     for line in path.read_text().splitlines():
         if module in line:
             if version is None:
                 continue
-            line = line.replace("v4.1.6", version)
+            line = line.replace(reviewed, version)
         lines.append(line)
     path.write_text("\n".join(lines) + "\n")
     with pytest.raises(ValueError, match="Required source dependency patch is missing"):

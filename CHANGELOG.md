@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Select the upstream license-corrected LDAP dependency in the Nuclei source build
+  and require its reviewed version in build provenance.
+
 - Correct toolkit source/archive packaging details and managed-worker support guidance.
 
 - Retain downloaded Go module legal texts and the Go license with each source-built
