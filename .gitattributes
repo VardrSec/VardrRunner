@@ -1,1 +1,3 @@
 container/infocmp-bound.patch -text
+container/nuclei-openpgp/backport.patch -text
+container/nuclei-openpgp/changes.json -text

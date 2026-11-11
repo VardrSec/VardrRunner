@@ -15,6 +15,13 @@ from vardrrunner import toolchain
 helper = runpy.run_path(str(Path(__file__).parents[1] / "container/go_tool_install.py"))
 
 
+def test_reviewed_openpgp_inputs_keep_exact_bytes():
+    root = Path(__file__).parents[1] / "container/nuclei-openpgp"
+    pgp = helper["nuclei_openpgp"]
+    assert pgp.digest(root / "backport.patch") == pgp.PATCH_SHA256
+    assert pgp.digest(root / "changes.json") == pgp.CHANGES_SHA256
+
+
 def test_container_builders_match_provenance_compiler():
     root = Path(__file__).parents[1]
     digest = "08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c"

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Preserve exact reviewed OpenPGP backport bytes on Windows checkouts; keep all
+  source-package builders on the pinned Go 1.27.4 image.
+
 - Verify retained OS backport source checksums in the actual toolkit image,
   alongside the combined crypto and OS security build.
 
