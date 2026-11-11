@@ -45,7 +45,6 @@ BUILDS["naabu"] = {
     "patches": {
         "github.com/yuin/goldmark": "v1.7.17",
         "golang.org/x/net": "v0.62.0",
-        "golang.org/x/crypto": "v0.58.0",
         "github.com/klauspost/compress": "v1.20.2",
     },
 }
@@ -78,7 +77,6 @@ BUILDS["nuclei"] = {
         "github.com/yuin/goldmark": "v1.7.17",
         "github.com/getkin/kin-openapi": "v0.149.0",
         "github.com/go-git/go-git/v5": "v5.19.2",
-        "golang.org/x/crypto": "v0.58.0",
         "golang.org/x/mod": "v0.41.0",
         "golang.org/x/net": "v0.62.0",
         "golang.org/x/text": "v0.43.0",
@@ -88,6 +86,8 @@ BUILDS["nuclei"] = {
 # Fixed decompressor versions required by the exact toolkit build provenance.
 for _tool in ("katana", "dnsx", "naabu", "httpx", "subfinder", "ffuf", "nuclei"):
     BUILDS[_tool]["patches"]["github.com/andybalholm/brotli"] = "v1.2.7"
+    if _tool != "ffuf":
+        BUILDS[_tool]["patches"]["golang.org/x/crypto"] = "v0.58.1-0.20261009181718-2f1f834330b2"
 BUILDS["nuclei"]["patches"]["github.com/klauspost/compress"] = "v1.20.2"
 COMPILER = "go1.27.4"
 BUILDS["gau"] = {

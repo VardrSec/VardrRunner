@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Select the advisory's fixed x/crypto revision in the six affected tool builds
+  and reject stale module provenance before executing or installing a binary.
+
 - Preserve exact reviewed OpenPGP backport bytes on Windows checkouts; keep all
   source-package builders on the pinned Go 1.27.4 image.
 

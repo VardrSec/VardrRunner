@@ -195,6 +195,18 @@ def test_source_helper_refuses_to_replace_an_existing_install(source_build):
     assert (tools / "tools.lock.json").read_bytes() == receipt
 
 
+@pytest.mark.parametrize("name", ["katana", "dnsx", "naabu", "httpx", "subfinder", "nuclei"])
+def test_stale_crypto_module_is_refused_before_execution(tmp_path, monkeypatch, name):
+    source, tools, probe, _, _ = _source_build(tmp_path, monkeypatch, name)
+    info = source / "build-info.txt"
+    fixed = helper["BUILDS"][name]["patches"]["golang.org/x/crypto"]
+    info.write_text(info.read_text().replace(fixed, "v0.58.0"))
+    with pytest.raises(ValueError):
+        helper["install_source"](source, name)
+    probe.assert_not_called()
+    assert not (tools / name).exists()
+
+
 @pytest.mark.parametrize(
     "filename",
     [

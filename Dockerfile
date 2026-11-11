@@ -168,7 +168,7 @@ WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 RUN go mod init vardrrunner-katana-build \
     && go get github.com/projectdiscovery/katana/cmd/katana@v1.8.0 \
-        github.com/jackc/pgx/v5@v5.9.2 golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
+        github.com/jackc/pgx/v5@v5.9.2 golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/katana github.com/projectdiscovery/katana/cmd/katana \
     && go version -m /out/katana > /out/build-info.txt \
@@ -187,7 +187,7 @@ WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 RUN go mod init vardrrunner-dnsx-build \
     && go get github.com/projectdiscovery/dnsx/cmd/dnsx@v1.3.1 \
-        golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
+        golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/dnsx github.com/projectdiscovery/dnsx/cmd/dnsx \
     && go version -m /out/dnsx > /out/build-info.txt \
@@ -208,7 +208,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN go mod init vardrrunner-naabu-build \
     && go get github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.6.1 \
-        golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 golang.org/x/crypto@v0.58.0 github.com/klauspost/compress@v1.20.2 \
+        golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/naabu github.com/projectdiscovery/naabu/v2/cmd/naabu \
     && go version -m /out/naabu > /out/build-info.txt \
@@ -261,7 +261,7 @@ RUN cd /go/pkg/mod \
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS httpx-build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-httpx-build     && go get github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0         golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2     github.com/yuin/goldmark@v1.7.17 \
+RUN go mod init vardrrunner-httpx-build     && go get github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0         golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/httpx github.com/projectdiscovery/httpx/cmd/httpx     && go version -m /out/httpx > /out/build-info.txt     && sha256sum /out/httpx > /out/httpx.sha256     && cp go.mod go.sum /out/
 
 # Retain legal texts from this builder's exact downloaded module cache.
@@ -274,7 +274,7 @@ RUN cd /go/pkg/mod \
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS subfinder-build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-subfinder-build     && go get github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.17.0         golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2     github.com/yuin/goldmark@v1.7.17 \
+RUN go mod init vardrrunner-subfinder-build     && go get github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.17.0         golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/subfinder github.com/projectdiscovery/subfinder/v2/cmd/subfinder     && go version -m /out/subfinder > /out/build-info.txt     && sha256sum /out/subfinder > /out/subfinder.sha256     && cp go.mod go.sum /out/
 
 # Retain legal texts from this builder's exact downloaded module cache.
@@ -313,7 +313,7 @@ ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum
 RUN go mod init vardrrunner-nuclei-build \
     && go mod edit -replace github.com/google/go-github/v30=/src/go-github-v30-patched \
     && go get github.com/ProtonMail/go-crypto@v1.5.2 \
-    && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/crypto@v0.58.0 golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
+    && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei     && go version -m /out/nuclei > /out/build-info.txt     && sha256sum /out/nuclei > /out/nuclei.sha256     && cp go.mod go.sum /out/
 
 # Upstream corrected this dependency's license to MIT without changing code.
