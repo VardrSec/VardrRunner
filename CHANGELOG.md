@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Update source-built toolkit decompression dependencies to Brotli 1.2.7 and
+  compress 1.20.2 for GO-2026-6888 and GO-2026-6865; require their exact versions
+  in retained provenance. Nuclei's reachable legacy OpenPGP dependency remains
+  a release-review blocker, not an exception or a claimed fixed-version bump.
+
+- Pin container Go builders to 1.27.4 and require matching managed-tool build
+  provenance, incorporating the upstream fix for GO-2026-6859. Fresh image
+  vulnerability evidence is still required before release; this does not waive
+  remaining findings or change native archive pins.
+
 ## [0.55.0] — source version prepared, not published
 
 This section records the changes assigned to source version 0.55.0. It does not

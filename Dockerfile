@@ -27,7 +27,7 @@ ENTRYPOINT ["vardrrunner"]
 CMD ["--help"]
 
 # Rebuild the upstream security release on the same Trixie ABI; no sid packages.
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS libpcap-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS libpcap-build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential bison flex debhelper libbluetooth-dev libdbus-1-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -59,19 +59,29 @@ COPY --from=libpcap-build /out/source/ /
 
 # Optional tool-enabled target; the default final target remains CLI-only.
 # Supply the pinned Gate source as BuildKit's named `gate` context.
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS gate-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS gate-build
 ENV GODEBUG=http2client=0
 WORKDIR /src
 COPY --from=gate . .
-RUN CGO_ENABLED=0 go build -trimpath -o /out/vardrgate ./cmd/vardrgate
+RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /out/vardrgate ./cmd/vardrgate \
+    && go mod verify \
+    && mkdir -p /out/provenance \
+    && go version -m /out/vardrgate > /out/provenance/build-info.txt \
+    && cp go.mod go.sum LICENSE /out/provenance/ \
+    && cp /usr/local/go/LICENSE /out/provenance/GO-LICENSE
+# Preserve the exact builder's legal payloads; downstream audit matches only
+# linked module identities, never counts unrelated cache entries as coverage.
+RUN cd /go/pkg/mod \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/gate-module-notices \
+    && tar --null -T /tmp/gate-module-notices -czf /out/provenance/dependency-notices.tar.gz
 
 # Upstream module/checksum HTTP/2 streams repeatedly failed; keep verified HTTPS over HTTP/1.1.
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS katana-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS katana-build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 RUN go mod init vardrrunner-katana-build \
     && go get github.com/projectdiscovery/katana/cmd/katana@v1.8.0 \
-        github.com/jackc/pgx/v5@v5.9.2 golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.18.7 \
+        github.com/jackc/pgx/v5@v5.9.2 golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/katana github.com/projectdiscovery/katana/cmd/katana \
     && go version -m /out/katana > /out/build-info.txt \
@@ -81,16 +91,16 @@ RUN go mod init vardrrunner-katana-build \
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS dnsx-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS dnsx-build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 RUN go mod init vardrrunner-dnsx-build \
     && go get github.com/projectdiscovery/dnsx/cmd/dnsx@v1.3.1 \
-        golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.18.7 \
+        golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/dnsx github.com/projectdiscovery/dnsx/cmd/dnsx \
     && go version -m /out/dnsx > /out/build-info.txt \
@@ -100,18 +110,18 @@ RUN go mod init vardrrunner-dnsx-build \
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS naabu-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS naabu-build
 WORKDIR /src
 ENV CGO_ENABLED=1 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 RUN apt-get update && apt-get install -y --no-install-recommends libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN go mod init vardrrunner-naabu-build \
     && go get github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.6.1 \
-        golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.0 github.com/klauspost/compress@v1.18.7 \
+        golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 golang.org/x/crypto@v0.58.0 github.com/klauspost/compress@v1.20.2 \
     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/naabu github.com/projectdiscovery/naabu/v2/cmd/naabu \
     && go version -m /out/naabu > /out/build-info.txt \
@@ -121,11 +131,11 @@ RUN go mod init vardrrunner-naabu-build \
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS gau-source
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS gau-source
 WORKDIR /src
 ENV GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 RUN go mod init vardrrunner-gau-source \
@@ -139,15 +149,15 @@ FROM base AS gau-patch
 USER root
 ENV VARDRRUNNER_TOOLS_DIR=/opt/vardrtools
 COPY --from=gau-source /out/ /build/
-COPY container/go_tool_install.py /build/go_tool_install.py
+COPY container/go_tool_install.py container/nuclei_openpgp.py /build/
 RUN python /build/go_tool_install.py --patch-gau
 
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS gau-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS gau-build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 COPY --from=gau-patch /build/source/ ./
 COPY --from=gau-patch /build/provenance/ /out/
-RUN go get golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.18.7 \
+RUN go get golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.20.2 \
         github.com/sirupsen/logrus@v1.9.3 github.com/valyala/fasthttp@v1.34.0 \
     && go mod verify && go build -trimpath -o /out/gau ./cmd/gau \
     && go version -m /out/gau > /out/build-info.txt \
@@ -157,57 +167,73 @@ RUN go get golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.18.7 \
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS httpx-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS httpx-build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-httpx-build     && go get github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0         golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.18.7     github.com/yuin/goldmark@v1.7.17 \
+RUN go mod init vardrrunner-httpx-build     && go get github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0         golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/httpx github.com/projectdiscovery/httpx/cmd/httpx     && go version -m /out/httpx > /out/build-info.txt     && sha256sum /out/httpx > /out/httpx.sha256     && cp go.mod go.sum /out/
 
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS subfinder-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS subfinder-build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-subfinder-build     && go get github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.17.0         golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.18.7     github.com/yuin/goldmark@v1.7.17 \
+RUN go mod init vardrrunner-subfinder-build     && go get github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.17.0         golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/subfinder github.com/projectdiscovery/subfinder/v2/cmd/subfinder     && go version -m /out/subfinder > /out/build-info.txt     && sha256sum /out/subfinder > /out/subfinder.sha256     && cp go.mod go.sum /out/
 
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS ffuf-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS ffuf-build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-ffuf-build     && go get github.com/ffuf/ffuf/v2@v2.3.0         golang.org/x/net@v0.62.0     && go build -trimpath -ldflags "-X github.com/ffuf/ffuf/v2/pkg/ffuf.VERSION=2.3.0 -X github.com/ffuf/ffuf/v2/pkg/ffuf.VERSION_APPENDIX=" -o /out/ffuf github.com/ffuf/ffuf/v2     && go version -m /out/ffuf > /out/build-info.txt     && sha256sum /out/ffuf > /out/ffuf.sha256     && cp go.mod go.sum /out/
+RUN go mod init vardrrunner-ffuf-build     && go get github.com/ffuf/ffuf/v2@v2.3.0         golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7     && go build -trimpath -ldflags "-X github.com/ffuf/ffuf/v2/pkg/ffuf.VERSION=2.3.0 -X github.com/ffuf/ffuf/v2/pkg/ffuf.VERSION_APPENDIX=" -o /out/ffuf github.com/ffuf/ffuf/v2     && go version -m /out/ffuf > /out/build-info.txt     && sha256sum /out/ffuf > /out/ffuf.sha256     && cp go.mod go.sum /out/
 
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS nuclei-build
+# A bounded local backport, pinned to the original module ZIP and exact patch.
+FROM base AS nuclei-openpgp-source
+USER root
+WORKDIR /build
+ADD --checksum=sha256:34ccb01d56786a8f7eb876e82f33dc79034c9bd2ce863e182cae6544861a2a3d https://proxy.golang.org/github.com/google/go-github/v30/@v/v30.1.0.zip /build/upstream.zip
+COPY container/nuclei_openpgp.py /build/
+COPY container/nuclei-openpgp/ /build/changes/
+RUN --network=none python /build/nuclei_openpgp.py /build/upstream.zip /build/changes /build/source /out
+
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS nuclei-build
 WORKDIR /src
+COPY --from=nuclei-openpgp-source /build/source/ /src/go-github-v30-patched/
+COPY --from=nuclei-openpgp-source /out/ /out/
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-nuclei-build     && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/crypto@v0.58.0 golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
+RUN go mod init vardrrunner-nuclei-build \
+    && go mod edit -replace github.com/google/go-github/v30=/src/go-github-v30-patched \
+    && go get github.com/ProtonMail/go-crypto@v1.5.2 \
+    && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/crypto@v0.58.0 golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei     && go version -m /out/nuclei > /out/build-info.txt     && sha256sum /out/nuclei > /out/nuclei.sha256     && cp go.mod go.sum /out/
 
 # Upstream corrected this dependency's license to MIT without changing code.
 RUN go get github.com/projectdiscovery/ldapserver@v1.0.2-0.20240723071106-7cb3f5bd9b7d \
     && go mod verify \
+    && test "$(go list -m -f '{{.Version}}' github.com/ProtonMail/go-crypto)" = v1.5.2 \
+    && go test -json github.com/google/go-github/v30/github -run 'TestGitService_|TestCryptoCompatibilityAudit|TestExpiredLegacySigningKeyRejected' -count=1 > /out/openpgp-tests.json \
     && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei \
     && go version -m /out/nuclei > /out/build-info.txt \
     && sha256sum /out/nuclei > /out/nuclei.sha256 \
@@ -216,12 +242,12 @@ RUN go get github.com/projectdiscovery/ldapserver@v1.0.2-0.20240723071106-7cb3f5
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
 RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
+    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
 # Ordinary CLI stays UID10001; only the explicit local-worker overlay invokes this binary.
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS local-owner-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS local-owner-build
 COPY container/worker_owner.c /src/worker_owner.c
 RUN gcc -std=c11 -O2 -Wall -Wextra -Werror -static -fstack-protector-strong \
     -D_FORTIFY_SOURCE=2 -o /vardr-worker-owner /src/worker_owner.c
@@ -246,10 +272,10 @@ COPY --from=subfinder-build /out/ /tmp/subfinder-build/
 COPY --from=ffuf-build /out/ /tmp/ffuf-build/
 COPY --from=nuclei-build /out/ /tmp/nuclei-build/
 COPY --from=gau-build /out/ /tmp/gau-build/
-COPY container/go_tool_install.py /tmp/go_tool_install.py
+COPY container/go_tool_install.py container/nuclei_openpgp.py /tmp/
 RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu", "gau", "httpx", "subfinder", "ffuf", "nuclei")]' \
     && python /tmp/go_tool_install.py \
-    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/nuclei-build /tmp/go_tool_install.py \
+    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/nuclei-build /tmp/go_tool_install.py /tmp/nuclei_openpgp.py \
     && chmod -R a+rX /opt/vardrtools \
     && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
     && ln -s /home/runner/.vardrmap /home/runner/.config
@@ -258,6 +284,7 @@ ENV XDG_CONFIG_HOME=/home/runner/.vardrmap \
     XDG_CACHE_HOME=/home/runner/.vardrmap/tool-cache
 COPY --from=gate-build /out/vardrgate /usr/local/bin/vardrgate
 COPY --from=gate-build /src/LICENSE /usr/share/licenses/vardrgate/LICENSE
+COPY --from=gate-build /out/provenance/ /opt/vardrtools/provenance/vardrgate/
 COPY --from=local-owner-build /vardr-worker-owner /usr/local/bin/vardr-worker-owner
 RUN chmod 0555 /usr/local/bin/vardr-worker-owner \
     && mkdir -m 0700 /run/vardr-worker-ready \
