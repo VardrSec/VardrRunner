@@ -69,3 +69,19 @@ was changed to conceal these failures. The compatibility setting is not enabled
 in the image or required by the bounded signing tests. These findings limit the
 qualification to the reported signing tests and successful exact-consumer build;
 they are not a blanket SDK compatibility claim.
+
+### Reviewed historical secret-scan fixture
+
+The full all-refs Gitleaks scan identified one public upstream `testGPGKey`
+fixture copied into the historical source manifest on the preserved candidate
+branch. The 3,525-byte armored block is byte-identical to
+[upstream v30.1.0](https://github.com/google/go-github/blob/371b0007be89061b4cf899dc2083dd08e3912c14/github/git_commits_test.go),
+SHA256 `83a86feece381d0bcb74be3c36914510e03188b81a34c3559fc56e65e1941cdd`.
+This public test key expired in 2021; it is not an operational credential and
+must never be used as one. The bounded compatibility tests require its rejection.
+
+Only the exact historical commit/file/rule/line fingerprint is recorded in
+`.gitleaksignore`. Full all-refs history scanning remains unchanged. No path,
+rule, wildcard, future finding, or different key is exempted. This candidate
+reconstructs the unchanged fixture from the checksum-pinned upstream archive
+rather than embedding its bytes in the source manifest.

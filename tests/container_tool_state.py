@@ -16,7 +16,11 @@ assert xdg_config == root and xdg_cache == root / "tool-cache"
 assert (Path.home() / ".config").resolve() == root.resolve()
 assert not os.access(config.tools_dir(), os.W_OK)
 for name in ("katana", "dnsx", "naabu", "httpx", "subfinder", "ffuf", "nuclei"):
-    assert toolchain.status(name, name).detail == "verified source build"
+    expected = "verified source build" + (
+        "; reviewed source patches" if name == "nuclei" else ""
+    )
+    status = toolchain.status(name, name)
+    assert status.source == "managed" and status.detail == expected, (name, status)
     assert (config.tools_dir() / "provenance" / name / "source.json").is_file()
 result = subprocess.run(
     [runner.program("nuclei"), "-version"], capture_output=True, text=True, timeout=20
