@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Ship Dalfox dependency notices, locked source references and the four
+  unmodified MPL dependency sources as inert package data; tool binaries stay
+  unchanged.
+
 - Select the upstream license-corrected LDAP dependency in the Nuclei source build
   and require its reviewed version in build provenance.
 

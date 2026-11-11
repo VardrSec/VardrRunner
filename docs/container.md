@@ -186,3 +186,25 @@ license correction changes only `LICENSE` to MIT. The existing provenance guard
 requires that module version; notice archives can also contain unused older cache
 entries, so use `build-info.txt` to identify the linked revision. This does not
 change the native Nuclei archive or clear other transitive obligations.
+
+## Dalfox dependency notices and source
+
+The Runner Python package also contains
+`notices/dalfox-3.2.4-notices.tar.gz`. It accompanies the existing checksum-pinned
+Dalfox binary in native packages and container installs without changing its
+bytes or installation behavior. The archive is inert data; Runner never
+extracts or executes it.
+
+The archive retains the exact upstream Cargo.lock, declared dependency licenses,
+source URLs/checksums, available legal texts and attribution, and the four
+unmodified MPL-2.0 dependency source archives. `manifest.json` maps each retained
+notice to its source and SHA-256; `SHA256SUMS` covers delivered files. Sources were
+checked against the upstream lockfile before collection. Root workspace notices
+use the exact VCS commits recorded in the crate archives.
+
+The lockfile includes optional and other-target dependencies; it does not prove
+what the upstream binary links. The Android-only verifier dependency's full
+grant text was not located; Android is outside Runner's supported platforms.
+This collection does not establish complete toolchain/base-image source delivery
+or license compatibility. Keep the existing top-level notices and package
+copyright files alongside it.
