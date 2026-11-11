@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Reuse the verified maintained OpenPGP source backport in DNSx, HTTPx and Naabu;
+  require the exact replacement, source receipts and per-tool signing checks.
+
 - Select the advisory's fixed x/crypto revision in the six affected tool builds
   and reject stale module provenance before executing or installing a binary.
 

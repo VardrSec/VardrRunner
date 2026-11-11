@@ -99,6 +99,10 @@ BUILDS["gau"] = {
         "github.com/valyala/fasthttp": "v1.34.0",
     },
 }
+OPENPGP_TOOLS = frozenset({"dnsx", "httpx", "naabu", "nuclei"})
+for _tool in OPENPGP_TOOLS:
+    BUILDS[_tool]["patches"]["github.com/ProtonMail/go-crypto"] = "v1.5.2"
+
 GAU_UPSTREAM = {
     "Path": "github.com/lc/gau/v2",
     "Version": "v2.2.4",
@@ -239,7 +243,7 @@ def install_source(source: Path, name: str) -> None:
     )
     check_files(source, names, binary=name)
     supplement = gau_provenance(source) if name == "gau" else {}
-    if name == "nuclei":
+    if name in OPENPGP_TOOLS:
         supplement = {"source_patches": {"openpgp_backport": nuclei_openpgp.verify(source)}}
         nuclei_openpgp.verify_tests(source / "openpgp-tests.json")
     expected = (source / (name + ".sha256")).read_text(encoding="utf-8").split()[0]
@@ -258,7 +262,7 @@ def install_source(source: Path, name: str) -> None:
         fields = line.strip().split("\t")
         if fields[0] == "=>":
             if (
-                name != "nuclei"
+                name not in OPENPGP_TOOLS
                 or replacement_seen
                 or previous != ["dep", nuclei_openpgp.MODULE, nuclei_openpgp.VERSION]
                 or fields != ["=>", nuclei_openpgp.REPLACEMENT, "(devel)"]
@@ -280,7 +284,7 @@ def install_source(source: Path, name: str) -> None:
             if fields[1] in modules or not re.fullmatch(r"h1:[A-Za-z0-9+/]{43}=", fields[3]):
                 raise ValueError("Invalid source module checksum")
             modules[fields[1]] = {"version": fields[2], "checksum": fields[3]}
-    if name == "nuclei" and not replacement_seen:
+    if name in OPENPGP_TOOLS and not replacement_seen:
         raise ValueError("Required OpenPGP source replacement is missing")
     entry = toolchain.load_manifest()["tools"][name]
     root = modules.get(build["module"], {})
@@ -318,7 +322,7 @@ def install_source(source: Path, name: str) -> None:
                 "GO-LICENSE",
             )
             + (gau_files() if name == "gau" else ())
-            + (nuclei_openpgp.FILES + ("openpgp-tests.json",) if name == "nuclei" else ())
+            + (nuclei_openpgp.FILES + ("openpgp-tests.json",) if name in OPENPGP_TOOLS else ())
         ):
             shutil.copyfile(source / filename, provenance / filename)
             hashes[filename] = hashlib.sha256((provenance / filename).read_bytes()).hexdigest()

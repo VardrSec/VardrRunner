@@ -8,6 +8,12 @@ algorithm, expiry, revocation or signature verification checks are disabled.
 The signing entity's Go package type changes: this is a bounded compatibility
 backport, not an unchanged upstream module or general-purpose SDK release.
 
+DNSx, HTTPx and Naabu also consume this exact go-github revision. Their image
+builds now reuse the same verified source backport and run the signing checks
+against each tool's actual module graph. Each binary retains its own original
+and modified source, license, module metadata and test receipt. Merely moving
+the deprecated implementation into a separate module is not a remediation.
+
 ## Exact inputs and source delivery
 
 - Upstream module: `github.com/google/go-github/v30@v30.1.0`

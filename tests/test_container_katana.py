@@ -82,7 +82,7 @@ def _source_build(tmp_path, monkeypatch, name):
             )
             (source / f"{key}.original.go").write_bytes(before)
             (source / f"{key}.patched.go").write_bytes(after)
-    if name == "nuclei":
+    if name in helper["OPENPGP_TOOLS"]:
         pgp = helper["nuclei_openpgp"]
         license_data = b"synthetic retained license"
         archive = source / pgp.FILES[0]
@@ -138,7 +138,7 @@ def test_source_build_records_origin_and_keeps_runtime_hash_checks(source_build)
     assert "asset_sha256" not in entry  # It must not claim an upstream archive check.
     assert entry["origin"]["module"] == helper["BUILDS"][name]["module"]
     expected = "verified source build" + (
-        "; reviewed source patches" if name in ("gau", "nuclei") else ""
+        "; reviewed source patches" if name == "gau" or name in helper["OPENPGP_TOOLS"] else ""
     )
     assert toolchain.status(name, name).detail == expected
     if name == "gau":
@@ -306,9 +306,10 @@ def test_vulnerable_decompressor_provenance_is_rejected(source_build, module, ol
     assert not (tools / "tools.lock.json").exists()
 
 
+@pytest.mark.parametrize("name", ["dnsx", "httpx", "naabu", "nuclei"])
 @pytest.mark.parametrize("kind", ["path", "module", "version", "missing", "source", "test"])
-def test_nuclei_rejects_unreviewed_replacement_or_missing_evidence(tmp_path, monkeypatch, kind):
-    source, _, _, name, _ = _source_build(tmp_path, monkeypatch, "nuclei")
+def test_tools_reject_unreviewed_replacement_or_missing_evidence(tmp_path, monkeypatch, name, kind):
+    source, _, _, name, _ = _source_build(tmp_path, monkeypatch, name)
     pgp = helper["nuclei_openpgp"]
     info = source / "build-info.txt"
     text = info.read_text()

@@ -182,10 +182,23 @@ RUN cd /go/pkg/mod \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
+FROM base AS nuclei-openpgp-source
+USER root
+WORKDIR /build
+ADD --checksum=sha256:34ccb01d56786a8f7eb876e82f33dc79034c9bd2ce863e182cae6544861a2a3d https://proxy.golang.org/github.com/google/go-github/v30/@v/v30.1.0.zip /build/upstream.zip
+COPY container/nuclei_openpgp.py /build/
+COPY container/nuclei-openpgp/ /build/changes/
+RUN --network=none python /build/nuclei_openpgp.py /build/upstream.zip /build/changes /build/source /out
+
+
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS dnsx-build
 WORKDIR /src
+COPY --from=nuclei-openpgp-source /build/source/ /src/go-github-v30-patched/
+COPY --from=nuclei-openpgp-source /out/ /out/
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 RUN go mod init vardrrunner-dnsx-build \
+    && go mod edit -replace github.com/google/go-github/v30=/src/go-github-v30-patched \
+    && go get github.com/ProtonMail/go-crypto@v1.5.2 \
     && go get github.com/projectdiscovery/dnsx/cmd/dnsx@v1.3.1 \
         golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
     github.com/yuin/goldmark@v1.7.17 \
@@ -193,6 +206,10 @@ RUN go mod init vardrrunner-dnsx-build \
     && go version -m /out/dnsx > /out/build-info.txt \
     && sha256sum /out/dnsx > /out/dnsx.sha256 \
     && cp go.mod go.sum /out/
+
+RUN go mod verify \
+    && test "$(go list -m -f '{{.Version}}' github.com/ProtonMail/go-crypto)" = v1.5.2 \
+    && go test -json github.com/google/go-github/v30/github -run 'TestGitService_|TestCryptoCompatibilityAudit|TestExpiredLegacySigningKeyRejected' -count=1 > /out/openpgp-tests.json
 
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
@@ -203,10 +220,14 @@ RUN cd /go/pkg/mod \
 
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS naabu-build
 WORKDIR /src
+COPY --from=nuclei-openpgp-source /build/source/ /src/go-github-v30-patched/
+COPY --from=nuclei-openpgp-source /out/ /out/
 ENV CGO_ENABLED=1 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
 RUN apt-get update && apt-get install -y --no-install-recommends libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN go mod init vardrrunner-naabu-build \
+    && go mod edit -replace github.com/google/go-github/v30=/src/go-github-v30-patched \
+    && go get github.com/ProtonMail/go-crypto@v1.5.2 \
     && go get github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.6.1 \
         golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2 \
     github.com/yuin/goldmark@v1.7.17 \
@@ -214,6 +235,10 @@ RUN go mod init vardrrunner-naabu-build \
     && go version -m /out/naabu > /out/build-info.txt \
     && sha256sum /out/naabu > /out/naabu.sha256 \
     && cp go.mod go.sum /out/
+
+RUN go mod verify \
+    && test "$(go list -m -f '{{.Version}}' github.com/ProtonMail/go-crypto)" = v1.5.2 \
+    && go test -json github.com/google/go-github/v30/github -run 'TestGitService_|TestCryptoCompatibilityAudit|TestExpiredLegacySigningKeyRejected' -count=1 > /out/openpgp-tests.json
 
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
@@ -260,9 +285,17 @@ RUN cd /go/pkg/mod \
 
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS httpx-build
 WORKDIR /src
+COPY --from=nuclei-openpgp-source /build/source/ /src/go-github-v30-patched/
+COPY --from=nuclei-openpgp-source /out/ /out/
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-httpx-build     && go get github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0         golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2     github.com/yuin/goldmark@v1.7.17 \
+RUN go mod init vardrrunner-httpx-build \
+    && go mod edit -replace github.com/google/go-github/v30=/src/go-github-v30-patched \
+    && go get github.com/ProtonMail/go-crypto@v1.5.2     && go get github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0         golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2     github.com/yuin/goldmark@v1.7.17 \
     && go build -trimpath -o /out/httpx github.com/projectdiscovery/httpx/cmd/httpx     && go version -m /out/httpx > /out/build-info.txt     && sha256sum /out/httpx > /out/httpx.sha256     && cp go.mod go.sum /out/
+
+RUN go mod verify \
+    && test "$(go list -m -f '{{.Version}}' github.com/ProtonMail/go-crypto)" = v1.5.2 \
+    && go test -json github.com/google/go-github/v30/github -run 'TestGitService_|TestCryptoCompatibilityAudit|TestExpiredLegacySigningKeyRejected' -count=1 > /out/openpgp-tests.json
 
 # Retain legal texts from this builder's exact downloaded module cache.
 # The archive is a notice collection (possibly a superset), not source closure.
@@ -297,14 +330,6 @@ RUN cd /go/pkg/mod \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
 # A bounded local backport, pinned to the original module ZIP and exact patch.
-FROM base AS nuclei-openpgp-source
-USER root
-WORKDIR /build
-ADD --checksum=sha256:34ccb01d56786a8f7eb876e82f33dc79034c9bd2ce863e182cae6544861a2a3d https://proxy.golang.org/github.com/google/go-github/v30/@v/v30.1.0.zip /build/upstream.zip
-COPY container/nuclei_openpgp.py /build/
-COPY container/nuclei-openpgp/ /build/changes/
-RUN --network=none python /build/nuclei_openpgp.py /build/upstream.zip /build/changes /build/source /out
-
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS nuclei-build
 WORKDIR /src
 COPY --from=nuclei-openpgp-source /build/source/ /src/go-github-v30-patched/
