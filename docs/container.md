@@ -76,8 +76,8 @@ docker build --target toolkit --build-context gate=/path/to/pinned-gate -t vardr
 The default `core` target remains CLI-only and needs no Gate context. `toolkit`
 compiles Gate and retains all nine managed tools. Dalfox uses the existing
 verified archive installer. Katana, DNSx, Naabu, Gau, HTTPx, Subfinder, ffuf and
-Nuclei use Go-checksummed upstream source with Go 1.27.3. Reviewed overrides
-include x/net 0.62.0 and compress 1.18.7; Katana selects pgx 5.9.2 and Naabu
+Nuclei use Go-checksummed upstream source with Go 1.27.4. Reviewed overrides
+include x/net 0.62.0 and compress 1.20.2 and Brotli 1.2.7; Katana selects pgx 5.9.2 and Naabu
 selects x/crypto 0.58.0. Per-tool versions and overrides are recorded in the
 Dockerfile and retained build provenance. Naabu enables CGO and uses libpcap-dev only
 in its build stage. The toolkit runtime installs the locally rebuilt libpcap
@@ -238,3 +238,52 @@ grant text was not located; Android is outside Runner's supported platforms.
 This collection does not establish complete toolchain/base-image source delivery
 or license compatibility. Keep the existing top-level notices and package
 copyright files alongside it.
+
+## SQLite source delivery
+
+The runtime image rebuilds Debian SQLite 3.54.1 source with Trixie's build-only
+Tcl 9.0 dependency. Upstream executable source, the legacy `libsqlite3.so.0`
+SONAME and Debian feature flags are retained. No unstable repository/binary
+package is installed. Only `libsqlite3-0` enters the runtime; its only runtime
+dependency is libc6. Existing application roles and privileges are unchanged.
+
+`/usr/share/doc/libsqlite3-0/vardr-source/` contains original and modified Debian
+source, build metadata, the image recipe, provenance and `SHA256SUMS`. Existing
+package copyright remains installed. The four upstream inputs are hash-pinned
+to Debian's immutable snapshot. This covers SQLite, not every image component.
+A `sqlite-source-delivery` build target exports the same materials separately.
+
+## Original Go dependency sources
+
+The Python package retains `notices/go-module-sources.tar.gz` beside the Dalfox
+notice/source archive. It supplies 17 original Go module source versions with
+checksums and metadata. These are inert source ZIPs, not installed or executed
+code. Cache supersets and dual-licensed material remain explicitly identified;
+this archive is not complete compiler/base-image source or legal acceptance.
+
+## ncurses source delivery
+
+The image backports the upstream `infocmp` analysis-copy bound for
+CVE-2025-69720 to Debian's existing Trixie source. Only `ncurses-bin` is
+installed; the existing ncurses and libtinfo libraries remain unchanged.
+Original/modified Debian source, the patch, build metadata and checksums are
+retained in `/usr/share/doc/ncurses-bin/vardr-source/`. The
+`ncurses-source-delivery` build target exports the same source materials.
+No unstable binary packages or repositories are introduced. A custom package
+version does not itself resolve version-based scanner findings.
+
+## util-linux source delivery
+
+The image rebuilds the existing Trixie util-linux source with the remaining
+upstream stable mount-hook, source-resolution and descriptor-close-on-exec
+security changes. Existing Debian patches are retained; upstream's missing
+header and corrected symlink-resolution flag are included. Runtime ABI and
+feature configuration remain unchanged. `mount`, `util-linux` and their five
+exact-version sibling libraries are replaced together, preserving Debian
+dependency constraints. Other build products remain in the builder.
+
+`/usr/share/doc/util-linux/vardr-source/` retains original/modified Debian
+source, patch identities, build metadata, recipe and checksums. Existing
+package copyright remains installed. The `util-linux-source-delivery` build
+target exports the same materials. A custom package version does not itself
+clear vulnerability findings.

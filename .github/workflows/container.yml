@@ -7,7 +7,7 @@ on:
 jobs:
   container:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -25,6 +25,13 @@ jobs:
         run: |
           docker build --target toolkit --build-context gate=./.gate-source -t vardrrunner:toolkit .
           docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; assert "GODEBUG" not in os.environ; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and not shutil.which("nmap")'
+      - name: Verify retained OS backport sources in the toolkit
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --entrypoint sh vardrrunner:toolkit -ec '
+              for package in libsqlite3-0 ncurses-bin util-linux libpcap0.8t64; do
+                (cd "/usr/share/doc/$package/vardr-source" && sha256sum -c SHA256SUMS)
+              done'
       - name: Verify non-root offline MCP stdio in the toolkit
         timeout-minutes: 1
         shell: bash
@@ -91,6 +98,23 @@ jobs:
           docker volume create "$volume"
           trap 'docker volume rm "$volume"' EXIT
           docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev,noexec --cap-drop ALL --security-opt no-new-privileges --mount "source=$volume,target=/home/runner/.vardrmap" --mount "type=bind,source=$PWD/tests,target=/checks,readonly" --mount "type=bind,source=$fixture,target=/tls-fixture,readonly" --entrypoint python vardrrunner:toolkit /checks/container_gau.py
+      - name: Verify bounded offline libpcap regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --memory 192m --pids-limit 32 --cap-drop ALL --security-opt no-new-privileges --mount "type=bind,source=$PWD/tests,target=/checks,readonly" --entrypoint python vardrrunner:toolkit /checks/container_libpcap.py > "$RUNNER_TEMP/libpcap-regression.json"
+          docker image inspect vardrrunner:toolkit --format '{{.Id}}' > "$RUNNER_TEMP/libpcap-image-id.txt"
+          cat "$RUNNER_TEMP/libpcap-regression.json"
+      - name: Preserve libpcap regression identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: toolkit-libpcap-regression
+          path: |
+            ${{ runner.temp }}/libpcap-regression.json
+            ${{ runner.temp }}/libpcap-image-id.txt
+          if-no-files-found: error
+          retention-days: 7
       - name: Report reachable Go advisories in the shipped binaries
         shell: bash
         run: |
@@ -109,8 +133,26 @@ jobs:
             echo "## Reachable Go advisories (govulncheck, live database)"
             for b in dnsx ffuf gau httpx katana naabu nuclei subfinder vardrgate; do
               echo "### $b"
-              "$(go env GOPATH)/bin/govulncheck" -mode=binary "$RUNNER_TEMP/bins/$b" 2>&1 \
-                | grep -E "^Vulnerability|Found in|Fixed in|No vulnerabilities|Your code" \
-                || echo "scan did not complete"
+              status=0
+              "$(go env GOPATH)/bin/govulncheck" -mode=binary "$RUNNER_TEMP/bins/$b" \
+                > "$RUNNER_TEMP/bins/$b.govulncheck.txt" 2>&1 || status=$?
+              cat "$RUNNER_TEMP/bins/$b.govulncheck.txt"
+              case "$status" in
+                0) echo "Scan completed: no reachable findings" ;;
+                3) echo "Scan completed: reachable findings require review" ;;
+                *) echo "Scan failed: govulncheck exit $status" ;;
+              esac
+              printf '%s\n' "$status" > "$RUNNER_TEMP/bins/$b.govulncheck.exit"
             done
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve complete Go reachability reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: toolkit-go-reachability
+          path: |
+            ${{ runner.temp }}/bins/*.govulncheck.txt
+            ${{ runner.temp }}/bins/*.govulncheck.exit
+          if-no-files-found: error
+          retention-days: 7
