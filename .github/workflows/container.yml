@@ -131,7 +131,7 @@ jobs:
           docker rm "$id" > /dev/null
           test ! -e "$RUNNER_TEMP/bins/nuclei"
           test ! -e "$RUNNER_TEMP/bins/provenance/nuclei"
-          for b in dnsx ffuf gau httpx katana naabu subfinder vardrgate; do
+          for b in dalfox dnsx ffuf gau httpx katana naabu subfinder vardrgate; do
             go version -m "$RUNNER_TEMP/bins/$b" > "$RUNNER_TEMP/bins/$b.build-info.txt"
             if grep -Fq 'github.com/censys/censys-sdk-go' "$RUNNER_TEMP/bins/$b.build-info.txt"; then
               echo "Unexpected Censys SDK in shipped $b" >&2
