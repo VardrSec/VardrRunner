@@ -131,7 +131,8 @@ jobs:
           docker rm "$id" > /dev/null
           test ! -e "$RUNNER_TEMP/bins/nuclei"
           test ! -e "$RUNNER_TEMP/bins/provenance/nuclei"
-          for b in dalfox dnsx ffuf gau httpx katana naabu subfinder vardrgate; do
+          # Dalfox 3.2.4 is Rust; its retained Cargo inventory is checked in container_tool_state.py.
+          for b in dnsx ffuf gau httpx katana naabu subfinder vardrgate; do
             go version -m "$RUNNER_TEMP/bins/$b" > "$RUNNER_TEMP/bins/$b.build-info.txt"
             if grep -Fq 'github.com/censys/censys-sdk-go' "$RUNNER_TEMP/bins/$b.build-info.txt"; then
               echo "Unexpected Censys SDK in shipped $b" >&2
@@ -161,6 +162,7 @@ jobs:
         with:
           name: toolkit-go-reachability
           path: |
+            ${{ runner.temp }}/bins/*.build-info.txt
             ${{ runner.temp }}/bins/*.govulncheck.txt
             ${{ runner.temp }}/bins/*.govulncheck.exit
           if-no-files-found: error

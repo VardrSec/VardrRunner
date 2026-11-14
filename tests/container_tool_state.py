@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 from container_dnsx import check as check_dnsx
@@ -27,6 +28,11 @@ assert not (config.tools_dir() / "nuclei").exists()
 assert not (config.tools_dir() / "provenance" / "nuclei").exists()
 for receipt in (config.tools_dir() / "provenance").glob("*/source.json"):
     assert "github.com/censys/censys-sdk-go" not in receipt.read_text(), receipt
+# Dalfox's pinned archive is Rust, not readable with go version -m.
+with tarfile.open(Path(toolchain.__file__).parent / "notices/dalfox-3.2.4-notices.tar.gz") as notices:
+    cargo = notices.extractfile("dalfox/Cargo.toml").read()
+    assert b'name = "dalfox"' in cargo and b'version = "3.2.4"' in cargo
+    assert b"censys" not in notices.extractfile("dalfox/Cargo.lock").read().lower()
 katana = subprocess.run(
     [runner.program("katana"), "-u", "http://127.0.0.1:1", "-duc", "-timeout", "1"],
     capture_output=True,
