@@ -329,35 +329,6 @@ RUN cd /go/pkg/mod \
     && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
     && cp /usr/local/go/LICENSE /out/GO-LICENSE
 
-# A bounded local backport, pinned to the original module ZIP and exact patch.
-FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS nuclei-build
-WORKDIR /src
-COPY --from=nuclei-openpgp-source /build/source/ /src/go-github-v30-patched/
-COPY --from=nuclei-openpgp-source /out/ /out/
-ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GODEBUG=http2client=0
-RUN go mod init vardrrunner-nuclei-build \
-    && go mod edit -replace github.com/google/go-github/v30=/src/go-github-v30-patched \
-    && go get github.com/ProtonMail/go-crypto@v1.5.2 \
-    && go get github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1         github.com/go-jose/go-jose/v4@v4.1.6         github.com/getkin/kin-openapi@v0.149.0 github.com/go-git/go-git/v5@v5.19.2         golang.org/x/mod@v0.41.0 golang.org/x/net@v0.62.0 golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2         golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.83.2     github.com/yuin/goldmark@v1.7.17 \
-    && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei     && go version -m /out/nuclei > /out/build-info.txt     && sha256sum /out/nuclei > /out/nuclei.sha256     && cp go.mod go.sum /out/
-
-# Upstream corrected this dependency's license to MIT without changing code.
-RUN go get github.com/projectdiscovery/ldapserver@v1.0.2-0.20240723071106-7cb3f5bd9b7d \
-    && go mod verify \
-    && test "$(go list -m -f '{{.Version}}' github.com/ProtonMail/go-crypto)" = v1.5.2 \
-    && go test -json github.com/google/go-github/v30/github -run 'TestGitService_|TestCryptoCompatibilityAudit|TestExpiredLegacySigningKeyRejected' -count=1 > /out/openpgp-tests.json \
-    && go build -trimpath -o /out/nuclei github.com/projectdiscovery/nuclei/v3/cmd/nuclei \
-    && go version -m /out/nuclei > /out/build-info.txt \
-    && sha256sum /out/nuclei > /out/nuclei.sha256 \
-    && cp go.mod go.sum /out/
-
-# Retain legal texts from this builder's exact downloaded module cache.
-# The archive is a notice collection (possibly a superset), not source closure.
-RUN cd /go/pkg/mod \
-    && find . -type f \( -iname 'license*' -o -iname 'licence*' -o -iname 'notice*' -o -iname 'copying*' -o -iname 'copyright*' \) -print0 > /tmp/module-notices \
-    && tar --null -T /tmp/module-notices -czf /out/dependency-notices.tar.gz \
-    && cp /usr/local/go/LICENSE /out/GO-LICENSE
-
 # Ordinary CLI stays UID10001; only the explicit local-worker overlay invokes this binary.
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS local-owner-build
 COPY container/worker_owner.c /src/worker_owner.c
@@ -382,12 +353,11 @@ COPY --from=naabu-build /out/ /tmp/naabu-build/
 COPY --from=httpx-build /out/ /tmp/httpx-build/
 COPY --from=subfinder-build /out/ /tmp/subfinder-build/
 COPY --from=ffuf-build /out/ /tmp/ffuf-build/
-COPY --from=nuclei-build /out/ /tmp/nuclei-build/
 COPY --from=gau-build /out/ /tmp/gau-build/
 COPY container/go_tool_install.py container/nuclei_openpgp.py /tmp/
 RUN python -c 'from vardrrunner import toolchain; [toolchain.install(n) for n in toolchain.manageable_tools() if n not in ("katana", "dnsx", "naabu", "gau", "httpx", "subfinder", "ffuf", "nuclei")]' \
     && python /tmp/go_tool_install.py \
-    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/nuclei-build /tmp/go_tool_install.py /tmp/nuclei_openpgp.py \
+    && rm -rf /tmp/katana-build /tmp/dnsx-build /tmp/naabu-build /tmp/gau-build /tmp/httpx-build /tmp/subfinder-build /tmp/ffuf-build /tmp/go_tool_install.py /tmp/nuclei_openpgp.py \
     && chmod -R a+rX /opt/vardrtools \
     && rm -rf /home/runner/.config /home/runner/.cache /home/runner/.pdcp \
     && ln -s /home/runner/.vardrmap /home/runner/.config

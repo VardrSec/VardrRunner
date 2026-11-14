@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Stop bundling Nuclei in the toolkit image; retain native installation and execution
+  integration as an explicit optional capability. Existing installations are preserved.
+
 - Reuse the verified maintained OpenPGP source backport in DNSx, HTTPx and Naabu;
   require the exact replacement, source receipts and per-tool signing checks.
 

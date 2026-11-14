@@ -1,4 +1,4 @@
-"""Real image regression: Nuclei config is writable and survives replacement."""
+"""Real image regression: bundled tools and persistent XDG state."""
 
 import os
 import subprocess
@@ -15,17 +15,18 @@ assert os.getuid() == 10001
 assert xdg_config == root and xdg_cache == root / "tool-cache"
 assert (Path.home() / ".config").resolve() == root.resolve()
 assert not os.access(config.tools_dir(), os.W_OK)
-for name in ("katana", "dnsx", "naabu", "httpx", "subfinder", "ffuf", "nuclei"):
-    patched = name in {"dnsx", "httpx", "naabu", "nuclei"}
+for name in ("katana", "dnsx", "naabu", "httpx", "subfinder", "ffuf"):
+    patched = name in {"dnsx", "httpx", "naabu"}
     expected = "verified source build" + ("; reviewed source patches" if patched else "")
     status = toolchain.status(name, name)
     assert status.source == "managed" and status.detail == expected, (name, status)
     assert (config.tools_dir() / "provenance" / name / "source.json").is_file()
-result = subprocess.run(
-    [runner.program("nuclei"), "-version"], capture_output=True, text=True, timeout=20
-)
-assert result.returncode == 0, result.stderr
-assert (xdg_config / "nuclei").stat().st_uid == 10001
+# Default toolkit must omit the optional binary, receipt and provenance.
+assert toolchain.status("nuclei", "nuclei").source == "missing"
+assert not (config.tools_dir() / "nuclei").exists()
+assert not (config.tools_dir() / "provenance" / "nuclei").exists()
+for receipt in (config.tools_dir() / "provenance").glob("*/source.json"):
+    assert "github.com/censys/censys-sdk-go" not in receipt.read_text(), receipt
 katana = subprocess.run(
     [runner.program("katana"), "-u", "http://127.0.0.1:1", "-duc", "-timeout", "1"],
     capture_output=True,
@@ -44,5 +45,5 @@ if sys.argv[1] == "create":
 else:
     assert sys.argv[1] == "check" and marker.read_text(encoding="utf-8") == "retained"
 print(
-    "PASS: real DNSx lookup, Nuclei config and persistent XDG state work as UID 10001; binaries remain immutable"
+    "PASS: real DNSx lookup, optional Nuclei absence and persistent XDG state work as UID 10001; binaries remain immutable"
 )

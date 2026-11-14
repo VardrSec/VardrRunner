@@ -351,13 +351,19 @@ def install_source(source: Path, name: str) -> None:
         toolchain._write_lock(lock)
 
 
+def install_bundled() -> None:
+    """Register the toolkit subset, leaving Nuclei explicitly operator-installed."""
+    for name in BUILDS:
+        if name != "nuclei":
+            install_source(Path("/tmp") / (name + "-build"), name)
+
+
 if __name__ == "__main__":
     if os.name != "posix" or os.getuid() != 0 or config.tools_dir() != Path("/opt/vardrtools"):
         raise SystemExit("This helper is restricted to the root image-build tools directory")
     if sys.argv[1:] == ["--patch-gau"]:
         patch_gau(Path("/build"))
     elif not sys.argv[1:]:
-        for name in BUILDS:
-            install_source(Path("/tmp") / (name + "-build"), name)
+        install_bundled()
     else:
         raise SystemExit("Unsupported image-build operation")

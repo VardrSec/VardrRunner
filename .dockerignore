@@ -18,3 +18,8 @@
 
 !container/util-linux/
 !container/util-linux/**
+
+# Shared OpenPGP source inputs remain needed by DNSx, HTTPx and Naabu.
+!container/nuclei_openpgp.py
+!container/nuclei-openpgp/
+!container/nuclei-openpgp/**

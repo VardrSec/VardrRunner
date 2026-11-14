@@ -24,7 +24,7 @@ jobs:
       - name: Build tool-enabled image and verify immutable tools
         run: |
           docker build --target toolkit --build-context gate=./.gate-source -t vardrrunner:toolkit .
-          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; assert "GODEBUG" not in os.environ; [toolchain.verify(n) for n in toolchain.manageable_tools()]; assert shutil.which("vardrgate") and not shutil.which("nmap")'
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint python vardrrunner:toolkit -c 'import os, shutil; from vardrrunner import toolchain; assert os.getuid()==10001; assert "GODEBUG" not in os.environ; [toolchain.verify(n) for n in toolchain.manageable_tools() if n != "nuclei"]; assert toolchain.status("nuclei", "nuclei").source == "missing"; assert shutil.which("vardrgate") and not shutil.which("nmap")'
       - name: Verify retained OS backport sources in the toolkit
         run: |
           docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
@@ -129,9 +129,18 @@ jobs:
           docker cp "$id:/opt/vardrtools/." "$RUNNER_TEMP/bins/"
           docker cp "$id:/usr/local/bin/vardrgate" "$RUNNER_TEMP/bins/vardrgate"
           docker rm "$id" > /dev/null
+          test ! -e "$RUNNER_TEMP/bins/nuclei"
+          test ! -e "$RUNNER_TEMP/bins/provenance/nuclei"
+          for b in dnsx ffuf gau httpx katana naabu subfinder vardrgate; do
+            go version -m "$RUNNER_TEMP/bins/$b" > "$RUNNER_TEMP/bins/$b.build-info.txt"
+            if grep -Fq 'github.com/censys/censys-sdk-go' "$RUNNER_TEMP/bins/$b.build-info.txt"; then
+              echo "Unexpected Censys SDK in shipped $b" >&2
+              exit 1
+            fi
+          done
           {
             echo "## Reachable Go advisories (govulncheck, live database)"
-            for b in dnsx ffuf gau httpx katana naabu nuclei subfinder vardrgate; do
+            for b in dnsx ffuf gau httpx katana naabu subfinder vardrgate; do
               echo "### $b"
               status=0
               "$(go env GOPATH)/bin/govulncheck" -mode=binary "$RUNNER_TEMP/bins/$b" \
