@@ -29,7 +29,9 @@ assert not (config.tools_dir() / "provenance" / "nuclei").exists()
 for receipt in (config.tools_dir() / "provenance").glob("*/source.json"):
     assert "github.com/censys/censys-sdk-go" not in receipt.read_text(), receipt
 # Dalfox's pinned archive is Rust, not readable with go version -m.
-with tarfile.open(Path(toolchain.__file__).parent / "notices/dalfox-3.2.4-notices.tar.gz") as notices:
+with tarfile.open(
+    Path(toolchain.__file__).parent / "notices/dalfox-3.2.4-notices.tar.gz"
+) as notices:
     cargo = notices.extractfile("dalfox/Cargo.toml").read()
     assert b'name = "dalfox"' in cargo and b'version = "3.2.4"' in cargo
     assert b"censys" not in notices.extractfile("dalfox/Cargo.lock").read().lower()
