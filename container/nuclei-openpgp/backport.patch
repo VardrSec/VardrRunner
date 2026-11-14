@@ -1,0 +1,71 @@
+--- a/github/git_commits.go
++++ b/github/git_commits.go
+@@ -13,7 +13,7 @@
+ 	"strings"
+ 	"time"
+ 
+-	"golang.org/x/crypto/openpgp"
++	"github.com/ProtonMail/go-crypto/openpgp"
+ )
+ 
+ // SignatureVerification represents GPG signature verification.
+@@ -152,7 +152,7 @@
+ }
+ 
+ func createSignature(signingKey *openpgp.Entity, commit *createCommit) (string, error) {
+-	if signingKey == nil || commit == nil {
++	if signingKey == nil || signingKey.PrimaryKey == nil || signingKey.PrivateKey == nil || commit == nil {
+ 		return "", errors.New("createSignature: invalid parameters")
+ 	}
+ 
+--- a/github/git_commits_test.go
++++ b/github/git_commits_test.go
+@@ -15,7 +15,7 @@
+ 	"testing"
+ 	"time"
+ 
+-	"golang.org/x/crypto/openpgp"
++	"github.com/ProtonMail/go-crypto/openpgp"
+ )
+ 
+ func TestCommit_Marshal(t *testing.T) {
+@@ -244,11 +244,12 @@
+ func TestGitService_CreateSignedCommitWithKey(t *testing.T) {
+ 	client, mux, _, teardown := setup()
+ 	defer teardown()
+-	s := strings.NewReader(testGPGKey)
+-	keyring, err := openpgp.ReadArmoredKeyRing(s)
++	// Generate a currently valid test key: the historical fixture expired in 2021.
++	entity, err := openpgp.NewEntity("go-github", "", "go-github@github.com", nil)
+ 	if err != nil {
+-		t.Errorf("Error reading keyring: %+v", err)
+-	}
++		t.Fatal(err)
++	}
++	keyring := openpgp.EntityList{entity}
+ 
+ 	date, _ := time.Parse("Mon Jan 02 15:04:05 2006 -0700", "Thu May 04 00:03:43 2017 +0200")
+ 	author := CommitAuthor{
+@@ -285,7 +286,7 @@
+ 		}
+ 
+ 		sigReader := strings.NewReader(*v.Signature)
+-		signer, err := openpgp.CheckArmoredDetachedSignature(keyring, messageReader, sigReader)
++		signer, err := openpgp.CheckArmoredDetachedSignature(keyring, messageReader, sigReader, nil)
+ 		if err != nil {
+ 			t.Errorf("Error verifying signature: %+v", err)
+ 		}
+--- a/github/crypto_compat_audit_test.go
++++ b/github/crypto_compat_audit_test.go
+@@ -0,0 +1,11 @@
++package github
++import("testing";"strings";"time";"bytes";"github.com/ProtonMail/go-crypto/openpgp";"github.com/ProtonMail/go-crypto/openpgp/packet")
++func TestCryptoCompatibilityAudit(t *testing.T){
++ keys,err:=openpgp.ReadArmoredKeyRing(strings.NewReader(testGPGKey));if err!=nil{t.Fatal(err)};e:=keys[0];s,id:=e.PrimarySelfSignature();now:=time.Now();t.Logf("primary created=%s algorithm=%v selfsig=%v id=%v",e.PrimaryKey.CreationTime,e.PrimaryKey.PubKeyAlgo,s!=nil,id!=nil)
++ if s!=nil{t.Logf("keyExpired=%v sigExpired=%v revoked=%v flagsValid=%v flagSign=%v lifetime=%v",e.PrimaryKey.KeyExpired(s,now),s.SigExpired(now),e.Revoked(now),s.FlagsValid,s.FlagSign,s.KeyLifetimeSecs);if s.KeyLifetimeSecs!=nil{t.Logf("expiry=%s",e.PrimaryKey.CreationTime.Add(time.Duration(*s.KeyLifetimeSecs)*time.Second))}}
++ fresh,err:=openpgp.NewEntity("compatibility fixture","","fixture@example.invalid",&packet.Config{RSABits:2048});if err!=nil{t.Fatal(err)};var sig bytes.Buffer;msg:="isolated compatibility fixture";if err=openpgp.ArmoredDetachSign(&sig,fresh,strings.NewReader(msg),nil);err!=nil{t.Fatal(err)};if _,err=openpgp.CheckArmoredDetachedSignature(openpgp.EntityList{fresh},strings.NewReader(msg),&sig,nil);err!=nil{t.Fatal(err)};t.Log("fresh RSA2048 sign/verify roundtrip passed under default policy")
++}
++func TestExpiredLegacySigningKeyRejected(t *testing.T){
++ keys,err:=openpgp.ReadArmoredKeyRing(strings.NewReader(testGPGKey));if err!=nil{t.Fatal(err)};now:=time.Now();_,err=createSignature(keys[0],&createCommit{Message:String("fixture"),Tree:String("t"),Author:&CommitAuthor{Name:String("fixture"),Email:String("fixture@example.invalid"),Date:&now}});if err==nil{t.Fatal("expired key was accepted")}
++
++}

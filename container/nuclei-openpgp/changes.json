@@ -1,0 +1,175 @@
+{
+  "github/git_commits.go": {
+    "before_sha256": "bdb3f293ad63ad5b5f14fa8614fed08dcef7005c57f54d05f324e1b6af69297e",
+    "after_sha256": "ba3eab35a695695c0b25e172a981f061fedee1e73c1aeae981e5b013903face5",
+    "edits": [
+      {
+        "start": 255,
+        "end": 255,
+        "replacement": "ithub.c"
+      },
+      {
+        "start": 256,
+        "end": 256,
+        "replacement": "m/ProtonMai"
+      },
+      {
+        "start": 257,
+        "end": 259,
+        "replacement": "/"
+      },
+      {
+        "start": 260,
+        "end": 261,
+        "replacement": ""
+      },
+      {
+        "start": 262,
+        "end": 267,
+        "replacement": "-"
+      },
+      {
+        "start": 4887,
+        "end": 4887,
+        "replacement": "signingKey.PrimaryKey == nil || signingKey.PrivateKey == nil || "
+      }
+    ]
+  },
+  "github/git_commits_test.go": {
+    "before_sha256": "33bbcf19388ebb25e5e036575662cd2ff22fe18eb1a427f1763f623bffcb5b16",
+    "after_sha256": "614ecbfbb40ea251f5a887759e8154fea2cab4dcf97fd6a0d7e1d4a4c5249407",
+    "edits": [
+      {
+        "start": 287,
+        "end": 287,
+        "replacement": "ithub.c"
+      },
+      {
+        "start": 288,
+        "end": 288,
+        "replacement": "m/ProtonMai"
+      },
+      {
+        "start": 289,
+        "end": 291,
+        "replacement": "/"
+      },
+      {
+        "start": 292,
+        "end": 293,
+        "replacement": ""
+      },
+      {
+        "start": 294,
+        "end": 299,
+        "replacement": "-"
+      },
+      {
+        "start": 5678,
+        "end": 5679,
+        "replacement": "//"
+      },
+      {
+        "start": 5680,
+        "end": 5687,
+        "replacement": "Ge"
+      },
+      {
+        "start": 5688,
+        "end": 5698,
+        "replacement": ""
+      },
+      {
+        "start": 5700,
+        "end": 5701,
+        "replacement": "ate a currently valid "
+      },
+      {
+        "start": 5705,
+        "end": 5714,
+        "replacement": " "
+      },
+      {
+        "start": 5717,
+        "end": 5717,
+        "replacement": ": the histo"
+      },
+      {
+        "start": 5719,
+        "end": 5719,
+        "replacement": "cal fixture expired i"
+      },
+      {
+        "start": 5720,
+        "end": 5721,
+        "replacement": " 2021.\n\tentity"
+      },
+      {
+        "start": 5738,
+        "end": 5739,
+        "replacement": "N"
+      },
+      {
+        "start": 5740,
+        "end": 5744,
+        "replacement": "wEntity(\"go-github\", \"\", \"go-github@github.co"
+      },
+      {
+        "start": 5745,
+        "end": 5753,
+        "replacement": "\", n"
+      },
+      {
+        "start": 5754,
+        "end": 5758,
+        "replacement": "l"
+      },
+      {
+        "start": 5781,
+        "end": 5782,
+        "replacement": "Fatal(e"
+      },
+      {
+        "start": 5784,
+        "end": 5803,
+        "replacement": ")\n\t}\n\t"
+      },
+      {
+        "start": 5810,
+        "end": 5810,
+        "replacement": " "
+      },
+      {
+        "start": 5811,
+        "end": 5811,
+        "replacement": "="
+      },
+      {
+        "start": 5812,
+        "end": 5818,
+        "replacement": "op"
+      },
+      {
+        "start": 5819,
+        "end": 5824,
+        "replacement": "npgp.EntityList{entity"
+      },
+      {
+        "start": 6864,
+        "end": 6864,
+        "replacement": ", nil"
+      }
+    ]
+  },
+  "github/crypto_compat_audit_test.go": {
+    "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "after_sha256": "6e6e7ea4a1841cd20d7cd2b142916562ac0c6e40ca1638d8907db02f79546197",
+    "edits": [
+      {
+        "start": 0,
+        "end": 0,
+        "replacement": "package github\nimport(\"testing\";\"strings\";\"time\";\"bytes\";\"github.com/ProtonMail/go-crypto/openpgp\";\"github.com/ProtonMail/go-crypto/openpgp/packet\")\nfunc TestCryptoCompatibilityAudit(t *testing.T){\n keys,err:=openpgp.ReadArmoredKeyRing(strings.NewReader(testGPGKey));if err!=nil{t.Fatal(err)};e:=keys[0];s,id:=e.PrimarySelfSignature();now:=time.Now();t.Logf(\"primary created=%s algorithm=%v selfsig=%v id=%v\",e.PrimaryKey.CreationTime,e.PrimaryKey.PubKeyAlgo,s!=nil,id!=nil)\n if s!=nil{t.Logf(\"keyExpired=%v sigExpired=%v revoked=%v flagsValid=%v flagSign=%v lifetime=%v\",e.PrimaryKey.KeyExpired(s,now),s.SigExpired(now),e.Revoked(now),s.FlagsValid,s.FlagSign,s.KeyLifetimeSecs);if s.KeyLifetimeSecs!=nil{t.Logf(\"expiry=%s\",e.PrimaryKey.CreationTime.Add(time.Duration(*s.KeyLifetimeSecs)*time.Second))}}\n fresh,err:=openpgp.NewEntity(\"compatibility fixture\",\"\",\"fixture@example.invalid\",&packet.Config{RSABits:2048});if err!=nil{t.Fatal(err)};var sig bytes.Buffer;msg:=\"isolated compatibility fixture\";if err=openpgp.ArmoredDetachSign(&sig,fresh,strings.NewReader(msg),nil);err!=nil{t.Fatal(err)};if _,err=openpgp.CheckArmoredDetachedSignature(openpgp.EntityList{fresh},strings.NewReader(msg),&sig,nil);err!=nil{t.Fatal(err)};t.Log(\"fresh RSA2048 sign/verify roundtrip passed under default policy\")\n}\nfunc TestExpiredLegacySigningKeyRejected(t *testing.T){\n keys,err:=openpgp.ReadArmoredKeyRing(strings.NewReader(testGPGKey));if err!=nil{t.Fatal(err)};now:=time.Now();_,err=createSignature(keys[0],&createCommit{Message:String(\"fixture\"),Tree:String(\"t\"),Author:&CommitAuthor{Name:String(\"fixture\"),Email:String(\"fixture@example.invalid\"),Date:&now}});if err==nil{t.Fatal(\"expired key was accepted\")}\n\n}\n"
+      }
+    ]
+  }
+}

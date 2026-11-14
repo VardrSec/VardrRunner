@@ -1,0 +1,19 @@
+SQLite 3.54.1 source security rebuild
+
+Debian source: 3.54.1-1
+https://tracker.debian.org/news/1818634/accepted-sqlite3-3541-1-source-into-unstable/
+Includes fixes for CVE-2026-119373, CVE-2026-119374 and CVE-2026-119379.
+
+The four original source inputs are pinned by SHA-256 and retrieved from
+Debian's immutable snapshot. Existing Trixie packages rebuild the library;
+no unstable binary package or repository is installed. The only source
+adaptation selects Trixie's Tcl 9.0 build dependency instead of Tcl 9.1,
+with a +vardr1 packaging entry. Upstream executable source is unchanged.
+The existing legacy libsqlite3.so.0 SONAME and Debian feature flags remain.
+Only libsqlite3-0 is installed; Tcl, ICU build dependencies and other source
+build products remain in the discarded builder.
+
+Original and modified Debian source, build metadata, recipe and SHA256SUMS
+accompany this notice. Retain /usr/share/doc/libsqlite3-0/copyright. Exact
+source hashes bind input bytes; this is not an assertion of verified PGP
+signer trust or complete source delivery for every package in the image.

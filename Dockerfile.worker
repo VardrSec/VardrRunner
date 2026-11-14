@@ -1,6 +1,6 @@
 # Worker-only overlay: caller must choose a reviewed immutable toolkit image.
 ARG RUNNER_BASE_IMAGE
-FROM golang:1.27.3@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS owner-build
+FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS owner-build
 COPY container/worker_owner.c /src/worker_owner.c
 COPY container/tests/worker_owner_eof_test.c /src/tests/worker_owner_eof_test.c
 COPY container/tests/worker_owner_sequence_test.c /src/tests/worker_owner_sequence_test.c

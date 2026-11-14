@@ -10,3 +10,11 @@
 !container/libpcap-source.txt
 **/__pycache__/
 **/*.pyc
+
+!container/sqlite-source.txt
+
+!container/infocmp-bound.patch
+!container/ncurses-source.txt
+
+!container/util-linux/
+!container/util-linux/**

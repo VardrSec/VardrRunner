@@ -1,0 +1,13 @@
+ncurses infocmp security backport
+
+Base: Debian ncurses 6.5+20250216-2 (Trixie).
+CVE-2025-69720: bound analyze_string() copy to MAX_TERMINFO_LENGTH and
+reserve space for its terminator. Only these two upstream executable-code
+changes are backported from:
+https://github.com/ThomasDickey/ncurses-snapshots/commit/6f6db0e8fd14e40096a0ee6f8bdf32dedbd3fc9e
+
+Only ncurses-bin is installed; existing ncurses/libtinfo libraries remain.
+Original and modified Debian source, original signature file (not asserted
+verified), build metadata, patch, recipe and checksums accompany this notice.
+Input SHA-256 checks protect source bytes. A local package suffix does not
+itself clear scanner findings or establish complete image license acceptance.
