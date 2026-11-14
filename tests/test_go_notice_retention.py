@@ -10,7 +10,7 @@ def test_every_go_cache_notice_find_includes_both_license_spellings():
     clauses = [
         line for line in docker.splitlines() if "find . -type f" in line and "license*" in line
     ]
-    assert len(clauses) == 9
+    assert len(clauses) == 8  # Seven bundled Go tools plus Gate; Nuclei is optional.
     assert all("-iname 'licence*'" in line for line in clauses)
 
 
