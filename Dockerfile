@@ -1,3 +1,27 @@
+# Coordinated ACL/caller build; no runtime suite or glibc migration.
+FROM debian:trixie-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392 AS acl-callers-build
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential debhelper dh-exec gettext libattr1-dev libacl1-dev libselinux1-dev libgmp3-dev libssl-dev libsystemd-dev gperf bison autoconf automake autopoint texinfo fakeroot acl attr python3 ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /build/inputs
+ADD --checksum=sha256:b987ebbeb3d498794bad29cd65301b77384978493d8765c94dba8bad8fa325b6 https://deb.debian.org/debian/pool/main/a/acl/acl_2.4.0-1.dsc acl_2.4.0-1.dsc
+ADD --checksum=sha256:e661131456d2708a01c614a0f400e11d7d1bfaeb6f3e74b75bb980b72f0161a3 https://deb.debian.org/debian/pool/main/a/acl/acl_2.4.0.orig.tar.xz acl_2.4.0.orig.tar.xz
+ADD --checksum=sha256:65931c2fb3e821bda67f8d8d72d77e99ac61502748dcdf38b6805fe89339085e https://deb.debian.org/debian/pool/main/a/acl/acl_2.4.0-1.debian.tar.xz acl_2.4.0-1.debian.tar.xz
+ADD --checksum=sha256:c3a207e3aaad165765c7a6fab89045f5fd20035fea6830b9f9ebbb92ebfbff89 https://deb.debian.org/debian/pool/main/c/coreutils/coreutils_9.7-3.dsc coreutils_9.7-3.dsc
+ADD --checksum=sha256:e8bb26ad0293f9b5a1fc43fb42ba970e312c66ce92c1b0b16713d7500db251bf https://deb.debian.org/debian/pool/main/c/coreutils/coreutils_9.7.orig.tar.xz coreutils_9.7.orig.tar.xz
+ADD --checksum=sha256:483f77876a080577f63da1d004cc1cf17d16df65d6925aefdd3294c6101eccfb https://deb.debian.org/debian/pool/main/c/coreutils/coreutils_9.7-3.debian.tar.xz coreutils_9.7-3.debian.tar.xz
+ADD --checksum=sha256:5bb58d4966d94c99a9f1b182676089ecc05058d62fdb927f5c07539d9cda4077 https://deb.debian.org/debian/pool/main/t/tar/tar_1.35+dfsg-3.1.dsc tar_1.35+dfsg-3.1.dsc
+ADD --checksum=sha256:9ae57e981c1e73c0eebc2b26c9b0c4497fe310ef1d516ea430efb5470b71f7a8 https://deb.debian.org/debian/pool/main/t/tar/tar_1.35+dfsg.orig.tar.xz tar_1.35+dfsg.orig.tar.xz
+ADD --checksum=sha256:0d0278034b82ed84dce04a461879b6e1871e4cb416a0ff04d3d35ff05fc30a53 https://deb.debian.org/debian/pool/main/t/tar/tar_1.35+dfsg-3.1.debian.tar.xz tar_1.35+dfsg-3.1.debian.tar.xz
+ADD --checksum=sha256:5f4f0b9b78821764fe6b88e32aef6ec519628522c211c36706bcb78d6f3f036b https://deb.debian.org/debian/pool/main/a/acl/acl_2.4.0.orig.tar.xz.asc acl_2.4.0.orig.tar.xz.asc
+ADD --checksum=sha256:5070e9428bd372a7fa1f66b395b81092bb40c98f9f56a2e2bc55c47fd387e901 https://deb.debian.org/debian/pool/main/c/coreutils/coreutils_9.7.orig.tar.xz.asc coreutils_9.7.orig.tar.xz.asc
+COPY container/acl/ /recipe/
+RUN mkdir -p /out && chown -R 65534:65534 /build /out
+USER 65534:65534
+RUN --network=none sh /recipe/build.sh acl
+USER root
+RUN --network=none dpkg --install /out/packages/libacl1_*.deb /out/packages/libacl1-dev_*.deb /out/packages/acl_*.deb && apt-get check
+USER 65534:65534
+RUN --network=none sh /recipe/build.sh callers
+
 FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS util-linux-build
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential debhelper dh-exec dh-package-notes dh-sequence-installsysusers dh-debputy asciidoctor bc bison flex gettext libaudit-dev libcap-ng-dev libcrypt-dev libcryptsetup-dev libncurses-dev libpam0g-dev libreadline-dev libselinux1-dev libsqlite3-dev libsystemd-dev libtool libudev-dev netbase pkgconf po-debconf po4a socat systemd systemd-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
@@ -81,6 +105,11 @@ RUN apt-get update \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge 3.0.4 \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=acl-callers-build /out/runtime/ /tmp/acl-security/
+RUN --network=none dpkg --install /tmp/acl-security/libacl1_*.deb \
+    && dpkg --install /tmp/acl-security/coreutils_*.deb /tmp/acl-security/tar_*.deb \
+    && apt-get check && rm -rf /tmp/acl-security
+COPY --from=acl-callers-build /out/source/ /usr/share/doc/libacl1/vardr-source/
 COPY --from=sqlite-build /out/packages/ /tmp/sqlite-security/
 RUN --network=none dpkg --install /tmp/sqlite-security/*.deb \
     && apt-get check && rm -rf /tmp/sqlite-security

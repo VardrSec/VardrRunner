@@ -1,0 +1,102 @@
+Description: Use libacl 2.4 anchored APIs and avoid its namespace
+Author: VardrSec maintainers
+Forwarded: not-needed
+
+--- a/src/xattrs.c
++++ b/src/xattrs.c
+@@ -139,48 +139,27 @@
+ 
+ #ifdef HAVE_POSIX_ACLS
+ 
+-/* acl-at wrappers, TODO: move to gnulib in future? */
+-static acl_t acl_get_file_at (int, const char *, acl_type_t);
+-static int acl_set_file_at (int, const char *, acl_type_t, acl_t);
++/* Use libacl 2.4's anchored API; never the legacy chdir/path fallback. */
++static acl_t
++tar_acl_get_file_at (int parent, char const *name, acl_type_t type)
++{
++  return acl_get_file_at (parent, name,
++                          dereference_option ? 0 : AT_SYMLINK_NOFOLLOW, type);
++}
++
++static int
++tar_acl_set_file_at (int parent, char const *name, acl_type_t type, acl_t acl)
++{
++  return acl_set_file_at (parent, name, AT_SYMLINK_NOFOLLOW, type, acl);
++}
++
++static int
++tar_acl_delete_def_file_at (int parent, char const *name)
++{
++  return acl_delete_def_file_at (parent, name, AT_SYMLINK_NOFOLLOW);
++}
++
+ static int file_has_acl_at (int, char const *, struct stat const *);
+-static int acl_delete_def_file_at (int, char const *);
+-
+-/* acl_get_file_at */
+-#define AT_FUNC_NAME acl_get_file_at
+-#define AT_FUNC_RESULT acl_t
+-#define AT_FUNC_FAIL (acl_t)NULL
+-#define AT_FUNC_F1 acl_get_file
+-#define AT_FUNC_POST_FILE_PARAM_DECLS   , acl_type_t type
+-#define AT_FUNC_POST_FILE_ARGS          , type
+-#include "at-func.c"
+-#undef AT_FUNC_NAME
+-#undef AT_FUNC_F1
+-#undef AT_FUNC_RESULT
+-#undef AT_FUNC_FAIL
+-#undef AT_FUNC_POST_FILE_PARAM_DECLS
+-#undef AT_FUNC_POST_FILE_ARGS
+-
+-/* acl_set_file_at */
+-#define AT_FUNC_NAME acl_set_file_at
+-#define AT_FUNC_F1 acl_set_file
+-#define AT_FUNC_POST_FILE_PARAM_DECLS   , acl_type_t type, acl_t acl
+-#define AT_FUNC_POST_FILE_ARGS          , type, acl
+-#include "at-func.c"
+-#undef AT_FUNC_NAME
+-#undef AT_FUNC_F1
+-#undef AT_FUNC_POST_FILE_PARAM_DECLS
+-#undef AT_FUNC_POST_FILE_ARGS
+-
+-/* acl_delete_def_file_at */
+-#define AT_FUNC_NAME acl_delete_def_file_at
+-#define AT_FUNC_F1 acl_delete_def_file
+-#define AT_FUNC_POST_FILE_PARAM_DECLS
+-#define AT_FUNC_POST_FILE_ARGS
+-#include "at-func.c"
+-#undef AT_FUNC_NAME
+-#undef AT_FUNC_F1
+-#undef AT_FUNC_POST_FILE_PARAM_DECLS
+-#undef AT_FUNC_POST_FILE_ARGS
+ 
+ /* gnulib file_has_acl_at */
+ #define AT_FUNC_NAME file_has_acl_at
+@@ -300,7 +279,7 @@
+       /* No "default" IEEE 1003.1e ACL set for directory.  At this moment,
+          FILE_NAME may already have inherited default acls from parent
+          directory;  clean them up. */
+-      if (acl_delete_def_file_at (chdir_fd, file_name))
++      if (tar_acl_delete_def_file_at (chdir_fd, file_name))
+         WARNOPT (WARN_XATTR_WRITE,
+                 (0, errno,
+                  _("acl_delete_def_file_at: Cannot drop default POSIX ACLs "
+@@ -317,7 +296,7 @@
+       return;
+     }
+ 
+-  if (acl_set_file_at (chdir_fd, file_name, type, acl) == -1)
++  if (tar_acl_set_file_at (chdir_fd, file_name, type, acl) == -1)
+     /* warn even if filesystem does not support acls */
+     WARNOPT (WARN_XATTR_WRITE,
+ 	     (0, errno,
+@@ -358,7 +337,7 @@
+   char *val = NULL;
+   acl_t acl;
+ 
+-  if (!(acl = acl_get_file_at (parentfd, file_name, type)))
++  if (!(acl = tar_acl_get_file_at (parentfd, file_name, type)))
+     {
+       if (errno != ENOTSUP)
+         call_arg_warn ("acl_get_file_at", file_name);

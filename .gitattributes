@@ -1,3 +1,7 @@
 container/infocmp-bound.patch -text
 container/nuclei-openpgp/backport.patch -text
 container/nuclei-openpgp/changes.json -text
+
+container/acl/** text eol=lf
+# Unified-diff context preserves upstream whitespace.
+container/acl/*.patch whitespace=-blank-at-eol,-space-before-tab
