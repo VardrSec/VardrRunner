@@ -15,6 +15,18 @@ from vardrrunner import toolchain
 helper = runpy.run_path(str(Path(__file__).parents[1] / "container/go_tool_install.py"))
 
 
+def test_toolkit_registration_omits_optional_nuclei(monkeypatch):
+    install = Mock()
+    monkeypatch.setitem(helper["install_bundled"].__globals__, "install_source", install)
+    helper["install_bundled"]()
+    assert [call.args[1] for call in install.call_args_list] == [
+        name for name in helper["BUILDS"] if name != "nuclei"
+    ]
+    assert all(
+        call.args[0] == Path("/tmp") / (call.args[1] + "-build") for call in install.call_args_list
+    )
+
+
 def test_reviewed_openpgp_inputs_keep_exact_bytes():
     root = Path(__file__).parents[1] / "container/nuclei-openpgp"
     pgp = helper["nuclei_openpgp"]

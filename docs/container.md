@@ -74,9 +74,10 @@ docker build --target toolkit --build-context gate=/path/to/pinned-gate -t vardr
 ```
 
 The default `core` target remains CLI-only and needs no Gate context. `toolkit`
-compiles Gate and retains all nine managed tools. Dalfox uses the existing
-verified archive installer. Katana, DNSx, Naabu, Gau, HTTPx, Subfinder, ffuf and
-Nuclei use Go-checksummed upstream source with Go 1.27.4. Reviewed overrides
+compiles Gate and retains eight managed tools. Nuclei is separately operator-installed.
+Dalfox uses the existing verified archive installer. Katana, DNSx, Naabu, Gau,
+HTTPx, Subfinder and ffuf use Go-checksummed upstream source with Go 1.27.4.
+Reviewed overrides
 include x/net 0.62.0 and compress 1.20.2 and Brotli 1.2.7; Katana selects pgx 5.9.2 and Naabu
 selects x/crypto 0.58.0. Per-tool versions and overrides are recorded in the
 Dockerfile and retained build provenance. Naabu enables CGO and uses libpcap-dev only
@@ -109,8 +110,8 @@ not claim an upstream archive checksum. Ordinary managed verification still hash
 the executable and fails closed on tampering; status reports `verified source
 build`. The helper is restricted to the root image-build directory and is removed
 from the final image.
-This changes the development toolkit's existing build, not its tool count or the
-undecided alpha shipping scope. Other tool vulnerabilities, release provenance and
+Nuclei is excluded from the toolkit; its optional installation is described below.
+Other tool vulnerabilities, release provenance and
 broader mode acceptance remain open. No release image is published.
 
 The toolkit places XDG configuration in `.vardrmap` and cache in
@@ -118,7 +119,7 @@ The toolkit places XDG configuration in `.vardrmap` and cache in
 `~/.config` path links to `.vardrmap` for clients such as Katana that ignore XDG.
 The link targets the existing volume root, so existing volumes need no migration.
 Build-time version probes may initialize root-owned defaults; those defaults are
-removed before selecting the runtime user. This keeps Nuclei and Katana
+removed before selecting the runtime user. This keeps Katana
 clients writable as UID 10001 without changing native/core paths or making
 `/opt/vardrtools` writable. Review each tool's separate provider credentials and
 data requirements; this does not certify every mode.
@@ -127,6 +128,40 @@ Wordlists, nuclei templates, headless browser support and raw-packet capabilitie
 are separate operator requirements. Bundled binary availability does not prove
 that every scan mode works. No target requests run during image startup.
 
+
+### Optional Nuclei
+
+Nuclei is no longer bundled in new toolkit images, including their use by Full
+and Mapless. Runner's Nuclei commands, jobs, parsers and native pinned installer
+remain available. Existing native binaries, templates, credentials and state are
+not deleted. Missing Nuclei is reported by doctor; select another available tool
+or install Nuclei before choosing a Nuclei job. This packaging change does not
+clear the other Community publication gates.
+
+For a native installation, explicitly run `vardrrunner tools install nuclei`.
+The existing installer checks the pinned archive hash and verifies managed binaries
+before use. This downloads upstream's archive; it does not apply the container's
+former source backports or establish security clearance for that archive.
+
+For container use, obtain and verify your own compatible Linux/amd64 Nuclei binary
+on the host, then add a read-only file mount to the existing Runner invocation:
+
+```sh
+--mount type=bind,source=/absolute/path/to/nuclei,target=/usr/local/bin/nuclei,readonly
+```
+
+The source must be an executable file, not a directory or Windows binary.
+Full/Mapless's distribution installer does not support additional mounts; do not
+edit its shipped Compose files or bypass its model checks. Until a separately
+reviewed distribution opt-in exists, use the supported native Runner installation
+for optional Nuclei work (connected to Map where applicable). The mount above is
+for component-level container use only, not a qualified Full/Mapless extension.
+Do not make `/opt/vardrtools` writable or replace the managed-tool directory. Runner uses its
+existing PATH fallback only when there is no managed Nuclei receipt; doctor
+honestly reports that supplied binary as an unverified PATH copy. A failed managed
+receipt remains an error and never falls back. The operator owns the binary's
+provenance, notices and updates. Optional container Nuclei is not qualified by the
+default toolkit checks; no scan runs merely by mounting it.
 
 ### Go source download reliability
 

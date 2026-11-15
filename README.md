@@ -74,6 +74,10 @@ naabu, katana, ffuf and dalfox. VardrGate is obtained separately or through the
 pinned distribution. Native Gau is excluded; its reviewed container form has
 separate limits. Nmap is not bundled: its integration requires the explicit
 `VARDRRUNNER_ENABLE_NMAP=1` opt-in and a separately licensed installation.
+The container toolkit omits Nuclei; its execution integration remains available.
+Install it explicitly for native use with `vardrrunner tools install nuclei`, or
+supply your own binary as described in [optional container Nuclei](docs/container.md#optional-nuclei).
+Existing installations are not removed or modified.
 For ffuf, provide named wordlists under `~/.vardrmap/wordlists`.
 
 Connected workflows need a backend URL and API key. Mapless does not. The legacy
