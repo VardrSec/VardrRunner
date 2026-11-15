@@ -42,7 +42,12 @@ jobs:
                 grep -Fx "cp-path-substitution: EXPECTED_VULNERABLE" evidence/negative-controls.log
                 grep -Fx "tar-path-substitution: EXPECTED_VULNERABLE" evidence/negative-controls.log
                 grep -Fx "cp-path-substitution: PASS" evidence/stripped-payload-regressions.log
-                grep -Fx "tar-path-substitution: PASS" evidence/stripped-payload-regressions.log'
+                grep -Fx "tar-path-substitution: PASS" evidence/stripped-payload-regressions.log
+                source=$PWD
+                cd /
+                grep -hE "  ./usr/(bin/(cp|tar)|lib/[^/]+/libacl[.]so[.][0-9.]+)$" "$source"/*.files-SHA256SUMS > /tmp/acl-runtime-hashes
+                test "$(wc -l < /tmp/acl-runtime-hashes)" -eq 3
+                sha256sum -c /tmp/acl-runtime-hashes'
           done
       - name: Verify non-root offline MCP stdio in the toolkit
         timeout-minutes: 1
