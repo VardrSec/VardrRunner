@@ -1,0 +1,362 @@
+Description: Bind Linux directory ACL operations to the selected objects
+Author: VardrSec maintainers
+Forwarded: not-needed
+
+--- a/lib/get-permissions.c
++++ b/lib/get-permissions.c
+@@ -20,6 +20,7 @@
+ #include <config.h>
+ 
+ #include <string.h>
++#include <fcntl.h>
+ #include "acl.h"
+ 
+ #include "acl-internal.h"
+@@ -43,7 +44,7 @@
+   /* Linux, FreeBSD, IRIX, Tru64, Cygwin >= 2.5 */
+ 
+   if (HAVE_ACL_GET_FD && desc != -1)
+-    ctx->acl = acl_get_fd (desc);
++    ctx->acl = acl_get_file_at (desc, "", AT_EMPTY_PATH, ACL_TYPE_ACCESS);
+   else
+     ctx->acl = acl_get_file (name, ACL_TYPE_ACCESS);
+   if (ctx->acl == NULL)
+@@ -55,7 +56,9 @@
+ 
+   if (S_ISDIR (mode))
+     {
+-      ctx->default_acl = acl_get_file (name, ACL_TYPE_DEFAULT);
++      ctx->default_acl = (desc != -1
++                          ? acl_get_file_at (desc, "", AT_EMPTY_PATH, ACL_TYPE_DEFAULT)
++                          : acl_get_file (name, ACL_TYPE_DEFAULT));
+       if (ctx->default_acl == NULL)
+         return -1;
+     }
+@@ -83,7 +86,7 @@
+      Each of these calls sets the file's ACL.  */
+ 
+   if (HAVE_ACL_GET_FD && desc != -1)
+-    ctx->acl = acl_get_fd (desc);
++    ctx->acl = acl_get_file_at (desc, "", AT_EMPTY_PATH, ACL_TYPE_ACCESS);
+   else
+     ctx->acl = acl_get_file (name, ACL_TYPE_EXTENDED);
+   if (ctx->acl == NULL)
+--- a/lib/set-permissions.c
++++ b/lib/set-permissions.c
+@@ -23,6 +23,8 @@
+ 
+ #include "acl-internal.h"
+ #include "minmax.h"
++#include <fcntl.h>
++#include <stdio.h>
+ 
+ #if USE_ACL
+ # if ! defined HAVE_ACL_FROM_MODE && defined HAVE_ACL_FROM_TEXT /* FreeBSD, IRIX, Tru64, Cygwin >= 2.5 */
+@@ -515,7 +517,7 @@
+       if (ret == 0 && ctx->acl)
+         {
+           if (HAVE_ACL_SET_FD && desc != -1)
+-            ret = acl_set_fd (desc, ctx->acl);
++            ret = acl_set_file_at (desc, "", AT_EMPTY_PATH, ACL_TYPE_ACCESS, ctx->acl);
+           else
+             ret = acl_set_file (name, ACL_TYPE_ACCESS, ctx->acl);
+           if (ret != 0)
+@@ -534,10 +536,14 @@
+                 {
+                   if (! from_mode && ctx->default_acl &&
+                       acl_default_nontrivial (ctx->default_acl))
+-                    ret = acl_set_file (name, ACL_TYPE_DEFAULT,
+-                                        ctx->default_acl);
++                    ret = (desc != -1
++                           ? acl_set_file_at (desc, "", AT_EMPTY_PATH,
++                                              ACL_TYPE_DEFAULT, ctx->default_acl)
++                           : acl_set_file (name, ACL_TYPE_DEFAULT, ctx->default_acl));
+                   else
+-                    ret = acl_delete_def_file (name);
++                    ret = (desc != -1
++                           ? acl_delete_def_file_at (desc, "", AT_EMPTY_PATH)
++                           : acl_delete_def_file (name));
+                 }
+             }
+         }
+@@ -597,7 +603,7 @@
+   else
+     {
+       if (HAVE_ACL_SET_FD && desc != -1)
+-        ret = acl_set_fd (desc, ctx->acl);
++        ret = acl_set_file_at (desc, "", AT_EMPTY_PATH, ACL_TYPE_ACCESS, ctx->acl);
+       else
+         ret = acl_set_file (name, ACL_TYPE_EXTENDED, ctx->acl);
+       if (ret != 0)
+@@ -760,6 +766,14 @@
+ int
+ chmod_or_fchmod (const char *name, int desc, mode_t mode)
+ {
++  /* O_PATH pins special files without opening devices or blocking on FIFOs.
++     Its procfs alias refers to that descriptor, never the original pathname. */
++  if (desc != -1 && (fcntl (desc, F_GETFL) & O_PATH))
++    {
++      char pinned[64];
++      snprintf (pinned, sizeof pinned, "/proc/self/fd/%d", desc);
++      return chmod (pinned, mode);
++    }
+   if (HAVE_FCHMOD && desc != -1)
+     return fchmod (desc, mode);
+   else
+--- a/src/copy.c
++++ b/src/copy.c
+@@ -77,6 +77,71 @@
+ # include <linux/falloc.h>
+ #endif
+ 
++/* Pin directory/special-file ACL operations to the objects selected by cp.
++   Do not reopen the displayed destination pathname after resolving its parent. */
++static int
++acl_destination_fd (int parent, char const *name)
++{
++  int fd = openat (parent, name, O_PATH | O_NOFOLLOW | O_CLOEXEC);
++  if (fd < 0)
++    return -1;
++  struct stat st;
++  int failed = fstat (fd, &st);
++  if (failed < 0 || S_ISLNK (st.st_mode))
++    {
++      int saved = errno;
++      if (failed == 0 && S_ISLNK (st.st_mode))
++        saved = ELOOP;
++      close (fd);
++      errno = saved;
++      return -1;
++    }
++  return fd;
++}
++
++int
++xcopy_acl_at (char const *src, struct stat const *expected,
++              char const *dst, int parent, char const *relative, mode_t mode)
++{
++  /* Follow an explicitly selected source link, but reject object substitution. */
++  int from = open (src, O_PATH | O_CLOEXEC);
++  struct stat st;
++  if (from < 0)
++    return -1;
++  int result = -1;
++  if (fstat (from, &st) == 0
++      && st.st_dev == expected->st_dev && st.st_ino == expected->st_ino)
++    {
++      int to = acl_destination_fd (parent, relative);
++      if (to >= 0)
++        {
++          result = xcopy_acl (src, from, dst, to, mode);
++          int saved = errno;
++          close (to);
++          errno = saved;
++        }
++    }
++  else
++    errno = ESTALE;
++  int saved = errno;
++  close (from);
++  errno = saved;
++  return result;
++}
++
++int
++xset_acl_at (char const *dst, int parent, char const *relative, mode_t mode)
++{
++  int fd = acl_destination_fd (parent, relative);
++  if (fd < 0)
++    return -1;
++  int result = xset_acl (dst, fd, mode);
++  int saved = errno;
++  close (fd);
++  errno = saved;
++  return result;
++}
++
+ /* See HAVE_FALLOCATE workaround when including this file.  */
+ #ifdef HAVE_LINUX_FS_H
+ # include <linux/fs.h>
+@@ -3261,13 +3326,13 @@
+ 
+   if (x->preserve_mode || x->move_mode)
+     {
+-      if (xcopy_acl (src_name, -1, dst_name, -1, src_mode) != 0
++      if (xcopy_acl_at (src_name, &src_sb, dst_name, dst_dirfd, drelname, src_mode) != 0
+           && x->require_preserve)
+         return false;
+     }
+   else if (x->set_mode)
+     {
+-      if (xset_acl (dst_name, -1, x->mode) != 0)
++      if (xset_acl_at (dst_name, dst_dirfd, drelname, x->mode) != 0)
+         return false;
+     }
+   else if (x->explicit_no_preserve_mode && new_dst)
+@@ -3277,7 +3342,7 @@
+       dst_mode = dst_sb.st_mode;
+       if (S_ISDIR (src_mode))  /* Keep set-group-ID for directories.  */
+         default_permissions |= (dst_mode & S_ISGID);
+-      if (xset_acl (dst_name, -1, default_permissions & ~cached_umask ()) != 0)
++      if (xset_acl_at (dst_name, dst_dirfd, drelname, default_permissions & ~cached_umask ()) != 0)
+         return false;
+     }
+   else
+--- a/src/cp.c
++++ b/src/cp.c
+@@ -363,7 +363,7 @@
+ 
+       if (x->preserve_mode)
+         {
+-          if (xcopy_acl (src_name, -1, dst_name, -1, p->st.st_mode) != 0)
++          if (xcopy_acl_at (src_name, &p->st, dst_name, dst_dirfd, relname, p->st.st_mode) != 0)
+             return false;
+         }
+       else if (p->restore_mode)
+--- a/src/copy.h
++++ b/src/copy.h
+@@ -318,6 +318,9 @@
+                                    bool recurse, const struct cp_options *x)
+   _GL_ATTRIBUTE_NONNULL ();
+ 
++int xcopy_acl_at (char const *, struct stat const *, char const *, int, char const *, mode_t);
++int xset_acl_at (char const *, int, char const *, mode_t);
++
+ void dest_info_init (struct cp_options *) _GL_ATTRIBUTE_NONNULL ();
+ void dest_info_free (struct cp_options *) _GL_ATTRIBUTE_NONNULL ();
+ void src_info_init (struct cp_options *) _GL_ATTRIBUTE_NONNULL ();
+--- a/lib/qcopy-acl.c
++++ b/lib/qcopy-acl.c
+@@ -27,6 +27,10 @@
+ 
+ # include <attr/libattr.h>
+ # include <dirent.h>
++# include <fcntl.h>
++# include <linux/limits.h>
++# include <stdio.h>
++# include <sys/xattr.h>
+ # include <string.h>
+ 
+ # if HAVE_LINUX_XATTR_H
+@@ -56,6 +60,61 @@
+          || attr_copy_action (name, ctx) == ATTR_ACTION_PERMISSIONS;
+ }
+ 
++
++/* O_PATH pins objects without opening devices or FIFOs, but cannot be used
++   with f*xattr. Follow only these descriptor aliases, never caller pathnames.
++   Linux bounds xattr lists and values to XATTR_LIST_MAX/XATTR_SIZE_MAX bytes; using that
++   bound avoids a size-query race without unbounded allocation or retries. */
++static int
++copy_acl_opath (char const *src, char const *dst)
++{
++  char *names = malloc (XATTR_LIST_MAX);
++  char *value = malloc (XATTR_SIZE_MAX);
++  int ret = -2;
++  if (!names || !value)
++    {
++      errno = ENOMEM;
++      goto done;
++    }
++  ssize_t size = listxattr (src, names, XATTR_LIST_MAX);
++  if (size < 0)
++    {
++      if (errno == ENOSYS || errno == ENOTSUP)
++        ret = 0;
++      goto done;
++    }
++  for (char *name = names; name < names + size; )
++    {
++      char *end = memchr (name, 0, names + size - name);
++      if (!end)
++        {
++          errno = EIO;
++          goto done;
++        }
++      if (*name && is_attr_permissions (name, NULL))
++        {
++          ssize_t length = getxattr (src, name, value, XATTR_SIZE_MAX);
++          if (length < 0)
++            goto done;
++          if (setxattr (dst, name, value, length, 0) < 0)
++            {
++              ret = -1;
++              goto done;
++            }
++        }
++      name = end + 1;
++    }
++  ret = 0;
++ done:
++  {
++    int saved = errno;
++    free (value);
++    free (names);
++    errno = saved;
++  }
++  return ret;
++}
++
+ #endif  /* USE_XATTR */
+ 
+ /* Copy access control lists from one file to another. If SOURCE_DESC is
+@@ -77,6 +136,16 @@
+   int ret;
+ 
+ #ifdef USE_XATTR
++  int source_flags = source_desc < 0 ? -1 : fcntl (source_desc, F_GETFL);
++  int dest_flags = dest_desc < 0 ? -1 : fcntl (dest_desc, F_GETFL);
++  bool pinned = (source_flags >= 0 && dest_flags >= 0
++                 && (source_flags & O_PATH) && (dest_flags & O_PATH));
++  char source_alias[64], dest_alias[64];
++  if (pinned)
++    {
++      snprintf (source_alias, sizeof source_alias, "/proc/self/fd/%d", source_desc);
++      snprintf (dest_alias, sizeof dest_alias, "/proc/self/fd/%d", dest_desc);
++    }
+   /* in case no ACLs present and also to set higher mode bits
+      we chmod before setting ACLs as doing it after could overwrite them
+      (especially true for NFSv4, posix ACL has that ugly "mask" hack that
+@@ -89,7 +158,8 @@
+      to copy */
+   if (ret == 0)
+     {
+-      ret = source_desc <= 0 || dest_desc <= 0
++      ret = pinned ? copy_acl_opath (source_alias, dest_alias)
++        : source_desc <= 0 || dest_desc <= 0
+         ? attr_copy_file (src_name, dst_name, is_attr_permissions, NULL)
+         : attr_copy_fd (src_name, source_desc, dst_name, dest_desc,
+                         is_attr_permissions, NULL);
+@@ -105,7 +175,9 @@
+           int flags = S_ISDIR (mode) ? DT_DIR : _GL_DT_NOTDIR | DT_UNKNOWN;
+ 
+           struct aclinfo ai;
+-          if (!fdfile_has_aclinfo (source_desc, src_name, &ai, flags))
++          if (!fdfile_has_aclinfo (pinned ? -1 : source_desc,
++                                 pinned ? source_alias : src_name, &ai,
++                                 flags | (pinned ? ACL_SYMLINK_FOLLOW : 0)))
+             ret = 0;
+           aclinfo_free (&ai);
+           errno = EOPNOTSUPP;
+--- a/gnulib-tests/gnulib.mk
++++ b/gnulib-tests/gnulib.mk
+@@ -99,7 +99,7 @@
+ TESTS_ENVIRONMENT += USE_ACL=$(USE_ACL)
+ check_PROGRAMS += test-set-mode-acl test-copy-acl test-sameacls
+ test_set_mode_acl_LDADD = $(LDADD) $(LIB_ACL) $(LIBUNISTRING) @LIBINTL@ $(MBRTOWC_LIB) $(LIBC32CONV)
+-test_copy_acl_LDADD = $(LDADD) $(LIB_ACL) $(QCOPY_ACL_LIB) $(LIBUNISTRING) @LIBINTL@ $(MBRTOWC_LIB) $(LIBC32CONV)
++test_copy_acl_LDADD = $(LDADD) $(LIB_ACL) $(QCOPY_ACL_LIB) $(LIB_SELINUX) $(LIBUNISTRING) @LIBINTL@ $(MBRTOWC_LIB) $(LIBC32CONV)
+ test_sameacls_LDADD = $(LDADD) $(LIB_ACL) @LIBINTL@ $(MBRTOWC_LIB)
+ EXTRA_DIST += test-set-mode-acl.sh test-set-mode-acl-1.sh test-set-mode-acl-2.sh test-copy-acl.sh test-copy-acl-1.sh test-copy-acl-2.sh test-set-mode-acl.c test-copy-acl.c test-sameacls.c macros.h
+ 
+--- a/gnulib-tests/Makefile.in
++++ b/gnulib-tests/Makefile.in
+@@ -6649,7 +6649,7 @@
+ IGNORE_SKIPPED_LOGS = 1
+ test_accept_LDADD = $(LDADD) @LIBSOCKET@
+ test_set_mode_acl_LDADD = $(LDADD) $(LIB_ACL) $(LIBUNISTRING) @LIBINTL@ $(MBRTOWC_LIB) $(LIBC32CONV)
+-test_copy_acl_LDADD = $(LDADD) $(LIB_ACL) $(QCOPY_ACL_LIB) $(LIBUNISTRING) @LIBINTL@ $(MBRTOWC_LIB) $(LIBC32CONV)
++test_copy_acl_LDADD = $(LDADD) $(LIB_ACL) $(QCOPY_ACL_LIB) $(LIB_SELINUX) $(LIBUNISTRING) @LIBINTL@ $(MBRTOWC_LIB) $(LIBC32CONV)
+ test_sameacls_LDADD = $(LDADD) $(LIB_ACL) @LIBINTL@ $(MBRTOWC_LIB)
+ test_areadlinkat_LDADD = $(LDADD) @LIBINTL@
+ test_areadlinkat_with_size_LDADD = $(LDADD) @LIBINTL@

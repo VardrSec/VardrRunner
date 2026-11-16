@@ -8,6 +8,13 @@
 !container/
 !container/go_tool_install.py
 !container/libpcap-source.txt
+!container/acl/
+!container/acl/README.md
+!container/acl/build.sh
+!container/acl/coreutils-descriptor-acl.patch
+!container/acl/regression.py
+!container/acl/swap-acl.c
+!container/acl/tar-descriptor-acl.patch
 **/__pycache__/
 **/*.pyc
 
