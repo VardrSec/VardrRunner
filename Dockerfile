@@ -32,11 +32,14 @@ RUN echo 'f1b5f57fefd122f7d7e1264a1a6f36039dc4fd5d0ec5f7a833f87095f06996d1  glib
     && apt-get build-dep -y --no-install-recommends ./src \
     && useradd -m builduser && chown -R builduser:builduser /work
 WORKDIR /work/src
-RUN --network=none runuser -u builduser -- dpkg-buildpackage -us -uc -b -j4 > /tmp/glibc-build.log 2>&1 || { tail -100 /tmp/glibc-build.log; exit 1; }
-RUN mkdir -p /out/packages /out/source \
+# Reproduce the previously tested amd64 packages; reject any byte difference.
+RUN --network=none { runuser -u builduser -- env DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -us -uc -b -Pnobiarch -j4 > /tmp/glibc-build.log 2>&1 || { tail -100 /tmp/glibc-build.log; exit 1; }; } \
+    && mkdir -p /out/packages /out/source \
     && cp ../libc6_*_amd64.deb ../libc-bin_*_amd64.deb ../libc-l10n_*_all.deb ../locales_*_all.deb /out/packages/ \
     && cp ../glibc_*.dsc ../glibc_*.tar.xz ../glibc_*.buildinfo ../glibc_*.changes /out/source/ \
-    && cd /out/source && sha256sum glibc_* > SHA256SUMS
+    && cd /out/packages && sha256sum -c /work/qualified-packages.sha256 \
+    && cd /out/source && sha256sum glibc_* > SHA256SUMS \
+    && rm -rf /work/src /work/*.deb
 
 FROM debian:trixie-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392 AS util-linux-build
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential debhelper dh-exec dh-package-notes dh-sequence-installsysusers dh-debputy asciidoctor bc bison flex gettext libaudit-dev libcap-ng-dev libcrypt-dev libcryptsetup-dev libncurses-dev libpam0g-dev libreadline-dev libselinux1-dev libsqlite3-dev libsystemd-dev libtool libudev-dev netbase pkgconf po-debconf po4a socat systemd systemd-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
@@ -51,9 +54,11 @@ RUN for p in debian/patches/vardr-*.patch; do basename "$p" >> debian/patches/se
 RUN --network=none dpkg-source --build .
 ENV DEB_BUILD_OPTIONS='nocheck parallel=2'
 RUN --network=none dpkg-buildpackage -us -uc -B > /work/package-build.log 2>&1 || (grep -n -i -B 4 -A 5 -E "error:|fatal|undefined|not found|No such" /work/package-build.log | head -n 100; tail -n 15 /work/package-build.log; exit 1)
-RUN mkdir -p /out/packages /out/source && cp ../libmount1_*.deb ../libblkid1_*.deb ../libsmartcols1_*.deb ../libuuid1_*.deb ../liblastlog2-2_*.deb ../mount_*.deb ../util-linux_*.deb /out/packages/ && cp ../util-linux_*.dsc ../util-linux_*.tar.* ../util-linux_*.buildinfo ../util-linux_*.changes /out/source/ || (tail -n 50 /work/package-build.log; ls -l /build; exit 1)
+RUN mkdir -p /out/packages /out/source && cp ../libmount1_*.deb ../libblkid1_*.deb ../libsmartcols1_*.deb ../libuuid1_*.deb ../liblastlog2-2_*.deb ../mount_*.deb ../util-linux_*.deb /out/packages/ && cp ../util-linux_*.dsc ../util-linux_*.tar.* ../util-linux_*.buildinfo ../util-linux_*.changes /out/source/ || (tail -n 50 /work/package-build.log; ls -l /work; exit 1)
 COPY Dockerfile /out/source/Dockerfile
 COPY container/util-linux/source.txt /out/source/util-linux-source.txt
+COPY container/util-linux/qualified-packages.sha256 /out/source/qualified-packages.sha256
+RUN cd /out/packages && sha256sum -c /out/source/qualified-packages.sha256
 RUN chmod 0644 /out/source/* && cd /out/source && sha256sum ./* > SHA256SUMS
 
 FROM scratch AS util-linux-source-delivery
