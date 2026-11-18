@@ -16,3 +16,5 @@ Original/modified Debian source, build metadata, patches, recipe, package
 copyright and checksums accompany the runtime. Original input SHA-256
 values are build guards, not a claim of verified PGP signer trust.
 A custom package suffix does not itself resolve scanner findings.
+
+Revision +vardr2 also closes the saved cgroup descriptor immediately after nsenter joins the cgroup (upstream 485dbb67f1b6).

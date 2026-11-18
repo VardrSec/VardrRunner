@@ -22,20 +22,36 @@ RUN --network=none dpkg --install /out/packages/libacl1_*.deb /out/packages/liba
 USER 65534:65534
 RUN --network=none sh /recipe/build.sh callers
 
-FROM golang:1.27.4@sha256:08bcb99a38f85a265f9a93d1d3323e2440eec333380f3ea26ee0dec9264bb41c AS util-linux-build
+FROM debian:trixie-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392 AS glibc-build
+WORKDIR /work
+ADD --checksum=sha256:f24aa441021121a79266f0d75242706cab8843a47901fefe74527491807f1998 https://deb.debian.org/debian/pool/main/g/glibc/glibc_2.41.orig.tar.xz ./
+COPY container/glibc/ ./
+RUN echo 'f1b5f57fefd122f7d7e1264a1a6f36039dc4fd5d0ec5f7a833f87095f06996d1  glibc_2.41-12+deb13u4+vardr1.dsc' | sha256sum -c - \
+    && apt-get update && apt-get install -y --no-install-recommends build-essential dpkg-dev fakeroot \
+    && dpkg-source -x glibc_2.41-12+deb13u4+vardr1.dsc src \
+    && apt-get build-dep -y --no-install-recommends ./src \
+    && useradd -m builduser && chown -R builduser:builduser /work
+WORKDIR /work/src
+RUN --network=none runuser -u builduser -- dpkg-buildpackage -us -uc -b -j4 > /tmp/glibc-build.log 2>&1 || { tail -100 /tmp/glibc-build.log; exit 1; }
+RUN mkdir -p /out/packages /out/source \
+    && cp ../libc6_*_amd64.deb ../libc-bin_*_amd64.deb ../libc-l10n_*_all.deb ../locales_*_all.deb /out/packages/ \
+    && cp ../glibc_*.dsc ../glibc_*.tar.xz ../glibc_*.buildinfo ../glibc_*.changes /out/source/ \
+    && cd /out/source && sha256sum glibc_* > SHA256SUMS
+
+FROM debian:trixie-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392 AS util-linux-build
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential debhelper dh-exec dh-package-notes dh-sequence-installsysusers dh-debputy asciidoctor bc bison flex gettext libaudit-dev libcap-ng-dev libcrypt-dev libcryptsetup-dev libncurses-dev libpam0g-dev libreadline-dev libselinux1-dev libsqlite3-dev libsystemd-dev libtool libudev-dev netbase pkgconf po-debconf po4a socat systemd systemd-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
-WORKDIR /build
+WORKDIR /work
 ADD --checksum=sha256:5b327ccd22f0f4ed28a389870aa51d04ecedb8693e52a1d122850f2b3188cbf6 https://deb.debian.org/debian/pool/main/u/util-linux/util-linux_2.41.5-0+deb13u1.debian.tar.xz util-linux_2.41.5-0+deb13u1.debian.tar.xz
 ADD --checksum=sha256:43e9b2cbebd10fdc598c4ad10217c8202c28de53af6eafc892c8e9b5cbf3a3a5 https://deb.debian.org/debian/pool/main/u/util-linux/util-linux_2.41.5-0+deb13u1.dsc util-linux_2.41.5-0+deb13u1.dsc
 ADD --checksum=sha256:f586e35d320ff537aab3ffeca37e9ecd482ccbe013590db4429a414d8aa6a728 https://deb.debian.org/debian/pool/main/u/util-linux/util-linux_2.41.5.orig.tar.xz util-linux_2.41.5.orig.tar.xz
 RUN --network=none dpkg-source --no-check -x util-linux_2.41.5-0+deb13u1.dsc source
-COPY container/util-linux/*.patch /build/source/debian/patches/
-WORKDIR /build/source
-RUN for p in debian/patches/vardr-*.patch; do basename "$p" >> debian/patches/series; done && dpkg-source --before-build . && { printf 'util-linux (2.41.5-0+deb13u1+vardr1) trixie; urgency=high\n\n  * Apply remaining upstream 2.41.6 mount and descriptor security fixes.\n\n -- VardrSec local build <local@invalid>  Wed, 11 Nov 2026 00:00:00 +0000\n\n'; cat debian/changelog; } > /tmp/changelog && mv /tmp/changelog debian/changelog
+COPY container/util-linux/*.patch /work/source/debian/patches/
+WORKDIR /work/source
+RUN for p in debian/patches/vardr-*.patch; do basename "$p" >> debian/patches/series; done && dpkg-source --before-build . && { printf 'util-linux (2.41.5-0+deb13u1+vardr2) trixie; urgency=high\n\n  * Backport upstream stable 485dbb67f1b6 for CVE-2026-78408.\n\n -- VardrSec Qualification <local@invalid>  Tue, 17 Nov 2026 00:00:00 +0000\n\n'; cat debian/changelog; } > /tmp/changelog && mv /tmp/changelog debian/changelog
 RUN --network=none dpkg-source --build .
 ENV DEB_BUILD_OPTIONS='nocheck parallel=2'
-RUN --network=none dpkg-buildpackage -us -uc -B > /build/package-build.log 2>&1 || (grep -n -i -B 4 -A 5 -E "error:|fatal|undefined|not found|No such" /build/package-build.log | head -n 100; tail -n 15 /build/package-build.log; exit 1)
-RUN mkdir -p /out/packages /out/source && cp ../libmount1_*.deb ../libblkid1_*.deb ../libsmartcols1_*.deb ../libuuid1_*.deb ../liblastlog2-2_*.deb ../mount_*.deb ../util-linux_*.deb /out/packages/ && cp ../util-linux_*.dsc ../util-linux_*.tar.* ../util-linux_*.buildinfo ../util-linux_*.changes /out/source/ || (tail -n 50 /build/package-build.log; ls -l /build; exit 1)
+RUN --network=none dpkg-buildpackage -us -uc -B > /work/package-build.log 2>&1 || (grep -n -i -B 4 -A 5 -E "error:|fatal|undefined|not found|No such" /work/package-build.log | head -n 100; tail -n 15 /work/package-build.log; exit 1)
+RUN mkdir -p /out/packages /out/source && cp ../libmount1_*.deb ../libblkid1_*.deb ../libsmartcols1_*.deb ../libuuid1_*.deb ../liblastlog2-2_*.deb ../mount_*.deb ../util-linux_*.deb /out/packages/ && cp ../util-linux_*.dsc ../util-linux_*.tar.* ../util-linux_*.buildinfo ../util-linux_*.changes /out/source/ || (tail -n 50 /work/package-build.log; ls -l /build; exit 1)
 COPY Dockerfile /out/source/Dockerfile
 COPY container/util-linux/source.txt /out/source/util-linux-source.txt
 RUN chmod 0644 /out/source/* && cd /out/source && sha256sum ./* > SHA256SUMS
@@ -121,6 +137,9 @@ COPY --from=ncurses-build /out/packages/ /tmp/ncurses-security/
 RUN --network=none dpkg --install /tmp/ncurses-security/*.deb \
     && apt-get check && rm -rf /tmp/ncurses-security
 COPY --from=ncurses-build /out/source/ /usr/share/doc/ncurses-bin/vardr-source/
+COPY --from=glibc-build /out/packages/libc6_*_amd64.deb /out/packages/libc-bin_*_amd64.deb /tmp/glibc-security/
+RUN --network=none dpkg -i /tmp/glibc-security/*.deb && apt-get check && rm -rf /tmp/glibc-security
+COPY --from=glibc-build /out/source/ /usr/share/doc/libc6/vardr-source/
 COPY --from=util-linux-build /out/packages/ /tmp/util-linux-security/
 RUN --network=none dpkg --install /tmp/util-linux-security/lib*.deb \
     && dpkg --install /tmp/util-linux-security/mount_*.deb /tmp/util-linux-security/util-linux_*.deb \

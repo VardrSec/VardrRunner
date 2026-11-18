@@ -30,3 +30,6 @@
 !container/nuclei_openpgp.py
 !container/nuclei-openpgp/
 !container/nuclei-openpgp/**
+
+!container/glibc/
+!container/glibc/**
