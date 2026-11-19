@@ -44,9 +44,9 @@ FROM debian:trixie-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86
 WORKDIR /work
 ADD --checksum=sha256:f24aa441021121a79266f0d75242706cab8843a47901fefe74527491807f1998 https://deb.debian.org/debian/pool/main/g/glibc/glibc_2.41.orig.tar.xz ./
 COPY container/glibc/ ./
-RUN echo '739637076bb57e56f6c9b52b0a15b6a33bfa7892c62c8663c5a513cef5f16051  glibc_2.41-12+deb13u4+vardr2.dsc' | sha256sum -c - \
+RUN echo '09999489e728062c43f24b2c45f04ee66a148ca138216c609372e16bfa07c21f  glibc_2.41-12+deb13u4+vardr3.dsc' | sha256sum -c - \
     && apt-get update && apt-get install -y --no-install-recommends build-essential dpkg-dev fakeroot \
-    && dpkg-source -x glibc_2.41-12+deb13u4+vardr2.dsc src \
+    && dpkg-source -x glibc_2.41-12+deb13u4+vardr3.dsc src \
     && apt-get build-dep -y --no-install-recommends ./src \
     && useradd -m builduser && chown -R builduser:builduser /work
 WORKDIR /work/src
