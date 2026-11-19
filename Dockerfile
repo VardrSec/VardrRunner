@@ -27,9 +27,9 @@ WORKDIR /work
 ADD --checksum=sha256:a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8 https://deb.debian.org/debian-security/pool/updates/main/o/openssl/openssl_3.5.7.orig.tar.gz ./
 ADD --checksum=sha256:d3d082bee3f658c31db53af625eceecf29d777c7010394bed5787ebcc98abdf2 https://deb.debian.org/debian-security/pool/updates/main/o/openssl/openssl_3.5.7.orig.tar.gz.asc ./
 COPY container/openssl/ ./
-RUN echo '5f8ff9ca6f90b1f3b19d7cacb07a1a904a38068b3ec4b82fec5edbc6e4de5342  openssl_3.5.7-1~deb13u3+vardr1.dsc' | sha256sum -c - \
+RUN echo '4f069d916c8d0ba5ad594880b52edbf082332b9c93326bbbf12949bee5893010  openssl_3.5.7-1~deb13u3+vardr2.dsc' | sha256sum -c - \
     && apt-get update && apt-get install -y --no-install-recommends build-essential dpkg-dev fakeroot debhelper libzstd-dev zlib1g-dev ca-certificates \
-    && dpkg-source -x openssl_3.5.7-1~deb13u3+vardr1.dsc src \
+    && dpkg-source -x openssl_3.5.7-1~deb13u3+vardr2.dsc src \
     && useradd -m builduser && chown -R builduser:builduser /work
 WORKDIR /work/src
 RUN --network=none { runuser -u builduser -- dpkg-buildpackage -us -uc -B -j4 > /tmp/openssl-build.log 2>&1 || { tail -100 /tmp/openssl-build.log; exit 1; }; } \
@@ -44,9 +44,9 @@ FROM debian:trixie-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86
 WORKDIR /work
 ADD --checksum=sha256:f24aa441021121a79266f0d75242706cab8843a47901fefe74527491807f1998 https://deb.debian.org/debian/pool/main/g/glibc/glibc_2.41.orig.tar.xz ./
 COPY container/glibc/ ./
-RUN echo 'f1b5f57fefd122f7d7e1264a1a6f36039dc4fd5d0ec5f7a833f87095f06996d1  glibc_2.41-12+deb13u4+vardr1.dsc' | sha256sum -c - \
+RUN echo '739637076bb57e56f6c9b52b0a15b6a33bfa7892c62c8663c5a513cef5f16051  glibc_2.41-12+deb13u4+vardr2.dsc' | sha256sum -c - \
     && apt-get update && apt-get install -y --no-install-recommends build-essential dpkg-dev fakeroot \
-    && dpkg-source -x glibc_2.41-12+deb13u4+vardr1.dsc src \
+    && dpkg-source -x glibc_2.41-12+deb13u4+vardr2.dsc src \
     && apt-get build-dep -y --no-install-recommends ./src \
     && useradd -m builduser && chown -R builduser:builduser /work
 WORKDIR /work/src

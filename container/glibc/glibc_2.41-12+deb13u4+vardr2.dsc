@@ -2,7 +2,7 @@ Format: 3.0 (quilt)
 Source: glibc
 Binary: libc-bin, libc-dev-bin, libc-devtools, libc-l10n, glibc-doc, glibc-source, locales, locales-all, nscd, libc6, libc6-dev, libc6-dbg, libc6-udeb, libc6.1, libc6.1-dev, libc6.1-dbg, libc6.1-udeb, libc0.3, libc0.3-dev, libc0.3-dbg, libc0.3-udeb, libc6-i386, libc6-dev-i386, libc6-sparc, libc6-dev-sparc, libc6-sparc64, libc6-dev-sparc64, libc6-s390, libc6-dev-s390, libc6-amd64, libc6-dev-amd64, libc6-powerpc, libc6-dev-powerpc, libc6-ppc64, libc6-dev-ppc64, libc6-mips32, libc6-dev-mips32, libc6-mipsn32, libc6-dev-mipsn32, libc6-mips64, libc6-dev-mips64, libc6-x32, libc6-dev-x32
 Architecture: any all
-Version: 2.41-12+deb13u4+vardr1
+Version: 2.41-12+deb13u4+vardr2
 Maintainer: GNU Libc Maintainers <debian-glibc@lists.debian.org>
 Uploaders: Clint Adams <clint@debian.org>, Aurelien Jarno <aurel32@debian.org>, Samuel Thibault <sthibault@debian.org>
 Homepage: https://www.gnu.org/software/libc/libc.html
@@ -59,10 +59,10 @@ Package-List:
  nscd deb admin optional arch=any profile=!stage1
 Checksums-Sha1:
  ecf54de179ba3fb468949af843c8270979e53cc8 20323540 glibc_2.41.orig.tar.xz
- 9214166a25e6d54095ce34bc314948b68ecfa45e 504744 glibc_2.41-12+deb13u4+vardr1.debian.tar.xz
+ 32f2f66b51e40b790189639d05395466fcfeb2c6 506964 glibc_2.41-12+deb13u4+vardr2.debian.tar.xz
 Checksums-Sha256:
  f24aa441021121a79266f0d75242706cab8843a47901fefe74527491807f1998 20323540 glibc_2.41.orig.tar.xz
- 722a9863f1cbe7c6dcf63845a7f1fd5ff23feb3649f600882a13ce17dab6cccb 504744 glibc_2.41-12+deb13u4+vardr1.debian.tar.xz
+ a917450e73107b20b4a840b4509243829f9ad15d877d170534d2ede68bc0b5a7 506964 glibc_2.41-12+deb13u4+vardr2.debian.tar.xz
 Files:
  3e4ee26cf98b0b6aca1beeda1ed410b7 20323540 glibc_2.41.orig.tar.xz
- 245f5353ad4561473ff95cb7f15ce358 504744 glibc_2.41-12+deb13u4+vardr1.debian.tar.xz
+ cf7f4ac6944f055df0deab893bbc52d4 506964 glibc_2.41-12+deb13u4+vardr2.debian.tar.xz
