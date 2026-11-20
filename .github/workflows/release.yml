@@ -53,11 +53,21 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build
       - name: Generate SBOM (CycloneDX)
+        id: generate_sbom
         run: |
           pip install cyclonedx-bom
           pip install -e .
           cyclonedx-py environment --output-format JSON > sbom.cdx.json
-          python -c "import json; p=json.load(open('sbom.cdx.json')); assert p['bomFormat']=='CycloneDX' and p.get('components')"
+      - name: Verify release inventory
+        id: verify_sbom
+        shell: python
+        run: |
+          import json
+
+          with open("sbom.cdx.json", encoding="utf-8") as sbom:
+              inventory = json.load(sbom)
+          if inventory.get("bomFormat") != "CycloneDX" or not inventory.get("components"):
+              raise SystemExit("Expected a CycloneDX SBOM with components")
       - name: Store release artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
