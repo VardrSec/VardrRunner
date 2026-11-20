@@ -181,25 +181,6 @@ Agent proposals and request-rate visibility in the MCP server. MCP only; the CLI
 unchanged. The propose tools require a VardrMap with the agent-proposals endpoints. See
 [`changelog/v0.53.0.md`](changelog/v0.53.0.md).
 
-### Added
-
-- MCP server: `propose_scope_item`, `propose_authorization` and `propose_rate_ceiling` write
-  tools, and a `list_proposals` read. An agent can now propose a scope item, an authorization
-  or the request-rate ceiling when it spots one missing; each creates a **pending proposal**
-  the operator approves in VardrMap. The server still exposes **no approve tool**, so a
-  prompt-injected agent can only file a proposal the operator sees and rejects — it cannot
-  apply a scope or authorization change (ADR 0015 amendment). Each propose tool takes a
-  `reason` and `source`. **Requires** a VardrMap with the `/engagements/{id}/proposals`
-  endpoints (agent-proposals release); older backends return 404 and the tools fail.
-
-### Changed
-
-- The MCP server now surfaces an engagement's request-rate ceiling. `get_engagement`
-  returns `max_request_rate`, the `queue_job` and `queue_pipeline` tool descriptions name the
-  `config.rate` key and the automatic ceiling, and the server instructions tell an agent to
-  respect it. The backend already enforced the ceiling; the agent just could not see it. No
-  backend change, and no new or writable tool — scope and authorization stay operator-only.
-
 ## [0.52.0] — 2026-10-24
 
 Leftover names from when engagements were "programs" are removed, and `login vardrmap` is

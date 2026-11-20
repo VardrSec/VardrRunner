@@ -225,11 +225,12 @@ as data and is never extracted or executed by Runner. Existing regular-file and
 size limits apply. This collection does not establish license compatibility,
 complete dependency notice coverage or corresponding-source delivery.
 
-The Nuclei source build selects ldapserver revision `7cb3f5bd9b7d`, whose upstream
-license correction changes only `LICENSE` to MIT. The existing provenance guard
-requires that module version; notice archives can also contain unused older cache
-entries, so use `build-info.txt` to identify the linked revision. This does not
-change the native Nuclei archive or clear other transitive obligations.
+For each binary, use its `build-info.txt` to identify the linked module paths and
+versions, then match them to notices retained in that image. A notice in another
+tool's archive can cover the same module at the same version.
+
+The earlier toolkit bundled Nuclei. Its Censys dependency is documented in the
+[historical notice review](https://github.com/VardrSec/VardrRunner/blob/e19ed1ff14a301e7b52647112ad38a7184bb1846/docs/linked-go-notice-review.md).
 
 ## Toolkit libpcap source
 
