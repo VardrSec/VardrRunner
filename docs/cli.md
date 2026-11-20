@@ -731,7 +731,7 @@ local and never contact the backend:
 ```bash
 vardrrunner audit list [--engagement <id>] [--since <iso-timestamp>] [--limit 100] [--json]
 vardrrunner audit show <run-id>
-vardrrunner audit export --output audit.json [--engagement <id>] [--since <iso-timestamp>] [--limit 10000]
+vardrrunner audit export --output audit.json [--overwrite] [--engagement <id>] [--since <iso-timestamp>] [--limit 10000]
 ```
 
 `list` shows recent lifecycle outcomes, `show` prints one full sanitized record, and
@@ -739,6 +739,9 @@ vardrrunner audit export --output audit.json [--engagement <id>] [--since <iso-t
 retention. Records include target counts, sanitized tool settings, lifecycle timestamps,
 failure categories, policy warnings, and artifact SHA-256/size. They exclude raw targets,
 credentials, request bodies, and headers.
+
+Choose a new output file or pass `--overwrite` to replace a previous export.
+The journal and its SQLite sidecar files are protected even with `--overwrite`.
 
 `--engagement <id>` (or `-e`) selects an exact local engagement or workspace ID.
 It requires no Map connection, account or token. The filter combines with `--since`

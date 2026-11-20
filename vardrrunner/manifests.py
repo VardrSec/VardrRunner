@@ -61,14 +61,14 @@ def artifact_digest(
     return digest.hexdigest(), size
 
 
-def write_atomic_json(path: Path, payload: dict[str, Any]) -> Path:
+def write_atomic_json(path: Path, payload: dict[str, Any], *, overwrite: bool = True) -> Path:
     """Write JSON durably and atomically beside its final destination."""
     safe = redaction.redact(payload)
     text = json.dumps(safe, indent=2, sort_keys=True) + "\n"
-    return write_atomic_text(path, text)
+    return write_atomic_text(path, text, overwrite=overwrite)
 
 
-def write_atomic_text(path: Path, content: str) -> Path:
+def write_atomic_text(path: Path, content: str, *, overwrite: bool = True) -> Path:
     """Write text durably and atomically with owner-only permissions."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -82,7 +82,12 @@ def write_atomic_text(path: Path, content: str) -> Path:
             temp_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
         except OSError:
             pass
-        os.replace(temp_path, path)
+        if overwrite:
+            os.replace(temp_path, path)
+        elif os.name == "nt":
+            os.rename(temp_path, path)  # Windows rename refuses an existing destination.
+        else:
+            os.link(temp_path, path)  # Publish complete bytes only if the name is still free.
     finally:
         temp_path.unlink(missing_ok=True)
     return path

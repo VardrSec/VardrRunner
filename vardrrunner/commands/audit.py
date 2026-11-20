@@ -347,20 +347,57 @@ def show_run(run_id: str) -> None:
     console.print_json(json.dumps(_payload(record), indent=2, sort_keys=True))
 
 
+def _same_path(left: Path, right: Path) -> bool:
+    if left == right:
+        return True
+    try:
+        return left.samefile(right)
+    except FileNotFoundError:
+        return False
+
+
+def _audit_export_path(output: Path) -> Path:
+    try:
+        journal = config.journal_file().resolve()
+        output = output.parent.resolve() / output.name
+        resolved = output.resolve()
+    except RuntimeError as exc:
+        # Python 3.10–3.12 report symlink loops as RuntimeError.
+        raise OSError("Cannot resolve the journal or export path") from exc
+    files = [
+        journal.with_name(journal.name + suffix) for suffix in ("", "-wal", "-shm", "-journal")
+    ]
+    # Reserve sidecar names even when SQLite has temporarily removed the files.
+    reserved_name = _same_path(resolved.parent, journal.parent) and resolved.name.casefold() in {
+        path.name.casefold() for path in files
+    }
+    if reserved_name or any(_same_path(output, path) for path in files):
+        raise OSError("The execution journal and its SQLite sidecars are protected")
+    return output
+
+
 def export_runs(
     output: Path,
     since: str | None = None,
     limit: int = 10_000,
     engagement_id: str | None = None,
+    *,
+    overwrite: bool = False,
 ) -> None:
-    records = _store().list(since=since, limit=limit, engagement_id=engagement_id)
-    document = {
-        "audit_schema_version": 1,
-        "run_count": len(records),
-        "runs": [_payload(record) for record in records],
-    }
     try:
-        manifests.write_atomic_json(output, document)
+        destination = _audit_export_path(output)
+        if not overwrite and os.path.lexists(destination):
+            raise FileExistsError
+        records = _store().list(since=since, limit=limit, engagement_id=engagement_id)
+        document = {
+            "audit_schema_version": 1,
+            "run_count": len(records),
+            "runs": [_payload(record) for record in records],
+        }
+        manifests.write_atomic_json(destination, document, overwrite=overwrite)
+    except FileExistsError as exc:
+        console.print("[red]Audit export destination exists. Use --overwrite to replace it.[/red]")
+        raise typer.Exit(1) from exc
     except OSError as exc:
         console.print(f"[red]Could not export audit:[/red] {redaction.redact_rich_exception(exc)}")
         raise typer.Exit(1) from exc
