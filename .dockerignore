@@ -33,3 +33,5 @@
 
 !container/glibc/
 !container/glibc/**
+!container/openssl/
+!container/openssl/**

@@ -1,0 +1,2 @@
+*.dsc -text
+*.sha256 text eol=lf

@@ -22,13 +22,31 @@ RUN --network=none dpkg --install /out/packages/libacl1_*.deb /out/packages/liba
 USER 65534:65534
 RUN --network=none sh /recipe/build.sh callers
 
+FROM debian:trixie-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392 AS openssl-build
+WORKDIR /work
+ADD --checksum=sha256:a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8 https://deb.debian.org/debian-security/pool/updates/main/o/openssl/openssl_3.5.7.orig.tar.gz ./
+ADD --checksum=sha256:d3d082bee3f658c31db53af625eceecf29d777c7010394bed5787ebcc98abdf2 https://deb.debian.org/debian-security/pool/updates/main/o/openssl/openssl_3.5.7.orig.tar.gz.asc ./
+COPY container/openssl/ ./
+RUN echo '4f069d916c8d0ba5ad594880b52edbf082332b9c93326bbbf12949bee5893010  openssl_3.5.7-1~deb13u3+vardr2.dsc' | sha256sum -c - \
+    && apt-get update && apt-get install -y --no-install-recommends build-essential dpkg-dev fakeroot debhelper libzstd-dev zlib1g-dev ca-certificates \
+    && dpkg-source -x openssl_3.5.7-1~deb13u3+vardr2.dsc src \
+    && useradd -m builduser && chown -R builduser:builduser /work
+WORKDIR /work/src
+RUN --network=none { runuser -u builduser -- dpkg-buildpackage -us -uc -B -j4 > /tmp/openssl-build.log 2>&1 || { tail -100 /tmp/openssl-build.log; exit 1; }; } \
+    && mkdir -p /out/packages /out/source \
+    && cp ../libssl3t64_*.deb ../openssl-provider-legacy_*.deb ../openssl_*.deb /out/packages/ \
+    && cd /out/packages && sha256sum -c /work/qualified-packages.sha256 \
+    && cp /work/openssl_*.dsc /work/openssl_*.tar.* /work/openssl_*.buildinfo /work/openssl_*.changes /out/source/ \
+    && cp /work/qualified-packages.sha256 /out/source/ && chmod 0644 /out/source/* \
+    && cd /out/source && sha256sum ./* > SHA256SUMS
+
 FROM debian:trixie-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392 AS glibc-build
 WORKDIR /work
 ADD --checksum=sha256:f24aa441021121a79266f0d75242706cab8843a47901fefe74527491807f1998 https://deb.debian.org/debian/pool/main/g/glibc/glibc_2.41.orig.tar.xz ./
 COPY container/glibc/ ./
-RUN echo 'f1b5f57fefd122f7d7e1264a1a6f36039dc4fd5d0ec5f7a833f87095f06996d1  glibc_2.41-12+deb13u4+vardr1.dsc' | sha256sum -c - \
+RUN echo '09999489e728062c43f24b2c45f04ee66a148ca138216c609372e16bfa07c21f  glibc_2.41-12+deb13u4+vardr3.dsc' | sha256sum -c - \
     && apt-get update && apt-get install -y --no-install-recommends build-essential dpkg-dev fakeroot \
-    && dpkg-source -x glibc_2.41-12+deb13u4+vardr1.dsc src \
+    && dpkg-source -x glibc_2.41-12+deb13u4+vardr3.dsc src \
     && apt-get build-dep -y --no-install-recommends ./src \
     && useradd -m builduser && chown -R builduser:builduser /work
 WORKDIR /work/src
@@ -150,6 +168,9 @@ RUN --network=none dpkg --install /tmp/util-linux-security/lib*.deb \
     && dpkg --install /tmp/util-linux-security/mount_*.deb /tmp/util-linux-security/util-linux_*.deb \
     && apt-get check && rm -rf /tmp/util-linux-security
 COPY --from=util-linux-build /out/source/ /usr/share/doc/util-linux/vardr-source/
+COPY --from=openssl-build /out/packages/ /tmp/openssl-security/
+RUN --network=none dpkg --install /tmp/openssl-security/*.deb && apt-get check && rm -rf /tmp/openssl-security
+COPY --from=openssl-build /out/source/ /usr/share/doc/libssl3t64/vardr-source/
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
