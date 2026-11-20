@@ -1,6 +1,7 @@
 """Audit CLI reads and exports only sanitized journal state."""
 
 import json
+import os
 from unittest.mock import patch
 
 import pytest
@@ -48,6 +49,73 @@ def test_export_is_atomic_and_versioned(tmp_path, monkeypatch):
     assert payload["audit_schema_version"] == 1
     assert payload["run_count"] == 1
     assert payload["runs"][0]["command_profile"]["token"] == "***REDACTED***"
+
+    original = output.read_bytes()
+    with pytest.raises(typer.Exit):
+        audit.export_runs(output, engagement_id="missing")
+    assert output.read_bytes() == original
+    audit.export_runs(output, engagement_id="missing", overwrite=True)
+    assert json.loads(output.read_text())["runs"] == []
+
+
+@pytest.mark.parametrize("suffix", ["", "-wal", "-shm", "-journal"])
+def test_export_protects_sqlite_paths_even_with_overwrite(tmp_path, monkeypatch, suffix):
+    journal = tmp_path / "journal.sqlite3"
+    record = _seed(journal)
+    monkeypatch.setattr(config, "JOURNAL_FILE", journal)
+    destination = journal.with_name(journal.name + suffix)
+    original = destination.read_bytes() if destination.exists() else None
+    with pytest.raises(typer.Exit):
+        audit.export_runs(destination, overwrite=True)
+    assert (destination.read_bytes() if destination.exists() else None) == original
+    assert Journal(journal).get(record.run_id) is not None
+
+
+def test_export_refuses_hard_link_to_journal(tmp_path, monkeypatch):
+    journal = tmp_path / "journal.sqlite3"
+    _seed(journal)
+    monkeypatch.setattr(config, "JOURNAL_FILE", journal)
+    alias = tmp_path / "history.json"
+    alias.hardlink_to(journal)
+    with pytest.raises(typer.Exit):
+        audit.export_runs(alias, overwrite=True)
+    assert alias.samefile(journal)
+
+
+def test_export_refuses_missing_journal_before_opening_it(tmp_path, monkeypatch):
+    journal = tmp_path / "journal.sqlite3"
+    monkeypatch.setattr(config, "JOURNAL_FILE", journal)
+    with pytest.raises(typer.Exit):
+        audit.export_runs(journal)
+    assert not journal.exists()
+
+
+def test_export_protects_sidecars_of_a_symlinked_journal(tmp_path, monkeypatch):
+    journal = tmp_path / "journal.sqlite3"
+    _seed(journal)
+    alias = tmp_path / "configured.sqlite3"
+    try:
+        alias.symlink_to(journal)
+    except OSError as exc:
+        pytest.skip(f"Symlinks unavailable: {exc}")
+    monkeypatch.setattr(config, "JOURNAL_FILE", alias)
+    with pytest.raises(typer.Exit):
+        audit.export_runs(journal.with_name(journal.name + "-wal"), overwrite=True)
+
+
+def test_export_preserves_destination_created_during_publication(tmp_path, monkeypatch):
+    output = tmp_path / "audit.json"
+    monkeypatch.setattr(config, "JOURNAL_FILE", tmp_path / "journal.sqlite3")
+    sync = os.fsync
+
+    def publish_other_export(fd):
+        sync(fd)
+        output.write_bytes(b"other export")
+
+    with patch.object(os, "fsync", side_effect=publish_other_export), pytest.raises(typer.Exit):
+        audit.export_runs(output)
+    assert output.read_bytes() == b"other export"
+    assert not list(tmp_path.glob(".audit.json.*.tmp"))
 
 
 def test_show_unknown_run_exits(tmp_path, monkeypatch):

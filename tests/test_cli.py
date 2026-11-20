@@ -395,8 +395,13 @@ class TestAuditCommands:
     def test_export_delegates(self, tmp_path):
         output = tmp_path / "audit.json"
         with patch("vardrrunner.commands.audit.export_runs") as mock:
-            invoke("audit", "export", "--output", str(output), "--limit", "50")
-        mock.assert_called_once_with(output=output, since=None, limit=50, engagement_id=None)
+            result = invoke(
+                "audit", "export", "--output", str(output), "--limit", "50", "--overwrite"
+            )
+        assert result.exit_code == 0
+        mock.assert_called_once_with(
+            output=output, since=None, limit=50, engagement_id=None, overwrite=True
+        )
 
     @pytest.mark.parametrize("flag", ["--engagement", "-e"])
     def test_list_scopes_local_history(self, flag):
@@ -414,7 +419,7 @@ class TestAuditCommands:
             result = invoke("audit", "export", "--output", str(output), flag, "workspace-1")
         assert result.exit_code == 0
         mock.assert_called_once_with(
-            output=output, since=None, limit=10_000, engagement_id="workspace-1"
+            output=output, since=None, limit=10_000, engagement_id="workspace-1", overwrite=False
         )
 
 

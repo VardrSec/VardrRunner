@@ -524,6 +524,7 @@ def audit_show(run_id: str = typer.Argument(..., help="Full journal run ID")):
 @audit_app.command("export")
 def audit_export(
     output: Path = typer.Option(..., "--output", "-o", help="Destination JSON file"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing export"),
     since: str | None = typer.Option(None, "--since", help="ISO timestamp lower bound"),
     limit: int = typer.Option(10_000, "--limit", min=1, max=10_000),
     engagement_id: str | None = typer.Option(
@@ -531,7 +532,9 @@ def audit_export(
     ),
 ):
     """Atomically export sanitized journal records."""
-    audit.export_runs(output=output, since=since, limit=limit, engagement_id=engagement_id)
+    audit.export_runs(
+        output=output, since=since, limit=limit, engagement_id=engagement_id, overwrite=overwrite
+    )
 
 
 @audit_app.command("reconcile-managed")
