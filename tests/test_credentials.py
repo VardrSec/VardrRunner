@@ -3,8 +3,9 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 
-from vardrrunner import config, keychain
+from vardrrunner import config, credentials, keychain
 from vardrrunner.commands import auth
 
 
@@ -38,6 +39,67 @@ def test_file_is_last_resort(monkeypatch):
     config.save({"api_url": "https://x", "api_key": "vmap_file"})
     monkeypatch.setattr("vardrrunner.keychain.get_key", lambda url: None)
     assert config.get_api_key() == "vmap_file"
+
+
+@pytest.mark.parametrize(
+    "saved_url",
+    [
+        None,
+        "http://map.example/team",
+        "https://other.example/team",
+        "https://map.example:8443/team",
+        "https://map.example/team-other",
+        "https://map.example/Team",
+    ],
+)
+def test_file_key_requires_matching_saved_url(monkeypatch, saved_url):
+    selected = "https://map.example/team"
+    data = {"api_key": "vmap_file"}
+    if saved_url is not None:
+        data["api_url"] = saved_url
+    config.save(data)
+    monkeypatch.setenv(config.ENV_API_URL, selected)
+    monkeypatch.setattr(keychain, "get_key", lambda url: None)
+    monkeypatch.setattr(keychain, "available", lambda: False)
+
+    with pytest.raises(typer.BadParameter, match="Not set up"):
+        config.require_auth()
+    assert config.credential_source() is None
+    posture = credentials.inspect()
+    assert posture.api_url == selected
+    assert posture.source is None
+    assert posture.plaintext_in_config
+
+
+def test_file_key_accepts_same_map_base_with_trailing_slash(monkeypatch):
+    config.save({"api_url": "https://map.example/team/", "api_key": "vmap_file"})
+    monkeypatch.setenv(config.ENV_API_URL, "https://map.example/team")
+    monkeypatch.setattr(keychain, "get_key", lambda url: None)
+    assert config.require_auth() == ("https://map.example/team", "vmap_file")
+    assert config.credential_source() == "config file"
+
+
+def test_url_override_uses_selected_keychain_or_explicit_env_key(monkeypatch):
+    selected = "https://second.example"
+    config.save({"api_url": "https://first.example", "api_key": "vmap_file"})
+    monkeypatch.setenv(config.ENV_API_URL, selected)
+    store = {selected: "vmap_second"}
+    monkeypatch.setattr(keychain, "get_key", store.get)
+    assert config.require_auth() == (selected, "vmap_second")
+    assert config.credential_source() == "keychain"
+    monkeypatch.setenv(config.ENV_API_KEY, "vmap_env")
+    assert config.require_auth() == (selected, "vmap_env")
+    assert config.credential_source() == "environment"
+
+
+def test_config_replacement_cannot_pair_old_url_with_new_key(monkeypatch):
+    first = {"api_url": "https://first.example", "api_key": "vmap_first"}
+    second = {"api_url": "https://second.example", "api_key": "vmap_second"}
+    first_read = iter([first])
+    monkeypatch.setattr(config, "load", lambda: next(first_read, second))
+    monkeypatch.setattr(keychain, "get_key", lambda url: None)
+    with pytest.raises(typer.BadParameter, match="Not set up"):
+        config.require_auth()
 
 
 @pytest.mark.parametrize(

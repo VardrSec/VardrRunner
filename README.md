@@ -88,6 +88,9 @@ endpoints, migrations and reviewed versions, not merely that minimum.
 fails closed unless the operator explicitly selects `--allow-plaintext-credentials`.
 For headless operation, provide `VARDRMAP_URL` and `VARDRMAP_API_KEY`. Credential
 precedence is environment, OS keychain, then the explicitly allowed config file.
+Runner uses a file key only for its saved Map URL, including the deployment path.
+When switching `VARDRMAP_URL`, log in to that instance or supply its key through
+`VARDRMAP_API_KEY`.
 Use HTTPS except for the documented local development boundary. Never disable TLS
 verification or expose host credentials to a container to bypass setup problems.
 

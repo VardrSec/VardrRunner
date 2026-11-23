@@ -3,8 +3,8 @@ Local config + credential resolution.
 
 The backend URL (not a secret) lives in ~/.vardrmap/config.json. The API key is
 resolved from, in order: the VARDRMAP_API_KEY env var, the OS keychain, then a
-legacy plaintext key in the config file. `vardrrunner login` stores the key in the
-keychain when one is available, falling back to the config file otherwise.
+plaintext key saved with the same Map URL. `vardrrunner login` uses the config
+file for credentials only when the operator explicitly allows plaintext storage.
 """
 
 import json
@@ -199,30 +199,39 @@ def get_api_url() -> str | None:
     return os.environ.get(ENV_API_URL) or load().get("api_url")
 
 
-def get_api_key() -> str | None:
-    """Resolved API key — precedence: VARDRMAP_API_KEY env > OS keychain > config file."""
+def _resolve_credential(
+    api_url: str | None, saved_config: dict | None = None
+) -> tuple[str | None, str | None]:
     env = os.environ.get(ENV_API_KEY)
     if env:
-        return env
-    url = get_api_url()
-    if url:
-        stored = keychain.get_key(url)
-        if stored:
-            return stored
-    return load().get("api_key")
+        return env, "environment"
+    if api_url is None and saved_config is None:
+        api_url = get_api_url()
+    if not isinstance(api_url, str) or not api_url.rstrip("/"):
+        return None, None
+    stored = keychain.get_key(api_url)
+    if stored:
+        return stored, "keychain"
+
+    data = load() if saved_config is None else saved_config
+    saved_url = data.get("api_url")
+    key = data.get("api_key")
+    # Match the base URL used by VardrMapClient, including the deployment path.
+    if key and isinstance(saved_url, str) and saved_url.rstrip("/") == api_url.rstrip("/"):
+        return key, "config file"
+    return None, None
 
 
-def credential_source() -> str | None:
-    """Where the API key resolves from, without revealing it: 'environment',
-    'keychain', 'config file', or None if no key is configured."""
-    if os.environ.get(ENV_API_KEY):
-        return "environment"
-    url = get_api_url()
-    if url and keychain.get_key(url):
-        return "keychain"
-    if load().get("api_key"):
-        return "config file"
-    return None
+def get_api_key(api_url: str | None = None) -> str | None:
+    """Resolve the key for the selected Map URL, honoring an explicit environment key."""
+    return _resolve_credential(api_url)[0]
+
+
+def credential_source(
+    api_url: str | None = None, *, saved_config: dict | None = None
+) -> str | None:
+    """Return the selected credential source without exposing the key."""
+    return _resolve_credential(api_url, saved_config)[1]
 
 
 def save_url(api_url: str) -> None:
@@ -270,7 +279,7 @@ def require_auth() -> tuple[str, str]:
     Reads VARDRMAP_URL / VARDRMAP_API_KEY first, then the config file.
     """
     url = get_api_url()
-    key = get_api_key()
+    key = get_api_key(url)
     if not url or not key:
         import typer
 

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Bind plaintext API keys to their saved Map URL so switching instances or
+  deployment paths requires a credential for the selected destination.
+
 - Stop bundling Nuclei in the toolkit image; retain native installation and execution
   integration as an explicit optional capability. Existing installations are preserved.
 

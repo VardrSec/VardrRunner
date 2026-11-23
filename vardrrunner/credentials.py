@@ -91,20 +91,10 @@ def inspect() -> CredentialStatus:
             # doctor reports the unreadable config separately.
             pass
 
-    # Derive the source from the data already read above. Calling
-    # config.credential_source()/get_api_url() here would parse a corrupt file a
-    # second time and defeat the recovery path above.
     api_url = os.environ.get(config.ENV_API_URL) or data.get("api_url")
     if not isinstance(api_url, str):
         api_url = None
-    if os.environ.get(config.ENV_API_KEY):
-        source = "environment"
-    elif api_url and keychain.get_key(api_url):
-        source = "keychain"
-    elif plaintext:
-        source = "config file"
-    else:
-        source = None
+    source = config.credential_source(api_url, saved_config=data)
 
     return CredentialStatus(
         source=source,
