@@ -67,7 +67,7 @@ class Check:
 
 def _check_credentials(production: bool = False) -> list[Check]:
     url = config.get_api_url()
-    source = config.credential_source()  # never the secret itself
+    source = config.credential_source(url)  # never the secret itself
     if not url or source is None:
         return [
             Check(
@@ -149,7 +149,7 @@ def _check_permissions() -> Check:
 
 def _check_auth() -> Check:
     url = config.get_api_url()
-    key = config.get_api_key()
+    key = config.get_api_key(url)
     if not url or not key:
         return Check("api auth", Health.FAIL, "skipped — no credentials", "See credentials above.")
     try:
@@ -197,7 +197,8 @@ def _check_version() -> Check:
 
 
 def _check_platform() -> list[Check]:
-    url, key = config.get_api_url(), config.get_api_key()
+    url = config.get_api_url()
+    key = config.get_api_key(url)
     if not url or not key:
         return [
             Check(
