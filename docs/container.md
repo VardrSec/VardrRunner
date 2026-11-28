@@ -11,7 +11,8 @@ Those paths select compatible component pins, retain installation state and hand
 trust or standalone issuer custody. The component-only builds below are for
 development; they are not an alternate installation or update procedure.
 
-Build from this repository:
+Run the build examples below with a Docker builder targeting `linux/amd64`.
+The core and toolkit images both use amd64 glibc packages.
 
 ```sh
 docker build -t vardrrunner:local .
